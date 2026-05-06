@@ -1,0 +1,10 @@
+1.1tạo môi trường giả lập :
+  python -m venv venv : tạo mt giả lập tên venv
+nếu lỗi ở 1.1 chạy
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+1.2 chạy môi trường tên là venv
+venv\Scripts\activate.ps1
+2.1 tải thư viện còn thiếu 
+ chạy file base.txt để tải những thư viện còn thiếu 
+ pip install -r base.txt
+
