@@ -1,56 +1,29 @@
-# Virtual environment
-venv/
-.venv/
-env/
-ENV/
-
-# Python cache
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / build
-build/
-dist/
+*.pyo
+.env
+venv/
 *.egg-info/
-.eggs/
+dist/
+build/
+.pytest_cache/
+*.log
+/ecommerce-backend/uploads/
+/ecommerce-backend/logs/
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# Node
+node_modules/
+dist/
+.env
+.env.local
+*.local
 
-# Unit test / coverage
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-pytest_cache/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# VSCode
-.vscode/
-
-# PyCharm
-.idea/
-
-# MacOS
+# OS
 .DS_Store
-
-# Windows
 Thumbs.db
 
-# Environment variables
-.env
-
-# Logs
-*.log
-
-# SQLite
-*.sqlite3
+# IDE
+.vscode/
+.idea/
+*.swp

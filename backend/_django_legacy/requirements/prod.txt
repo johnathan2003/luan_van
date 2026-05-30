@@ -1,0 +1,6 @@
+-r base.txt
+gunicorn
+whitenoise
+django-storages[azure]
+sentry-sdk
+

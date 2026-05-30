@@ -1,70 +1,66 @@
-version: "3.9"
+version: '3.8'
 
 services:
   db:
-    image: postgres:15
+    image: mysql:8.0
+    container_name: shopvn_db
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: shopee_clone
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: ecommerce_db
+      MYSQL_USER: shopvn_user
+      MYSQL_PASSWORD: shopvn_pass
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
+    container_name: shopvn_redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
 
   backend:
-    build: ./backend
-    command: >
-      sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
-    volumes:
-      - ./backend:/app
+    build:
+      context: ./backend          # ← FastAPI backend
+      dockerfile: Dockerfile
+    container_name: shopvn_backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: shopvn_user
+      DB_PASSWORD: shopvn_pass
+      DB_NAME: ecommerce_db
+      REDIS_HOST: redis
     ports:
       - "8000:8000"
-    env_file:
-      - ./backend/.env
     depends_on:
-      - db
-      - redis
-
-  celery:
-    build: ./backend
-    command: celery -A config worker -l info
+      db:
+        condition: service_healthy
     volumes:
-      - ./backend:/app
-    env_file:
-      - ./backend/.env
-    depends_on:
-      - db
-      - redis
-
-  celery-beat:
-    build: ./backend
-    command: celery -A config beat -l info
-    volumes:
-      - ./backend:/app
-    env_file:
-      - ./backend/.env
-    depends_on:
-      - db
-      - redis
+      - ./backend/uploads:/app/uploads
+      - ./backend/logs:/app/logs
+    command: uvicorn app.main:socket_app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
-    build: ./frontend
-    command: npm start
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+    build:
+      context: ./frontend          # ← React TS frontend
+      dockerfile: Dockerfile
+    container_name: shopvn_frontend
+    restart: unless-stopped
     ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000/api/v1
-      - REACT_APP_WS_URL=ws://localhost:8000/ws
+      - "3000:80"
+    depends_on:
+      - backend
 
 volumes:
-  postgres_data:
+  db_data:
