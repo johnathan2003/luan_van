@@ -25,7 +25,7 @@ const ProductCard: React.FC<Props> = ({ product }) => {
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
           {product.sales_count > 100 && (
-            <span style={{ position: 'absolute', top: 8, left: 8, background: 'var(--primary)', color: 'white', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
+            <span style={{ position: 'absolute', top: 8, left: 8, background: 'var(--flash-timer-bg)', color: 'var(--flash-timer-text)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
               HOT
             </span>
           )}
@@ -33,7 +33,7 @@ const ProductCard: React.FC<Props> = ({ product }) => {
       </Link>
       <div style={{ padding: 12 }}>
         <Link to={`/products/${product.product_id}`}>
-          <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--gray-800)', marginBottom: 6, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+          <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 6, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {product.product_name}
           </p>
         </Link>
@@ -44,11 +44,18 @@ const ProductCard: React.FC<Props> = ({ product }) => {
           <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--gray-400)' }}>Đã bán {product.sales_count}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary)' }}>{formatCurrency(product.price)}</span>
+          <span style={{
+            fontSize: 16,
+            fontWeight: 700,
+            color: 'var(--price-color)',
+            letterSpacing: '-0.02em',
+          }}>
+            {formatCurrency(product.price)}
+          </span>
           {isAuthenticated && product.stock_quantity > 0 && (
             <button
               onClick={(e) => { e.preventDefault(); add(product.product_id) }}
-              style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 'var(--radius)', padding: '5px 10px', fontSize: 18, cursor: 'pointer' }}
+              style={{ background: 'var(--cta-bg)', color: 'var(--cta-text)', border: 'none', borderRadius: 'var(--radius)', padding: '5px 10px', fontSize: 18, cursor: 'pointer' }}
               title="Thêm vào giỏ"
             >
               +

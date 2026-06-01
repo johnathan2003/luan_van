@@ -8,6 +8,8 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, './src'),
     },
+    // Ưu tiên .tsx trước .jsx (tránh Windows load nhầm file cũ)
+    extensions: ['.tsx', '.ts', '.jsx', '.js', '.json'],
   },
   server: {
     port: 3000,

@@ -7,7 +7,7 @@ const Register: React.FC = () => (
     <div style={{ width: '100%', maxWidth: 440 }}>
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <div style={{ fontSize: 48, marginBottom: 8 }}>🛒</div>
-        <h1 style={{ fontSize: 28, fontWeight: 800, color: 'var(--primary)' }}>ShopVN</h1>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: 'var(--primary)' }}>BuyZo</h1>
         <p style={{ color: 'var(--gray-500)', marginTop: 4 }}>Tạo tài khoản để bắt đầu mua sắm</p>
       </div>
       <div className="card" style={{ padding: 32 }}>

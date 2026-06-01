@@ -35,8 +35,8 @@ const AdminSidebar: React.FC = () => (
   <aside style={{ width: 220, flexShrink: 0 }}>
     <div className="card" style={{ overflow: 'hidden', position: 'sticky', top: 80 }}>
       {/* Header sidebar */}
-      <div style={{
-        background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+        <div style={{
+        background: 'linear-gradient(135deg, #1E3A8A 0%, #1D4ED8 100%)',
         padding: '16px 20px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -51,7 +51,7 @@ const AdminSidebar: React.FC = () => (
       {/* Nav items */}
       <nav style={{ padding: '8px 0' }}>
         {ADMIN_NAV.map(item => (
-          <NavLink
+              <NavLink
             key={item.path}
             to={item.path}
             end={item.path === '/admin'}
@@ -62,9 +62,9 @@ const AdminSidebar: React.FC = () => (
               padding: '10px 20px',
               fontSize: 13,
               fontWeight: isActive ? 600 : 400,
-              color: isActive ? 'var(--primary)' : 'var(--gray-700)',
-              background: isActive ? '#fff0ed' : 'transparent',
-              borderRight: isActive ? '3px solid var(--primary)' : '3px solid transparent',
+                color: isActive ? '#3B82F6' : 'var(--gray-700)',
+              background: isActive ? '#EFF6FF' : 'transparent',
+              borderRight: isActive ? '3px solid #3B82F6' : '3px solid transparent',
               textDecoration: 'none',
               transition: 'all 0.15s ease',
             })}
@@ -80,7 +80,7 @@ const AdminSidebar: React.FC = () => (
         ))}
       </nav>
 
-      <div style={{ padding: '12px 20px', borderTop: '1px solid var(--gray-100)', fontSize: 11, color: 'var(--gray-400)' }}>
+      <div style={{ padding: '12px 20px', borderTop: '1px solid #DBEAFE', fontSize: 11, color: '#64748b' }}>
         Hệ thống quản trị v1.0
       </div>
     </div>

@@ -13,7 +13,7 @@ interface Props {
 }
 
 const PublicLayout: React.FC<Props> = ({ children, noFooter }) => (
-  <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+  <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-page)' }}>
     <Navbar />
     <main style={{ flex: 1 }}>
       {children}

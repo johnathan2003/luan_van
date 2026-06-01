@@ -10,7 +10,7 @@ import Login              from './pages/Login'
 import Register           from './pages/Register'
 
 // ── Public / chung ────────────────────────────────────────────────────────────
-import Home               from './pages/Home'
+import Home               from './pages/Home.tsx'
 import NotFoundPage       from './pages/NotFoundPage'
 import ProfilePage        from './pages/ProfilePage'
 import ShopRegistration   from './pages/ShopRegistration'

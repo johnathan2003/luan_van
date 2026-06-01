@@ -47,9 +47,10 @@ const ShipperSidebar: React.FC = () => {
       <div className="card" style={{ overflow: 'hidden', position: 'sticky', top: 80 }}>
         {/* Shipper header */}
         <div style={{
-          background: 'linear-gradient(135deg, #0f172a 0%, #1e40af 100%)',
+          background: 'linear-gradient(135deg, #78350F 0%, #D97706 100%)',
           padding: '16px 20px',
         }}>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.15)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🚚</div>
             <div>
@@ -108,9 +109,11 @@ const ShipperSidebar: React.FC = () => {
                 padding: '10px 20px',
                 fontSize: 13,
                 fontWeight: isActive ? 600 : 400,
-                color: isActive ? '#1e40af' : 'var(--gray-700)',
-                background: isActive ? '#eff6ff' : 'transparent',
-                borderRight: isActive ? '3px solid #1e40af' : '3px solid transparent',
+                color: isActive ? '#D97706' : 'var(--gray-700)',
+
+                background: isActive ? '#FFFBEB' : 'transparent',
+
+                borderRight: isActive ? '3px solid #F59E0B' : '3px solid transparent',
                 textDecoration: 'none',
                 transition: 'all 0.15s ease',
               })}

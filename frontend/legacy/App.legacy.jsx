@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RequireAuth, RequireRole, GuestOnly } from "./router";
+import { RequireAuth, RequireRole, GuestOnly } from "./routeGuards";
 
 // Layouts
 import BuyerLayout from "./components/layout/BuyerLayout";

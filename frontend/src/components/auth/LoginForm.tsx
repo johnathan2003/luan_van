@@ -14,8 +14,15 @@ const LoginForm: React.FC = () => {
     e.preventDefault()
     const result = await dispatch(login(form))
     if (login.fulfilled.match(result)) {
+      const user: any = result.payload?.user
+      const roleName: string | undefined = user?.roles?.[0]?.role_name
+
       toast.success('Đăng nhập thành công!')
-      navigate('/')
+
+      if (roleName === 'admin') navigate('/admin')
+      else if (roleName === 'shop') navigate('/shop')
+      else if (roleName === 'shipper') navigate('/shipper')
+      else navigate('/')
     } else {
       toast.error(result.payload as string || 'Đăng nhập thất bại')
     }

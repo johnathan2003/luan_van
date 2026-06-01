@@ -1,0 +1,185 @@
+/**
+ * BuyZo — Design tokens
+ * Sáng: nền tím nhạt, topbar tím đậm + nhấn vàng gold
+ * Tối:  nền đêm sâu, topbar tím nhạt
+ */
+
+/* ── Light (nhấn nhá violet + gold) ─────────────────────────── */
+:root,
+:root[data-theme='light'] {
+  /* Nền trang */
+  --bg-page: #F8F7FF;
+  --bg-page-gradient: linear-gradient(
+    165deg,
+    #F8F7FF 0%,
+    #EDE9FE 35%,
+    #F5F3FF 70%,
+    #F8F7FF 100%
+  );
+
+  /* Topbar — gradient tím đậm */
+  --bg-topbar: #4C1D95;
+  --topbar-gradient: linear-gradient(
+    105deg,
+    #4C1D95 0%,
+    #5B21B6 45%,
+    #6D28D9 100%
+  );
+  --text-on-topbar: #FFFFFF;
+  --topbar-shadow: 0 4px 24px rgba(76, 29, 149, 0.35);
+
+  /* Navbar / card */
+  --bg-surface: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-card-muted: #FAFAFF;
+  --bg-highlight: #F5F3FF;
+
+  /* Viền & nhấn */
+  --border-subtle: #E9E5FF;
+  --border-accent: #C4B5FD;
+  --border-gold: #F9C74F;
+
+  /* Chữ */
+  --text-primary: #1E1B4B;
+  --text-secondary: #5B5676;
+  --text-muted: #8B85A8;
+  --text-on-violet: #FFFFFF;
+
+  /* Nút CTA — Violet + glow */
+  --cta-bg: #7C3AED;
+  --cta-bg-hover: #6D28D9;
+  --cta-text: #FFFFFF;
+  --cta-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
+
+  /* Gold nhấn nhá */
+  --accent-gold: #F9C74F;
+  --accent-gold-soft: #FEF9C3;
+  --accent-gold-dark: #E8A317;
+
+  /* Giá sản phẩm */
+  --price-color: #6D28D9;
+  --price-glow: 0 0 0 transparent;
+
+  /* Flash timer */
+  --flash-timer-bg: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+  --flash-timer-text: #FFFFFF;
+  --flash-timer-border: 2px solid #F9C74F;
+
+  /* Hero banner */
+  --hero-gradient: linear-gradient(
+    125deg,
+    #4C1D95 0%,
+    #6D28D9 42%,
+    #7C3AED 68%,
+    #A78BFA 100%
+  );
+  --hero-text: #FFFFFF;
+  --hero-accent: #F9C74F;
+
+  /* Alias */
+  --primary: #7C3AED;
+  --primary-dark: #5B21B6;
+  --primary-light: #A78BFA;
+  --secondary: #4C1D95;
+  --accent: #F9C74F;
+
+  --gray-50: #F8F7FF;
+  --gray-100: #EDE9FE;
+  --gray-200: #DDD6FE;
+  --gray-300: #C4B5FD;
+  --gray-400: #A78BFA;
+  --gray-500: #8B5CF6;
+  --gray-600: #6D28D9;
+  --gray-700: #5B21B6;
+  --gray-800: #1E1B4B;
+
+  --shadow: 0 1px 3px rgba(91, 33, 182, 0.06), 0 1px 2px rgba(91, 33, 182, 0.04);
+  --shadow-md: 0 6px 20px rgba(91, 33, 182, 0.1);
+  --shadow-lg: 0 12px 32px rgba(91, 33, 182, 0.14);
+  --shadow-card-hover: 0 16px 40px rgba(124, 58, 237, 0.18);
+}
+
+/* ── Dark (đậm, tím đêm sâu) ─────────────────────────────── */
+:root[data-theme='dark'] {
+  /* Nền — đậm hơn #0A0118 */
+  --bg-page: #050010;
+  --bg-page-gradient: linear-gradient(
+    180deg,
+    #030008 0%,
+    #050010 40%,
+    #08011a 100%
+  );
+
+  /* Topbar — tím đậm (không còn tím nhạt quá sáng) */
+  --bg-topbar: #4C1D95;
+  --topbar-gradient: linear-gradient(
+    105deg,
+    #3B0764 0%,
+    #4C1D95 50%,
+    #5B21B6 100%
+  );
+  --text-on-topbar: #EDE9FE;
+  --topbar-shadow: 0 4px 28px rgba(0, 0, 0, 0.65);
+
+  /* Card / surface — tím đen đậm */
+  --bg-surface: #0C011C;
+  --bg-card: #0C011C;
+  --bg-card-muted: #100224;
+  --bg-highlight: #14032E;
+
+  --border-subtle: #1E0A42;
+  --border-accent: #3B0764;
+  --border-gold: #D4A017;
+
+  --text-primary: #EDE9FE;
+  --text-secondary: #A78BFA;
+  --text-muted: #7C6BA8;
+  --text-on-violet: #F5F3FF;
+
+  --cta-bg: #E8A317;
+  --cta-bg-hover: #D4920F;
+  --cta-text: #050010;
+  --cta-shadow: 0 4px 18px rgba(232, 163, 23, 0.4);
+
+  --accent-gold: #F9C74F;
+  --accent-gold-soft: #2A1F06;
+  --accent-gold-dark: #E8A317;
+
+  --price-color: #C4B5FD;
+  --price-glow: none;
+
+  --flash-timer-bg: linear-gradient(135deg, #E8A317 0%, #D4920F 100%);
+  --flash-timer-text: #050010;
+  --flash-timer-border: 2px solid #7C3AED;
+
+  --hero-gradient: linear-gradient(
+    125deg,
+    #030008 0%,
+    #2E1065 45%,
+    #4C1D95 75%,
+    #5B21B6 100%
+  );
+  --hero-text: #EDE9FE;
+  --hero-accent: #F9C74F;
+
+  --primary: #8B5CF6;
+  --primary-dark: #6D28D9;
+  --primary-light: #A78BFA;
+  --secondary: #5B21B6;
+  --accent: #F9C74F;
+
+  --gray-50: #0C011C;
+  --gray-100: #100224;
+  --gray-200: #1E0A42;
+  --gray-300: #3B0764;
+  --gray-400: #5B21B6;
+  --gray-500: #7C3AED;
+  --gray-600: #8B5CF6;
+  --gray-700: #A78BFA;
+  --gray-800: #EDE9FE;
+
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.75);
+  --shadow-card-hover: 0 14px 36px rgba(91, 33, 182, 0.25);
+}

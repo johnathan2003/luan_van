@@ -38,7 +38,8 @@ const ShopSidebar: React.FC = () => {
       <div className="card" style={{ overflow: 'hidden', position: 'sticky', top: 80 }}>
         {/* Shop header */}
         <div style={{
-          background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+          background: 'linear-gradient(135deg, #14532D 0%, #16A34A 100%)',
+
           padding: '16px 20px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -64,9 +65,9 @@ const ShopSidebar: React.FC = () => {
                 padding: '10px 20px',
                 fontSize: 13,
                 fontWeight: isActive ? 600 : 400,
-                color: isActive ? 'var(--primary)' : 'var(--gray-700)',
-                background: isActive ? '#fff0ed' : 'transparent',
-                borderRight: isActive ? '3px solid var(--primary)' : '3px solid transparent',
+                color: isActive ? '#16A34A' : 'var(--gray-700)',
+                background: isActive ? '#F0FDF4' : 'transparent',
+                borderRight: isActive ? '3px solid #22C55E' : '3px solid transparent',
                 textDecoration: 'none',
                 transition: 'all 0.15s ease',
               })}

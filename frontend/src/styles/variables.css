@@ -61,7 +61,12 @@
   --shadow-lg: 0 10px 15px rgba(0,0,0,.1), 0 4px 6px rgba(0,0,0,.05);
 
   /* Layout */
-  --navbar-height: 64px;
+  --navbar-height: 100px;
+  --navbar-gap: 32px;           /* khoảng cách giữa logo | search | actions */
+  --navbar-actions-gap: 20px;   /* khoảng cách giữa icon/nút bên phải */
+  --navbar-padding-x: 24px;   /* padding ngang trong thanh nav */
+  --logo-height: 72px;        /* chiều cao logo (navbar-height ~ 100px) */
+  --logo-max-width: 200px;    /* chiều ngang tối đa logo */
   --sidebar-width: 240px;
   --container-max: 1280px;
 
