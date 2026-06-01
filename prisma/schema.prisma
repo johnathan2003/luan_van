@@ -1,0 +1,720 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  userId       Int        @id @default(autoincrement()) @map("user_id")
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  fullName     String?    @map("full_name")
+  phone        String?
+  address      String?
+  avatarUrl    String?    @map("avatar_url")
+  status       UserStatus @default(ACTIVE)
+  lastLogin    DateTime?  @map("last_login")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  userRoles       UserRole[]
+  rolesAssignedBy UserRole[] @relation("AssignedBy")
+
+  shop                      Shop?
+  shopRegistrations         ShopRegistration[]
+  shopRegistrationsReviewed ShopRegistration[] @relation("ShopRegistrationReviewedBy")
+  shopEmployees             ShopEmployee[]
+  shopEmployeesCreatedBy    ShopEmployee[]     @relation("CreatedBy")
+
+  employeeRolePermissions   EmployeeRolePermission[]
+  systemEmployees           SystemEmployee[]
+  systemEmployeesCreatedBy  SystemEmployee[]           @relation("CreatedBy")
+  systemEmployeePermissions SystemEmployeePermission[]
+
+  orders                 Order[]
+  orderDisputesInitiated Dispute[] @relation("InitiatedBy")
+  orderDisputesResolved  Dispute[] @relation("ResolvedBy")
+
+  voucherCreatedBy             Voucher[]
+  notifications                Notification[]
+  notificationPreferences      NotificationPreference?
+  adminLogs                    AdminLog[]
+  productReviews               ProductReview[]
+  shipperProfile               Shipper?
+  shipperRegistration          ShipperRegistration?
+  shipperRegistrationsReviewed ShipperRegistration[]   @relation("ShipperRegistrationReviewedBy")
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE   @map("active")
+  INACTIVE @map("inactive")
+  BANNED   @map("banned")
+}
+
+model Role {
+  roleId      Int      @id @default(autoincrement()) @map("role_id")
+  roleName    String   @unique @map("role_name")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userRoleId  Int            @id @default(autoincrement()) @map("user_role_id")
+  userId      Int            @map("user_id")
+  roleId      Int            @map("role_id")
+  status      UserRoleStatus @default(ACTIVE)
+  currentRole Boolean?       @default(false) @map("current_role")
+  assignedBy  Int?           @map("assigned_by")
+  assignedAt  DateTime       @default(now()) @map("assigned_at")
+
+  // Relations
+  user           User  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  role           Role  @relation(fields: [roleId], references: [roleId])
+  assignedByUser User? @relation("AssignedBy", fields: [assignedBy], references: [userId])
+
+  @@unique([userId, roleId], map: "unique_user_role")
+  @@index([userId, currentRole])
+  @@map("user_roles")
+}
+
+enum UserRoleStatus {
+  ACTIVE   @map("active")
+  INACTIVE @map("inactive")
+}
+
+model Permission {
+  permissionId   Int      @id @default(autoincrement()) @map("permission_id")
+  permissionCode String   @unique @map("permission_code")
+  description    String?
+  category       String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  rolePermissions           RolePermission[]
+  employeeRolePermissions   EmployeeRolePermission[]
+  systemEmployeePermissions SystemEmployeePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  rolePermId   Int @id @default(autoincrement()) @map("role_perm_id")
+  roleId       Int @map("role_id")
+  permissionId Int @map("permission_id")
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [roleId])
+  permission Permission @relation(fields: [permissionId], references: [permissionId])
+
+  @@unique([roleId, permissionId], map: "unique_role_permission")
+  @@map("role_permissions")
+}
+
+// ============================================================================
+// PART 2: SHOP MANAGEMENT
+// ============================================================================
+
+model Shop {
+  shopId             Int                    @id @map("shop_id")
+  shopName           String                 @map("shop_name")
+  description        String?
+  avatarUrl          String?                @map("avatar_url")
+  address            String                 @map("address")
+  phone              String?
+  rating             Decimal                @default(0) @db.Decimal(3, 2)
+  totalFollowers     Int                    @default(0) @map("total_followers")
+  totalOrders        Int                    @default(0) @map("total_orders")
+  verificationStatus ShopVerificationStatus @default(PENDING) @map("verification_status")
+  verifiedAt         DateTime?              @map("verified_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+
+  // Relations
+  owner     User           @relation(fields: [shopId], references: [userId], onDelete: Cascade)
+  products  Product[]
+  employees ShopEmployee[]
+  orders    Order[]
+
+  @@index([verificationStatus])
+  @@map("shops")
+}
+
+enum ShopVerificationStatus {
+  PENDING  @map("pending")
+  APPROVED @map("approved")
+  REJECTED @map("rejected")
+}
+
+model ShopRegistration {
+  regId           Int                @id @default(autoincrement()) @map("reg_id")
+  userId          Int                @unique @map("user_id")
+  shopName        String             @map("shop_name")
+  description     String?
+  address         String
+  cmndUrl         String?            @map("cmnd_url")
+  cmndBackUrl     String?            @map("cmnd_back_url")
+  businessRegUrl  String?            @map("business_reg_url")
+  status          RegistrationStatus @default(PENDING)
+  rejectionReason String?            @map("rejection_reason")
+  reviewedBy      Int?               @map("reviewed_by")
+  reviewedAt      DateTime?          @map("reviewed_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+
+  // Relations
+  user     User  @relation(fields: [userId], references: [userId])
+  reviewer User? @relation("ShopRegistrationReviewedBy", fields: [reviewedBy], references: [userId])
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("shop_registrations")
+}
+
+enum RegistrationStatus {
+  PENDING  @map("pending")
+  APPROVED @map("approved")
+  REJECTED @map("rejected")
+}
+
+model ShopEmployee {
+  employeeId   Int            @id @default(autoincrement()) @map("employee_id")
+  userId       Int            @unique @map("user_id")
+  shopId       Int            @map("shop_id")
+  employeeName String?        @map("employee_name")
+  position     String?
+  status       EmployeeStatus @default(ACTIVE)
+  hiredDate    DateTime?      @map("hired_date") @db.Date
+  createdBy    Int            @map("created_by")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [userId])
+
+  shop Shop @relation(fields: [shopId], references: [shopId])
+
+  createdByUser User @relation("CreatedBy", fields: [createdBy], references: [userId])
+
+  permissions EmployeeRolePermission[]
+
+  @@index([shopId])
+  @@index([status])
+  @@map("shop_employees")
+}
+
+enum EmployeeStatus {
+  ACTIVE    @map("active")
+  INACTIVE  @map("inactive")
+  SUSPENDED @map("suspended")
+}
+
+model EmployeeRolePermission {
+  empPermId      Int          @id @default(autoincrement()) @map("emp_perm_id")
+  employeeId     Int          @map("employee_id")
+  permissionCode String       @map("permission_code")
+  grantedBy      Int          @map("granted_by")
+  grantedAt      DateTime     @default(now()) @map("granted_at")
+  // Relations
+  employee       ShopEmployee @relation(fields: [employeeId], references: [employeeId])
+  grantedByUser  User         @relation(fields: [grantedBy], references: [userId])
+  permission     Permission   @relation(fields: [permissionCode], references: [permissionCode])
+
+  @@index([employeeId])
+  @@map("employee_role_permissions")
+}
+
+model SystemEmployee {
+  empId     Int            @id @default(autoincrement()) @map("emp_id")
+  userId    Int            @unique @map("user_id")
+  empName   String?        @map("emp_name")
+  roleName  String?        @map("role_name")
+  status    EmployeeStatus @default(ACTIVE)
+  createdBy Int            @map("created_by")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  user          User                       @relation(fields: [userId], references: [userId])
+  createdByUser User                       @relation("CreatedBy", fields: [createdBy], references: [userId])
+  permissions   SystemEmployeePermission[]
+
+  @@index([status])
+  @@map("system_employees")
+}
+
+model SystemEmployeePermission {
+  empPermId      Int             @id @default(autoincrement()) @map("emp_perm_id")
+  empId          Int             @map("emp_id")
+  permissionCode String?         @map("permission_code")
+  scope          PermissionScope @default(ADMIN)
+  grantedBy      Int             @map("granted_by")
+  grantedAt      DateTime        @default(now()) @map("granted_at")
+
+  // Relations
+  employee      SystemEmployee @relation(fields: [empId], references: [empId])
+  grantedByUser User           @relation(fields: [grantedBy], references: [userId])
+  permission    Permission?    @relation(fields: [permissionCode], references: [permissionCode])
+
+  @@index([empId])
+  @@map("system_employee_permissions")
+}
+
+enum PermissionScope {
+  ADMIN @map("admin")
+  SHOP  @map("shop")
+  BOTH  @map("both")
+}
+
+// ============================================================================
+// PART 3: PRODUCT MANAGEMENT
+// ============================================================================
+
+model ProductCategory {
+  categoryId   Int      @id @default(autoincrement()) @map("category_id")
+  categoryName String   @unique @map("category_name")
+  description  String?
+  iconUrl      String?  @map("icon_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  products Product[]
+
+  @@map("product_categories")
+}
+
+model Product {
+  productId     Int           @id @default(autoincrement()) @map("product_id")
+  shopId        Int           @map("shop_id")
+  categoryId    Int?          @map("category_id")
+  productName   String        @map("product_name")
+  description   String?
+  price         Decimal       @db.Decimal(10, 2)
+  cost          Decimal?      @db.Decimal(10, 2)
+  stockQuantity Int           @default(0) @map("stock_quantity")
+  imageUrls     Json?         @map("image_urls")
+  status        ProductStatus @default(PENDING)
+  approvedAt    DateTime?     @map("approved_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  shop       Shop             @relation(fields: [shopId], references: [shopId])
+  category   ProductCategory? @relation(fields: [categoryId], references: [categoryId])
+  variants   ProductVariant[]
+  reviews    ProductReview[]
+  orderItems OrderItem[]
+
+  @@index([shopId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("products")
+}
+
+enum ProductStatus {
+  ACTIVE   @map("active")
+  PENDING  @map("pending")
+  REJECTED @map("rejected")
+  ARCHIVED @map("archived")
+}
+
+model ProductVariant {
+  variantId   Int      @id @default(autoincrement()) @map("variant_id")
+  productId   Int      @map("product_id")
+  variantName String   @map("variant_name")
+  sku         String
+  price       Decimal  @db.Decimal(10, 2)
+  stock       Int      @default(0)
+  imageUrl    String?  @map("image_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [productId], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([sku])
+  @@map("product_variants")
+}
+
+model ProductReview {
+  reviewId  Int      @id @default(autoincrement()) @map("review_id")
+  productId Int      @map("product_id")
+  userId    Int      @map("user_id")
+  rating    Int
+  title     String?
+  content   String?
+  verified  Boolean  @default(false)
+  helpful   Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [productId], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [userId])
+
+  @@index([productId])
+  @@index([userId])
+  @@map("product_reviews")
+}
+
+// ============================================================================
+// PART 4: ORDERS
+// ============================================================================
+
+model Order {
+  orderId         Int           @id @default(autoincrement()) @map("order_id")
+  shopId          Int           @map("shop_id")
+  userId          Int           @map("user_id")
+  orderNumber     String        @unique @map("order_number")
+  totalPrice      Decimal       @map("total_price") @db.Decimal(10, 2)
+  discountAmount  Decimal       @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  finalPrice      Decimal       @map("final_price") @db.Decimal(10, 2)
+  voucherId       Int?          @map("voucher_id")
+  shippingFee     Decimal       @default(0) @map("shipping_fee") @db.Decimal(10, 2)
+  shippingAddress String?       @map("shipping_address")
+  paymentMethod   PaymentMethod @map("payment_method")
+  orderStatus     OrderStatus   @default(PENDING) @map("order_status")
+  notes           String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  shop     Shop        @relation(fields: [shopId], references: [shopId])
+  user     User        @relation(fields: [userId], references: [userId])
+  voucher  Voucher?    @relation(fields: [voucherId], references: [voucherId])
+  items    OrderItem[]
+  payment  Payment?
+  shipment Shipment?
+  disputes Dispute[]
+
+  @@index([shopId])
+  @@index([userId])
+  @@index([orderStatus])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING   @map("pending")
+  CONFIRMED @map("confirmed")
+  PAID      @map("paid")
+  SHIPPED   @map("shipped")
+  DELIVERED @map("delivered")
+  CANCELLED @map("cancelled")
+  RETURNED  @map("returned")
+}
+
+enum PaymentMethod {
+  MOMO        @map("momo")
+  COD         @map("cod")
+  CREDIT_CARD @map("credit_card")
+}
+
+model OrderItem {
+  orderItemId  Int      @id @default(autoincrement()) @map("order_item_id")
+  orderId      Int      @map("order_id")
+  productId    Int      @map("product_id")
+  quantity     Int
+  priceAtOrder Decimal  @map("price_at_order") @db.Decimal(10, 2)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [productId])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// ============================================================================
+// PART 5: PAYMENTS & SHIPMENTS
+// ============================================================================
+
+model Payment {
+  paymentId     Int           @id @default(autoincrement()) @map("payment_id")
+  orderId       Int           @unique @map("order_id")
+  transId       String?       @map("trans_id")
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  momoRequestId String?       @map("momo_request_id")
+  momoResponse  Json?         @map("momo_response")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [orderId])
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING @map("pending")
+  SUCCESS @map("success")
+  FAILED  @map("failed")
+}
+
+model Shipper {
+  shipperId       Int           @id @map("shipper_id")
+  vehicleType     String?       @map("vehicle_type")
+  currentLocation Json?         @map("current_location")
+  status          ShipperStatus @default(OFFLINE)
+  rating          Decimal       @default(0) @db.Decimal(3, 2)
+  totalDeliveries Int           @default(0) @map("total_deliveries")
+  verifiedAt      DateTime?     @map("verified_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  user      User       @relation(fields: [shipperId], references: [userId])
+  shipments Shipment[]
+
+  @@index([status])
+  @@map("shippers")
+}
+
+enum ShipperStatus {
+  AVAILABLE   @map("available")
+  ON_DELIVERY @map("on_delivery")
+  OFFLINE     @map("offline")
+}
+
+model ShipperRegistration {
+  regId           Int                @id @default(autoincrement()) @map("reg_id")
+  userId          Int                @unique @map("user_id")
+  vehicleType     String?            @map("vehicle_type")
+  licenseUrl      String?            @map("license_url")
+  registrationUrl String?            @map("registration_url")
+  status          RegistrationStatus @default(PENDING)
+  rejectionReason String?            @map("rejection_reason")
+  reviewedBy      Int?               @map("reviewed_by")
+  reviewedAt      DateTime?          @map("reviewed_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+
+  // Relations
+  user     User  @relation(fields: [userId], references: [userId])
+  reviewer User? @relation("ShipperRegistrationReviewedBy", fields: [reviewedBy], references: [userId])
+
+  @@index([status])
+  @@map("shipper_registrations")
+}
+
+model Shipment {
+  shipmentId       Int            @id @default(autoincrement()) @map("shipment_id")
+  orderId          Int            @unique @map("order_id")
+  shipperId        Int?           @map("shipper_id")
+  pickupLocation   String?        @map("pickup_location")
+  deliveryLocation String?        @map("delivery_location")
+  status           ShipmentStatus @default(PENDING)
+  pickupTime       DateTime?      @map("pickup_time")
+  deliveryTime     DateTime?      @map("delivery_time")
+  currentLocation  Json?          @map("current_location")
+  route            Json?
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  order   Order    @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
+  shipper Shipper? @relation(fields: [shipperId], references: [shipperId])
+
+  @@index([status])
+  @@index([shipperId])
+  @@index([createdAt])
+  @@map("shipments")
+}
+
+enum ShipmentStatus {
+  PENDING    @map("pending")
+  ASSIGNED   @map("assigned")
+  PICKED_UP  @map("picked_up")
+  IN_TRANSIT @map("in_transit")
+  DELIVERED  @map("delivered")
+  FAILED     @map("failed")
+}
+
+// ============================================================================
+// PART 6: NOTIFICATIONS & LOGGING
+// ============================================================================
+
+model Notification {
+  notificationId    Int       @id @default(autoincrement()) @map("notification_id")
+  userId            Int       @map("user_id")
+  title             String
+  message           String
+  type              String?
+  relatedEntityType String?   @map("related_entity_type")
+  relatedEntityId   Int?      @map("related_entity_id")
+  isRead            Boolean   @default(false) @map("is_read")
+  readAt            DateTime? @map("read_at")
+  actionUrl         String?   @map("action_url")
+  data              Json?
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  prefId             Int       @id @default(autoincrement()) @map("pref_id")
+  userId             Int       @unique @map("user_id")
+  emailNotifications Boolean   @default(true) @map("email_notifications")
+  smsNotifications   Boolean   @default(false) @map("sms_notifications")
+  pushNotifications  Boolean   @default(true) @map("push_notifications")
+  notificationTypes  Json?     @map("notification_types")
+  quietHoursStart    DateTime? @map("quiet_hours_start") @db.Time
+  quietHoursEnd      DateTime? @map("quiet_hours_end") @db.Time
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model EmployeeActivityLog {
+  logId      Int      @id @default(autoincrement()) @map("log_id")
+  employeeId Int?     @map("employee_id")
+  action     String
+  entityType String?  @map("entity_type")
+  entityId   Int?     @map("entity_id")
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([createdAt])
+  @@map("employee_activity_logs")
+}
+
+model AdminLog {
+  logId      Int      @id @default(autoincrement()) @map("log_id")
+  adminId    Int      @map("admin_id")
+  action     String
+  targetType String?  @map("target_type")
+  targetId   Int?     @map("target_id")
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  admin User @relation(fields: [adminId], references: [userId])
+
+  @@index([adminId])
+  @@index([createdAt])
+  @@map("admin_logs")
+}
+
+model SystemLog {
+  logId     Int      @id @default(autoincrement()) @map("log_id")
+  level     LogLevel
+  message   String
+  context   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([level])
+  @@index([createdAt])
+  @@map("system_logs")
+}
+
+enum LogLevel {
+  INFO     @map("info")
+  WARNING  @map("warning")
+  ERROR    @map("error")
+  CRITICAL @map("critical")
+}
+
+// ============================================================================
+// PART 7: VOUCHERS & DISPUTES
+// ============================================================================
+
+model Voucher {
+  voucherId     Int           @id @default(autoincrement()) @map("voucher_id")
+  code          String        @unique
+  discountType  DiscountType  @default(PERCENTAGE) @map("discount_type")
+  discountValue Decimal       @map("discount_value") @db.Decimal(10, 2)
+  minOrderValue Decimal?      @map("min_order_value") @db.Decimal(10, 2)
+  maxUses       Int?          @map("max_uses")
+  currentUses   Int           @default(0) @map("current_uses")
+  status        VoucherStatus @default(ACTIVE)
+  validFrom     DateTime?     @map("valid_from")
+  validTo       DateTime?     @map("valid_to")
+  createdBy     Int?          @map("created_by")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  creator User?   @relation(fields: [createdBy], references: [userId])
+  orders  Order[]
+
+  @@index([code])
+  @@index([status])
+  @@map("vouchers")
+}
+
+enum DiscountType {
+  PERCENTAGE @map("percentage")
+  FIXED      @map("fixed")
+}
+
+enum VoucherStatus {
+  ACTIVE   @map("active")
+  INACTIVE @map("inactive")
+  EXPIRED  @map("expired")
+}
+
+model Dispute {
+  disputeId         Int           @id @default(autoincrement()) @map("dispute_id")
+  orderId           Int           @map("order_id")
+  initiatedBy       Int           @map("initiated_by")
+  initiatedParty    DisputeParty  @map("initiated_party")
+  reason            String?
+  status            DisputeStatus @default(OPEN)
+  resolvedBy        Int?          @map("resolved_by")
+  resolutionDetails String?       @map("resolution_details")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  resolvedAt        DateTime?     @map("resolved_at")
+
+  // Relations
+  order     Order @relation(fields: [orderId], references: [orderId])
+  initiator User  @relation("InitiatedBy", fields: [initiatedBy], references: [userId])
+  resolver  User? @relation("ResolvedBy", fields: [resolvedBy], references: [userId])
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("disputes")
+}
+
+enum DisputeParty {
+  USER    @map("user")
+  SHOP    @map("shop")
+  SHIPPER @map("shipper")
+}
+
+enum DisputeStatus {
+  OPEN      @map("open")
+  RESOLVED  @map("resolved")
+  ESCALATED @map("escalated")
+}

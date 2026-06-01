@@ -1,0 +1,88 @@
+# render.yaml - Render Infrastructure as Code
+# Doc them: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: ecommerce-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    region: singapore
+    plan: free
+
+    # Health check - Render dung de biet service da ready
+    healthCheckPath: /health
+
+    # Auto-deploy khi push len branch main
+    autoDeploy: true
+    branch: main
+
+    # Environment variables - dien vao Render Dashboard
+    envVars:
+      # Database (Supabase)
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        value: postgres
+
+      # Alembic direct connection
+      - key: DIRECT_URL
+        sync: false
+
+      # Supabase Storage
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: uploads
+
+      # JWT
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+
+      # Server
+      - key: DEBUG
+        value: "False"
+      - key: ENVIRONMENT
+        value: production
+      - key: FRONTEND_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      # Payment gateways
+      - key: MOMO_PARTNER_CODE
+        sync: false
+      - key: MOMO_ACCESS_KEY
+        sync: false
+      - key: MOMO_SECRET_KEY
+        sync: false
+      - key: VNPAY_TMN_CODE
+        sync: false
+      - key: VNPAY_HASH_SECRET
+        sync: false
+
+      # Email
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+
+      # Logging
+      - key: LOG_LEVEL
+        value: INFO

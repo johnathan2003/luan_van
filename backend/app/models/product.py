@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Enum, DateTime, ForeignKey, JSON, Index
+from sqlalchemy import Column, Integer, String, Text, Enum, DateTime, ForeignKey, JSON, Index, Numeric, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -25,15 +25,18 @@ class Product(Base):
     category_id = Column(Integer, ForeignKey("product_categories.category_id"))
     product_name = Column(String(255), nullable=False)
     description = Column(Text)
-    price = Column(String(15), nullable=False)
-    cost = Column(String(15))
+    # Prisma schema: price Decimal(10,2) — đổi từ String sang Numeric
+    price = Column(Numeric(10, 2), nullable=False)
+    cost = Column(Numeric(10, 2))
     stock_quantity = Column(Integer, default=0)
     image_urls = Column(JSON)
     status = Column(Enum("active", "pending", "rejected", "archived"), default="pending", index=True)
-    rating = Column(String(5), default="0.00")
+    # rating, reviews — giữ lại cho tính năng reviews
+    rating = Column(Numeric(3, 2), default=0.00)
     total_reviews = Column(Integer, default=0)
     views_count = Column(Integer, default=0)
     sales_count = Column(Integer, default=0)
+    approved_at = Column(DateTime)           # Prisma: approvedAt
     deleted_at = Column(DateTime)
     deleted_by = Column(Integer, ForeignKey("users.user_id"))
     created_at = Column(DateTime, server_default=func.now())
@@ -43,6 +46,7 @@ class Product(Base):
         Index("idx_product_shop", "shop_id"),
         Index("idx_product_status", "status"),
         Index("idx_product_category", "category_id"),
+        Index("idx_product_created", "created_at"),
     )
 
     # Relationships
@@ -52,6 +56,56 @@ class Product(Base):
     order_items = relationship("OrderItem", back_populates="product")
     cart_items = relationship("Cart", back_populates="product")
     deletion_requests = relationship("ProductDeletionRequest", back_populates="product")
+    variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan")
+    reviews = relationship("ProductReview", back_populates="product", cascade="all, delete-orphan")
+
+
+# ── Prisma: ProductVariant (mới) ──────────────────────────────────────────────
+class ProductVariant(Base):
+    """Biến thể sản phẩm: size, màu sắc, v.v. Mỗi variant có giá & stock riêng."""
+    __tablename__ = "product_variants"
+
+    variant_id = Column(Integer, primary_key=True, autoincrement=True)
+    product_id = Column(Integer, ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False)
+    variant_name = Column(String(255), nullable=False)   # Ví dụ: "Màu đỏ - Size M"
+    sku = Column(String(100), nullable=False, index=True) # Stock Keeping Unit
+    price = Column(Numeric(10, 2), nullable=False)
+    stock = Column(Integer, default=0)
+    image_url = Column(String(500))
+    created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_variant_product", "product_id"),
+    )
+
+    # Relationships
+    product = relationship("Product", back_populates="variants")
+
+
+# ── Prisma: ProductReview (mới) ───────────────────────────────────────────────
+class ProductReview(Base):
+    """Đánh giá sản phẩm sau khi mua hàng thành công."""
+    __tablename__ = "product_reviews"
+
+    review_id = Column(Integer, primary_key=True, autoincrement=True)
+    product_id = Column(Integer, ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    rating = Column(Integer, nullable=False)   # 1-5 sao
+    title = Column(String(255))
+    content = Column(Text)
+    verified = Column(Boolean, default=False)  # Đã mua hàng xác thực
+    helpful = Column(Integer, default=0)       # Số lượt thấy hữu ích
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("idx_review_product", "product_id"),
+        Index("idx_review_user", "user_id"),
+    )
+
+    # Relationships
+    product = relationship("Product", back_populates="reviews")
+    user = relationship("User", foreign_keys=[user_id])
 
 
 class StockReservation(Base):

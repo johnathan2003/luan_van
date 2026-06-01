@@ -1,29 +1,103 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-.env
-venv/
-*.egg-info/
-dist/
-build/
-.pytest_cache/
-*.log
-/ecommerce-backend/uploads/
-/ecommerce-backend/logs/
-
-# Node
-node_modules/
-dist/
+# ==== ENVIRONMENT & SECRETS ====
 .env
 .env.local
-*.local
+.env.production
+.env.*.local
+*.env
 
-# OS
-.DS_Store
-Thumbs.db
+# ==== PYTHON / FASTAPI BACKEND ====
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
 
-# IDE
+# Virtual environments
+backend/venv/
+backend/.venv/
+venv/
+.venv/
+env/
+ENV/
+
+# Alembic cache
+backend/migrations/__pycache__/
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+coverage.xml
+
+# Logs
+backend/logs/
+*.log
+logs/
+
+# User uploads
+backend/uploads/products/
+backend/uploads/users/
+backend/uploads/shops/
+
+# ==== NODE / FRONTEND ====
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Build output
+frontend/dist/
+frontend/build/
+dist/
+build/
+
+# Vite cache
+frontend/.vite/
+.vite/
+
+# ==== PRISMA / NODE LEFTOVERS ====
+backend/package-lock.json
+backend/package.json.bak_prisma
+generated/
+prisma.config.ts
+seed.ts
+
+# ==== IDE & EDITOR ====
 .vscode/
 .idea/
 *.swp
+*.swo
+*.suo
+*.user
+.DS_Store
+Thumbs.db
+
+# ==== DOCKER ====
+docker-compose.override.yml
+
+# ==== MISC ====
+*.bak
+*.tmp
+*.orig
+]
+
+# ==== DJANGO LEGACY (khong dung nua) ====
+backend/_django_legacy/
+backend/apps/
+backend/config/
+backend/core/
+configg/
+
+# ==== PRISMA / NODE LEFTOVERS (root level) ====
+package.json
+package-lock.json
+tsconfig.json
+prisma.config.ts
+seed.ts
+
+# ==== SCAFFOLD / TEMP ====
+run.py
+skills-lock.json
+tree.md
+]

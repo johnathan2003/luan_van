@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { authAPI } from "../services/api";
 
+// Helper: lay current_role tu FastAPI response
+function extractRole(user) {
+  if (!user) return null;
+  return user.current_role?.toLowerCase() || user.roles?.[0]?.role_name?.toLowerCase() || null;
+}
+
 const useAuthStore = create((set, get) => ({
   user: JSON.parse(localStorage.getItem("user") || "null"),
   isAuthenticated: !!localStorage.getItem("access_token"),
@@ -10,16 +16,19 @@ const useAuthStore = create((set, get) => ({
   login: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
+      // FastAPI tra ve: { access_token, refresh_token, user: { user_id, email, full_name, roles, current_role } }
       const { data } = await authAPI.login({ email, password });
-      localStorage.setItem("access_token", data.access);
-      localStorage.setItem("refresh_token", data.refresh);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      set({ user: data.user, isAuthenticated: true, isLoading: false });
-      return data.user;
+      const userWithRole = { ...data.user, role: extractRole(data.user) };
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("refresh_token", data.refresh_token);
+      localStorage.setItem("user", JSON.stringify(userWithRole));
+      set({ user: userWithRole, isAuthenticated: true, isLoading: false });
+      return userWithRole;
     } catch (err) {
-      const error = err.response?.data?.non_field_errors?.[0] || "Đăng nhập thất bại";
-      set({ error, isLoading: false });
-      throw new Error(error);
+      const msg =
+        err.response?.data?.detail || err.response?.data?.message || "Dang nhap that bai";
+      set({ error: msg, isLoading: false });
+      throw new Error(msg);
     }
   },
 
@@ -27,34 +36,39 @@ const useAuthStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data } = await authAPI.register(formData);
-      localStorage.setItem("access_token", data.access);
-      localStorage.setItem("refresh_token", data.refresh);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      set({ user: data.user, isAuthenticated: true, isLoading: false });
-      return data.user;
+      const userWithRole = { ...data.user, role: extractRole(data.user) };
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("refresh_token", data.refresh_token);
+      localStorage.setItem("user", JSON.stringify(userWithRole));
+      set({ user: userWithRole, isAuthenticated: true, isLoading: false });
+      return userWithRole;
     } catch (err) {
-      set({ error: "Đăng ký thất bại", isLoading: false });
+      const msg = err.response?.data?.detail || "Dang ky that bai";
+      set({ error: msg, isLoading: false });
       throw err;
     }
   },
 
   logout: async () => {
-    const refresh = localStorage.getItem("refresh_token");
-    try { await authAPI.logout(refresh); } catch {}
-    localStorage.clear();
-    set({ user: null, isAuthenticated: false });
+    try { await authAPI.logout(); } catch {}
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("user");
+    set({ user: null, isAuthenticated: false, error: null });
   },
 
   updateUser: (user) => {
-    localStorage.setItem("user", JSON.stringify(user));
-    set({ user });
+    const merged = { ...user, role: extractRole(user) };
+    localStorage.setItem("user", JSON.stringify(merged));
+    set({ user: merged });
   },
 
-  // Helpers
-  isBuyer: () => get().user?.role === "buyer",
-  isSeller: () => get().user?.role === "seller",
+  // Role helpers
+  getRole:   () => get().user?.role,
+  isBuyer:   () => get().user?.role === "customer",
+  isSeller:  () => ["shop_owner", "employee"].includes(get().user?.role),
   isShipper: () => get().user?.role === "shipper",
-  isAdmin: () => get().user?.role === "admin",
+  isAdmin:   () => get().user?.role === "admin",
 }));
 
 export default useAuthStore;

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+from decimal import Decimal
 
 
 class OrderItemCreate(BaseModel):
@@ -24,7 +25,7 @@ class OrderItemResponse(BaseModel):
     product_name: Optional[str]
     product_image: Optional[str]
     quantity: int
-    price_at_order: str
+    price_at_order: Decimal  # Đổi từ str → Decimal (khớp Prisma)
 
     class Config:
         from_attributes = True
@@ -32,18 +33,21 @@ class OrderItemResponse(BaseModel):
 
 class OrderResponse(BaseModel):
     order_id: int
+    order_number: Optional[str]       # Prisma: orderNumber
     user_id: int
     shop_id: Optional[int]
-    total_price: str
-    discount: str
-    final_price: str
+    total_price: Decimal
+    discount_amount: Optional[Decimal]  # Prisma: discountAmount
+    final_price: Decimal
+    shipping_fee: Optional[Decimal]   # Prisma: shippingFee (mới)
     payment_method: str
     payment_status: str
     order_status: str
-    shipping_address: str
+    shipping_address: Optional[str]
     recipient_name: Optional[str]
     recipient_phone: Optional[str]
-    note: Optional[str]
+    notes: Optional[str]              # Prisma: notes
+    voucher_id: Optional[int]
     created_at: Optional[datetime]
     items: List[OrderItemResponse] = []
 
