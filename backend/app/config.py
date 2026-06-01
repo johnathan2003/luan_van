@@ -1,14 +1,21 @@
+import os
 from pydantic_settings import BaseSettings
 from typing import List
 
 
 class Settings(BaseSettings):
-    # Database
+    # Database (PostgreSQL / Supabase)
     DB_HOST: str = "localhost"
-    DB_PORT: int = 3306
-    DB_USER: str = "root"
+    DB_PORT: int = 5432
+    DB_USER: str = "postgres"
     DB_PASSWORD: str = "password"
-    DB_NAME: str = "ecommerce_db"
+    DB_NAME: str = "postgres"
+
+    # Supabase
+    SUPABASE_URL: str = ""
+    SUPABASE_SERVICE_KEY: str = ""
+    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_STORAGE_BUCKET: str = "uploads"
 
     # JWT
     SECRET_KEY: str = "your-super-secret-key"
@@ -30,7 +37,7 @@ class Settings(BaseSettings):
 
     # Server
     SERVER_HOST: str = "0.0.0.0"
-    SERVER_PORT: int = 8000
+    SERVER_PORT: int = int(os.environ.get("PORT", 8000))
     DEBUG: bool = True
     ENVIRONMENT: str = "development"
     FRONTEND_URL: str = "http://localhost:3000"
@@ -60,11 +67,13 @@ class Settings(BaseSettings):
     LOG_FILE: str = "logs/app.log"
 
     @property
-    def DATABASE_URL(self) -> str:
-        return f"mysql+pymysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+    def DATABASE_URL(self):
+        return "postgresql+psycopg2://{}:{}@{}:{}/{}".format(
+            self.DB_USER, self.DB_PASSWORD, self.DB_HOST, self.DB_PORT, self.DB_NAME
+        )
 
     @property
-    def ALLOWED_ORIGINS_LIST(self) -> List[str]:
+    def ALLOWED_ORIGINS_LIST(self):
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
 
     class Config:

@@ -18,7 +18,7 @@ echo === Tạo virtual environment "venv" ===
 if exist venv (
     echo [SKIP] venv đã tồn tại, bỏ qua tạo mới
 ) else (
-    python -m venv venv
+    python3.10 -m venv venv
     echo [OK] Tạo venv thành công
 )
 
@@ -28,11 +28,11 @@ call venv\Scripts\activate.bat
 
 echo.
 echo === Nâng cấp pip ===
-python -m pip install --upgrade pip
+python3.10 -m pip install --upgrade pip
 
 echo.
 echo === Cài đặt dependencies ===
-pip install -r requirements.txt
+python3.10 -m pip install -r requirements.txt
 if errorlevel 1 (
     echo [LOI] Cài đặt thất bại
     pause

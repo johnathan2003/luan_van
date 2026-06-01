@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 
-const WS_BASE = process.env.REACT_APP_WS_URL || "ws://localhost:8000/ws";
+const WS_BASE = import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws";
 
 /**
  * Hook theo dõi GPS shipper realtime.

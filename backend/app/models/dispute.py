@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Text, Enum, DateTime, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Text, Enum, DateTime, ForeignKey, Index, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -16,7 +16,7 @@ class Dispute(Base):
     status = Column(Enum("open", "resolved", "escalated"), default="open", index=True)
     resolved_by = Column(Integer, ForeignKey("users.user_id"))
     resolution_details = Column(Text)
-    refund_amount = Column(String(15))
+    refund_amount = Column(Numeric(10, 2))
     created_at = Column(DateTime, server_default=func.now())
     resolved_at = Column(DateTime)
 

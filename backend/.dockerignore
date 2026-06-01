@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Development
+.env
+.env.local
+*.log
+logs/
+
+# Uploads (dung Supabase Storage tren production)
+uploads/
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Django legacy (khong can trong container)
+_django_legacy/
+apps/
+config/
+core/
+manage.py
+
+# Node leftovers
+node_modules/
+package.json
+package-lock.json
+
+# Misc
+*.bak
+*.tmp
+README.md
+RUN_MIGRATION.md
+setup_venv.bat
+setup_venv.sh
