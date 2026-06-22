@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Enum, DateTime, ForeignKey, Index, Numeric
+from sqlalchemy import Column, Integer, String, Enum, DateTime, ForeignKey, Index, Numeric, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -30,3 +30,22 @@ class Voucher(Base):
     # Relationships
     creator = relationship("User", foreign_keys=[created_by])
     orders = relationship("Order", back_populates="voucher", foreign_keys="Order.voucher_id")
+    collections = relationship("VoucherCollection", back_populates="voucher")
+
+
+class VoucherCollection(Base):
+    """Voucher mà user đã 'thu thập' (lưu vào ví voucher của riêng mình)."""
+    __tablename__ = "voucher_collections"
+
+    collection_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    voucher_id = Column(Integer, ForeignKey("vouchers.voucher_id", ondelete="CASCADE"), nullable=False)
+    collected_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "voucher_id", name="uq_user_voucher_collection"),
+        Index("idx_voucher_collection_user", "user_id"),
+    )
+
+    user = relationship("User", foreign_keys=[user_id])
+    voucher = relationship("Voucher", back_populates="collections")

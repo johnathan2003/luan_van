@@ -81,6 +81,26 @@ class VoucherResponse(BaseModel):
         from_attributes = True
 
 
+class VoucherPublicResponse(BaseModel):
+    voucher_id: int
+    code: str
+    discount_type: str
+    discount_value: str
+    min_order_value: Optional[str]
+    max_discount: Optional[str]
+    max_uses: Optional[int]
+    current_uses: int
+    status: str
+    valid_from: Optional[datetime]
+    valid_to: Optional[datetime]
+    source: str  # "platform" | "shop"
+    shop_name: Optional[str] = None
+    is_collected: bool = False
+
+    class Config:
+        from_attributes = True
+
+
 class AnalyticsResponse(BaseModel):
     total_revenue: float
     total_orders: int

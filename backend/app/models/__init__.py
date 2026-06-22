@@ -7,7 +7,7 @@ from app.models.payment import Payment
 from app.models.shipment import Shipper, ShipperRegistration, Shipment
 from app.models.notification import Notification, NotificationPreference
 from app.models.dispute import Dispute
-from app.models.voucher import Voucher
+from app.models.voucher import Voucher, VoucherCollection
 from app.models.logs import EmployeeActivityLog, AdminLog, SystemLog
 
 __all__ = [
@@ -22,6 +22,6 @@ __all__ = [
     "Shipper", "ShipperRegistration", "Shipment",
     "Notification", "NotificationPreference",
     "Dispute",
-    "Voucher",
+    "Voucher", "VoucherCollection",
     "EmployeeActivityLog", "AdminLog", "SystemLog",
 ]

@@ -1,10 +1,9 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import Navbar from '../components/common/Navbar'
 
 const NotFoundPage: React.FC = () => (
   <div className="page-wrapper">
-    <Navbar />
+
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', textAlign: 'center' }}>
       <div style={{ fontSize: 80, marginBottom: 20 }}>🔍</div>
       <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 12, color: 'var(--gray-800)' }}>404 - Không tìm thấy</h1>

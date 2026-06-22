@@ -15,6 +15,8 @@ import { NavLink } from 'react-router-dom'
 import Navbar from '../components/common/Navbar'
 import { shopService } from '../services/shopService'
 
+
+
 const SHOP_NAV = [
   { icon: '📊', label: 'Tổng quan',    path: '/shop' },
   { icon: '🏷️', label: 'Sản phẩm',   path: '/shop/products' },
@@ -22,6 +24,7 @@ const SHOP_NAV = [
   { icon: '👥', label: 'Nhân viên',   path: '/shop/employees' },
   { icon: '📈', label: 'Thống kê',    path: '/shop/analytics' },
   { icon: '🎫', label: 'Voucher',     path: '/shop/vouchers' },
+  { icon: '⚠️', label: 'Khiếu nại',   path: '/complaints' },
 ]
 
 const ShopSidebar: React.FC = () => {
@@ -65,9 +68,9 @@ const ShopSidebar: React.FC = () => {
                 padding: '10px 20px',
                 fontSize: 13,
                 fontWeight: isActive ? 600 : 400,
-                color: isActive ? '#16A34A' : 'var(--gray-700)',
-                background: isActive ? '#F0FDF4' : 'transparent',
-                borderRight: isActive ? '3px solid #22C55E' : '3px solid transparent',
+                color: isActive ? 'var(--role-active-color, #16A34A)' : 'var(--text-secondary)',
+                background: isActive ? 'var(--role-active-bg, rgba(22,163,74,0.1))' : 'transparent',
+                borderRight: isActive ? '3px solid var(--role-active-border, #22C55E)' : '3px solid transparent',
                 textDecoration: 'none',
                 transition: 'all 0.15s ease',
               })}
@@ -84,16 +87,23 @@ const ShopSidebar: React.FC = () => {
 
 interface Props { children: React.ReactNode }
 
-const ShopLayout: React.FC<Props> = ({ children }) => (
-  <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--gray-50)' }}>
-    <Navbar />
-    <div className="container" style={{ display: 'flex', gap: 24, paddingTop: 24, paddingBottom: 48, flex: 1 }}>
-      <ShopSidebar />
-      <main style={{ flex: 1, minWidth: 0 }}>
-        {children}
-      </main>
+const ShopLayout: React.FC<Props> = ({ children }) => {
+  useEffect(() => {
+    document.documentElement.setAttribute('data-role', 'shop')
+    return () => document.documentElement.removeAttribute('data-role')
+  }, [])
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-page)' }}>
+      <Navbar />
+      <div className="container" style={{ display: 'flex', gap: 24, paddingTop: 24, paddingBottom: 48, flex: 1 }}>
+        <ShopSidebar />
+        <main style={{ flex: 1, minWidth: 0 }}>
+          {children}
+        </main>
+      </div>
     </div>
-  </div>
-)
+  )
+}
 
 export default ShopLayout

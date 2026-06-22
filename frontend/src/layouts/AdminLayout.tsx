@@ -1,16 +1,8 @@
 /**
  * AdminLayout — dùng cho tất cả trang Admin
- * Gồm: Navbar + Sidebar quản trị + nội dung trang
- *
- * Dùng cho:
- *  - /admin (Dashboard)
- *  - /admin/users
- *  - /admin/approvals
- *  - /admin/disputes
- *  - /admin/system-employees
- *  - /admin/logs
+ * Sidebar 12 nhóm nghiệp vụ theo luận văn
  */
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import Navbar from '../components/common/Navbar'
 
@@ -18,87 +10,170 @@ interface NavItem {
   icon: string
   label: string
   path: string
-  badge?: number
+}
+interface NavGroup {
+  group: string
+  items: NavItem[]
 }
 
-const ADMIN_NAV: NavItem[] = [
-  { icon: '📊', label: 'Tổng quan',         path: '/admin' },
-  { icon: '👥', label: 'Người dùng',        path: '/admin/users' },
-  { icon: '✅', label: 'Phê duyệt',         path: '/admin/approvals' },
-  { icon: '🗑️', label: 'Xóa sản phẩm',     path: '/admin/deletion-requests' },
-  { icon: '⚖️', label: 'Khiếu nại',        path: '/admin/disputes' },
-  { icon: '🧑‍💼', label: 'Nhân viên HT',   path: '/admin/system-employees' },
-  { icon: '📋', label: 'Nhật ký',           path: '/admin/logs' },
+const ADMIN_NAV: NavGroup[] = [
+  {
+    group: 'Tổng quan',
+    items: [
+      { icon: '📊', label: 'Dashboard',        path: '/admin' },
+    ],
+  },
+  {
+    group: 'Người dùng',
+    items: [
+      { icon: '👥', label: 'Danh sách ND',     path: '/admin/users' },
+      { icon: '🔐', label: 'Phân quyền',       path: '/admin/users/roles' },
+    ],
+  },
+  {
+    group: 'Cửa hàng',
+    items: [
+      { icon: '🏪', label: 'Danh sách shop',   path: '/admin/shops' },
+      { icon: '✅', label: 'Duyệt đăng ký',    path: '/admin/approvals' },
+    ],
+  },
+  {
+    group: 'Sản phẩm',
+    items: [
+      { icon: '🏷️', label: 'Quản lý SP',      path: '/admin/products' },
+      { icon: '🗑️', label: 'Yêu cầu xóa',     path: '/admin/deletion-requests' },
+    ],
+  },
+  {
+    group: 'Đơn hàng',
+    items: [
+      { icon: '📦', label: 'Danh sách ĐH',    path: '/admin/orders' },
+      { icon: '⚖️', label: 'Tranh chấp',       path: '/admin/disputes' },
+    ],
+  },
+  {
+    group: 'Tài chính',
+    items: [
+      { icon: '💰', label: 'Doanh thu HT',     path: '/admin/finance' },
+      { icon: '🎫', label: 'Mã giảm giá',      path: '/admin/vouchers' },
+    ],
+  },
+  {
+    group: 'Nội dung',
+    items: [
+      { icon: '🖼️', label: 'Banner QC',        path: '/admin/banners' },
+      { icon: '📣', label: 'Thông báo HT',     path: '/admin/notifications' },
+    ],
+  },
+  {
+    group: 'Vận hành',
+    items: [
+      { icon: '🚚', label: 'Cấu hình VC',      path: '/admin/shipping-config' },
+      { icon: '🧑‍💼', label: 'Nhân viên HT',  path: '/admin/system-employees' },
+    ],
+  },
+  {
+    group: 'Báo cáo & Log',
+    items: [
+      { icon: '📈', label: 'Báo cáo',          path: '/admin/reports' },
+      { icon: '💬', label: 'Phản hồi ND',      path: '/admin/feedback' },
+      { icon: '📋', label: 'Nhật ký hệ thống', path: '/admin/logs' },
+    ],
+  },
 ]
 
-const AdminSidebar: React.FC = () => (
-  <aside style={{ width: 220, flexShrink: 0 }}>
-    <div className="card" style={{ overflow: 'hidden', position: 'sticky', top: 80 }}>
-      {/* Header sidebar */}
-        <div style={{
-        background: 'linear-gradient(135deg, #1E3A8A 0%, #1D4ED8 100%)',
-        padding: '16px 20px',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.15)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>⚙️</div>
-          <div>
-            <p style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>Quản trị viên</p>
-            <p style={{ color: '#94a3b8', fontSize: 11 }}>Admin Panel</p>
+const AdminSidebar: React.FC = () => {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+
+  const toggle = (g: string) => setCollapsed(p => ({ ...p, [g]: !p[g] }))
+
+  return (
+    <aside style={{ width: 232, flexShrink: 0 }}>
+      <div className="card" style={{ overflow: 'hidden', position: 'sticky', top: 80, maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+        {/* Header */}
+        <div style={{ background: 'linear-gradient(135deg, #1E3A8A 0%, #1D4ED8 100%)', padding: '16px 20px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.18)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>⚙️</div>
+            <div>
+              <p style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>Quản trị viên</p>
+              <p style={{ color: '#BFDBFE', fontSize: 11 }}>Admin Panel v1.0</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Nav items */}
-      <nav style={{ padding: '8px 0' }}>
-        {ADMIN_NAV.map(item => (
-              <NavLink
-            key={item.path}
-            to={item.path}
-            end={item.path === '/admin'}
-            style={({ isActive }) => ({
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '10px 20px',
-              fontSize: 13,
-              fontWeight: isActive ? 600 : 400,
-                color: isActive ? '#3B82F6' : 'var(--gray-700)',
-              background: isActive ? '#EFF6FF' : 'transparent',
-              borderRight: isActive ? '3px solid #3B82F6' : '3px solid transparent',
-              textDecoration: 'none',
-              transition: 'all 0.15s ease',
-            })}
-          >
-            <span style={{ fontSize: 16 }}>{item.icon}</span>
-            <span style={{ flex: 1 }}>{item.label}</span>
-            {item.badge !== undefined && item.badge > 0 && (
-              <span style={{ background: 'var(--error)', color: 'white', borderRadius: 10, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>
-                {item.badge}
-              </span>
-            )}
-          </NavLink>
-        ))}
-      </nav>
+        {/* Nav groups */}
+        <nav style={{ padding: '8px 0' }}>
+          {ADMIN_NAV.map(({ group, items }) => (
+            <div key={group}>
+              {/* Group header — click để collapse */}
+              <button
+                onClick={() => toggle(group)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '7px 20px 4px', border: 'none', background: 'none', cursor: 'pointer',
+                  fontSize: 10, fontWeight: 700, letterSpacing: 0.8,
+                  color: 'var(--text-muted)', textTransform: 'uppercase',
+                }}
+              >
+                {group}
+                <span style={{ fontSize: 10, transition: 'transform 0.15s', transform: collapsed[group] ? 'rotate(-90deg)' : '' }}>▾</span>
+              </button>
 
-      <div style={{ padding: '12px 20px', borderTop: '1px solid #DBEAFE', fontSize: 11, color: '#64748b' }}>
-        Hệ thống quản trị v1.0
+              {/* Items */}
+              {!collapsed[group] && items.map(item => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.path === '/admin'}
+                  style={({ isActive }) => ({
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '9px 20px', fontSize: 13,
+                    fontWeight: isActive ? 600 : 400,
+                    color: isActive ? 'var(--role-active-color, #1D4ED8)' : 'var(--text-secondary)',
+                    background: isActive ? 'var(--role-active-bg, rgba(29,78,216,0.1))' : 'transparent',
+                    borderRight: isActive ? '3px solid var(--role-active-border, #3B82F6)' : '3px solid transparent',
+                    textDecoration: 'none', transition: 'all 0.12s ease',
+                  })}
+                  onMouseEnter={e => { if (!(e.currentTarget as HTMLAnchorElement).className.includes('active')) (e.currentTarget as HTMLAnchorElement).style.background = 'var(--bg-highlight)' }}
+                  onMouseLeave={e => { if (!(e.currentTarget as HTMLAnchorElement).className.includes('active')) (e.currentTarget as HTMLAnchorElement).style.background = 'transparent' }}
+                >
+                  <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>{item.icon}</span>
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                </NavLink>
+              ))}
+
+              <div style={{ height: 4 }} />
+            </div>
+          ))}
+        </nav>
+
+        <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border-subtle)', fontSize: 11, color: 'var(--text-muted)' }}>
+          BuyZO Admin © 2025
+        </div>
       </div>
-    </div>
-  </aside>
-)
+    </aside>
+  )
+}
 
 interface Props { children: React.ReactNode }
 
-const AdminLayout: React.FC<Props> = ({ children }) => (
-  <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--gray-50)' }}>
-    <Navbar />
-    <div className="container" style={{ display: 'flex', gap: 24, paddingTop: 24, paddingBottom: 48, flex: 1 }}>
-      <AdminSidebar />
-      <main style={{ flex: 1, minWidth: 0 }}>
-        {children}
-      </main>
+const AdminLayout: React.FC<Props> = ({ children }) => {
+  useEffect(() => {
+    document.documentElement.setAttribute('data-role', 'admin')
+    return () => document.documentElement.removeAttribute('data-role')
+  }, [])
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-page)' }}>
+      <Navbar />
+      <div className="container" style={{ display: 'flex', gap: 24, paddingTop: 24, paddingBottom: 48, flex: 1, alignItems: 'flex-start' }}>
+        <AdminSidebar />
+        <main style={{ flex: 1, minWidth: 0 }}>
+          {children}
+        </main>
+      </div>
     </div>
-  </div>
-)
+  )
+}
 
 export default AdminLayout

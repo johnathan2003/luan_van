@@ -1,4 +1,5 @@
 import logging
+import logging.handlers
 import os
 from contextlib import asynccontextmanager
 
@@ -10,27 +11,50 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import engine, Base
 from app.middleware.error_handler import add_exception_handlers
+from app.middleware.logging import RequestLoggingMiddleware
 from app.routes import (
     auth, users, products, carts, orders,
-    payments, shipments, shops, admin, notifications,
+    payments, shipments, shops, admin, notifications, vouchers,
 )
 from app.websocket.connection_manager import sio
 
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+
+def setup_logging():
+    """Cấu hình logging: console + file rotating."""
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+
+    # File handler — chỉ bật nếu LOG_FILE được cấu hình
+    if settings.LOG_FILE:
+        log_dir = os.path.dirname(settings.LOG_FILE)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        file_handler = logging.handlers.RotatingFileHandler(
+            settings.LOG_FILE,
+            maxBytes=10 * 1024 * 1024,  # 10 MB
+            backupCount=5,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(logging.Formatter(log_format))
+        handlers.append(file_handler)
+
+    logging.basicConfig(level=log_level, format=log_format, handlers=handlers)
+
+
+setup_logging()
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Starting E-Commerce API [{settings.ENVIRONMENT}]...")
-    # create_all an toan khi dung kem Alembic (idempotent, khong drop table)
-    # Chi chay khi development de tao missing tables nhanh
-    if settings.DEBUG:
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables verified (dev mode).")
+    # Schema được quản lý hoàn toàn bởi Alembic — KHÔNG dùng create_all()
+    # vì models dùng Enum(...) trong khi migration dùng String(50),
+    # PostgreSQL yêu cầu ENUM type phải có name → create_all() sẽ fail.
+    # Chạy migration trước khi start server: alembic upgrade head
+    logger.info("Schema managed by Alembic. Skipping create_all().")
     yield
     logger.info("Shutting down E-Commerce API...")
 
@@ -44,6 +68,9 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
 )
+
+# ── Request logging ───────────────────────────────────────────────────────────
+app.add_middleware(RequestLoggingMiddleware)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
@@ -76,6 +103,7 @@ app.include_router(shipments.router,     prefix="/api/v1/shipments",     tags=["
 app.include_router(shops.router,         prefix="/api/v1/shop",          tags=["Shop"])
 app.include_router(admin.router,         prefix="/api/v1/admin",         tags=["Admin"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notifications"])
+app.include_router(vouchers.router,      prefix="/api/v1/vouchers",      tags=["Vouchers"])
 
 # ── Socket.io ─────────────────────────────────────────────────────────────────
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)

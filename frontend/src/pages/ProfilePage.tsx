@@ -1,7 +1,5 @@
 import React, { useState } from 'react'
 import { toast } from 'react-toastify'
-import Navbar from '../components/common/Navbar'
-import Footer from '../components/common/Footer'
 import Header from '../components/common/Header'
 import RoleSwitcher from '../components/auth/RoleSwitcher'
 import { useAuth } from '../hooks/useAuth'
@@ -34,7 +32,7 @@ const ProfilePage: React.FC = () => {
 
   return (
     <div className="page-wrapper">
-      <Navbar />
+
       <div className="container" style={{ paddingTop: 32, paddingBottom: 48 }}>
         <Header title="Hồ sơ của tôi" />
         <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, alignItems: 'start' }}>
@@ -79,7 +77,7 @@ const ProfilePage: React.FC = () => {
           </div>
         </div>
       </div>
-      <Footer />
+
     </div>
   )
 }

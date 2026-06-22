@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom'
 import Router from './Router.tsx'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import ThemeProvider from './components/common/ThemeProvider'
+import ThemeToggle from './components/common/ThemeToggle'
 import { useAppDispatch } from './store/hooks'
 import { checkAuth } from './store/slices/authSlice'
 
@@ -13,7 +14,12 @@ const AppContent: React.FC = () => {
     dispatch(checkAuth())
   }, [dispatch])
 
-  return <Router />
+  return (
+    <>
+      <Router />
+      <ThemeToggle />
+    </>
+  )
 }
 
 const App: React.FC = () => {

@@ -120,6 +120,8 @@ const authSlice = createSlice({
         storage.set(USER_KEY, action.payload)
       })
       .addCase(checkAuth.rejected, (state) => {
+        // Nếu user bị banned thì KHÔNG logout — giữ token/session để hiện banner
+        if (state.user?.status === 'banned') return
         state.user = null
         state.isAuthenticated = false
         removeToken()

@@ -4,6 +4,7 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 
+
 class User(Base):
     __tablename__ = "users"
 
@@ -20,7 +21,7 @@ class User(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    user_roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
+    user_roles = relationship("UserRole", back_populates="user", foreign_keys="[UserRole.user_id]", primaryjoin="User.user_id==UserRole.user_id" , cascade="all, delete-orphan")
     shop = relationship("Shop", back_populates="owner", uselist=False, foreign_keys="Shop.shop_id")
     shipper = relationship("Shipper", back_populates="user", uselist=False, foreign_keys="Shipper.shipper_id")
     notifications = relationship("Notification", back_populates="user", foreign_keys="Notification.user_id")
@@ -31,7 +32,7 @@ class User(Base):
 class Role(Base):
     __tablename__ = "roles"
 
-    role_id = Column(Integer, primary_key=True, autoincrement=True)
+    role_id = Column(Integer, primary_key=True,autoincrement=True)
     role_name = Column(String(100), unique=True, nullable=False)
     description = Column(Text)
     created_at = Column(DateTime, server_default=func.now())

@@ -22,6 +22,7 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
   delivered: 'Đã giao',
   completed: 'Hoàn thành',
   cancelled: 'Đã hủy',
+  returned: 'Khiếu nại',
 }
 
 export const ORDER_STATUS_COLORS: Record<string, string> = {
@@ -32,6 +33,7 @@ export const ORDER_STATUS_COLORS: Record<string, string> = {
   delivered: '#10b981',
   completed: '#22c55e',
   cancelled: '#ef4444',
+  returned: '#dc2626',
 }
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {

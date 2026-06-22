@@ -4,9 +4,9 @@ import type { Order } from '../../types/order'
 import StatusBadge from './StatusBadge'
 import { formatCurrency, formatDate, formatOrderId } from '../../utils/formatters'
 
-interface Props { order: Order; onCancel?: (id: number) => void; onConfirmReceived?: (id: number) => void }
+interface Props { order: Order; onCancel?: (id: number) => void; onConfirmReceived?: (id: number) => void; onComplain?: (order: Order) => void }
 
-const OrderCard: React.FC<Props> = ({ order, onCancel, onConfirmReceived }) => (
+const OrderCard: React.FC<Props> = ({ order, onCancel, onConfirmReceived, onComplain }) => (
   <div className="card" style={{ padding: 20, marginBottom: 12 }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
       <div>
@@ -42,6 +42,16 @@ const OrderCard: React.FC<Props> = ({ order, onCancel, onConfirmReceived }) => (
         )}
         {order.order_status === 'delivered' && onConfirmReceived && (
           <button onClick={() => onConfirmReceived(order.order_id)} className="btn btn-primary btn-sm">Đã nhận hàng</button>
+        )}
+        {(order.order_status === 'delivered' || order.order_status === 'completed') && (
+          <Link to={`/orders/${order.order_id}`} className="btn btn-sm" style={{ background: '#fff7ed', color: '#b45309', border: '1px solid #fed7aa', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            ⭐ Đánh giá <span style={{ fontWeight: 700 }}>(+200 xu)</span>
+          </Link>
+        )}
+        {onComplain && !['pending', 'cancelled'].includes(order.order_status) && (
+          <button onClick={() => onComplain(order)} className="btn btn-sm" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
+            ⚠️ Khiếu nại
+          </button>
         )}
       </div>
     </div>

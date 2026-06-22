@@ -9,12 +9,19 @@
  */
 import React, { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useSelector } from 'react-redux'
+import type { RootState } from '../store/store'
 import Navbar from '../components/common/Navbar'
 import { shipmentService } from '../services/shipmentService'
 
 const SHIPPER_NAV = [
-  { icon: '🏠', label: 'Tổng quan',      path: '/shipper' },
-  { icon: '📦', label: 'Đơn giao hàng', path: '/shipper/deliveries' },
+  { icon: '🏠', label: 'Tổng quan',       path: '/shipper' },
+  { icon: '📦', label: 'Đơn giao hàng',  path: '/shipper/deliveries' },
+  { icon: '💰', label: 'Thu nhập',        path: '/shipper/earnings' },
+  { icon: '🏦', label: 'Rút tiền',        path: '/shipper/withdrawal' },
+  { icon: '⚠️', label: 'Sự cố & Vi phạm',path: '/shipper/incidents' },
+  { icon: '🎁', label: 'Phúc lợi',        path: '/shipper/benefits' },
+  { icon: '🚩', label: 'Khiếu nại',       path: '/complaints' },
 ]
 
 const STATUS_COLORS: Record<string, string> = {
@@ -109,11 +116,9 @@ const ShipperSidebar: React.FC = () => {
                 padding: '10px 20px',
                 fontSize: 13,
                 fontWeight: isActive ? 600 : 400,
-                color: isActive ? '#D97706' : 'var(--gray-700)',
-
-                background: isActive ? '#FFFBEB' : 'transparent',
-
-                borderRight: isActive ? '3px solid #F59E0B' : '3px solid transparent',
+                color: isActive ? 'var(--role-active-color, #D97706)' : 'var(--text-secondary)',
+                background: isActive ? 'var(--role-active-bg, rgba(217,119,6,0.1))' : 'transparent',
+                borderRight: isActive ? '3px solid var(--role-active-border, #F59E0B)' : '3px solid transparent',
                 textDecoration: 'none',
                 transition: 'all 0.15s ease',
               })}
@@ -128,18 +133,66 @@ const ShipperSidebar: React.FC = () => {
   )
 }
 
-interface Props { children: React.ReactNode }
-
-const ShipperLayout: React.FC<Props> = ({ children }) => (
-  <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--gray-50)' }}>
-    <Navbar />
-    <div className="container" style={{ display: 'flex', gap: 24, paddingTop: 24, paddingBottom: 48, flex: 1 }}>
-      <ShipperSidebar />
-      <main style={{ flex: 1, minWidth: 0 }}>
-        {children}
-      </main>
+const BannedBanner: React.FC = () => (
+  <div style={{
+    position: 'fixed', inset: 0, zIndex: 9999,
+    background: 'rgba(0,0,0,0.6)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  }}>
+    <div style={{
+      background: 'white', borderRadius: 20, padding: '40px 48px',
+      maxWidth: 480, width: '90%', textAlign: 'center',
+      boxShadow: '0 24px 64px rgba(0,0,0,0.3)',
+    }}>
+      <div style={{ fontSize: 56, marginBottom: 16 }}>🚫</div>
+      <h2 style={{ fontSize: 22, fontWeight: 800, color: '#DC2626', margin: '0 0 10px' }}>
+        Tài khoản bị khóa
+      </h2>
+      <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6, margin: '0 0 24px' }}>
+        Tài khoản Shipper của bạn đã bị khóa do vi phạm chính sách dịch vụ.
+        Vui lòng liên hệ bộ phận hỗ trợ để biết thêm thông tin.
+      </p>
+      <div style={{
+        background: '#FEF2F2', border: '1px solid #FECACA',
+        borderRadius: 10, padding: '12px 16px', marginBottom: 24,
+        fontSize: 13, color: '#DC2626', fontWeight: 500,
+      }}>
+        📧 support@buyzo.vn &nbsp;|&nbsp; 📞 1800-0000
+      </div>
+      <a href="/" style={{
+        display: 'inline-block', padding: '10px 28px',
+        background: '#DC2626', color: 'white', borderRadius: 8,
+        fontWeight: 600, fontSize: 14, textDecoration: 'none',
+      }}>
+        Về trang chủ
+      </a>
     </div>
   </div>
 )
+
+interface Props { children: React.ReactNode }
+
+const ShipperLayout: React.FC<Props> = ({ children }) => {
+  const user = useSelector((s: RootState) => s.auth.user)
+  const isBanned = user?.status === 'banned'
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-role', 'shipper')
+    return () => document.documentElement.removeAttribute('data-role')
+  }, [])
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-page)' }}>
+      {isBanned && <BannedBanner />}
+      <Navbar />
+      <div className="container" style={{ display: 'flex', gap: 24, paddingTop: 24, paddingBottom: 48, flex: 1 }}>
+        <ShipperSidebar />
+        <main style={{ flex: 1, minWidth: 0 }}>
+          {children}
+        </main>
+      </div>
+    </div>
+  )
+}
 
 export default ShipperLayout

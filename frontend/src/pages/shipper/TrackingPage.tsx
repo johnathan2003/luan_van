@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import Navbar from '../../components/common/Navbar'
 import { shipmentService } from '../../services/shipmentService'
 import { toast } from 'react-toastify'
 import Loading from '../../components/common/Loading'
@@ -44,11 +43,11 @@ const TrackingPage: React.FC = () => {
 
   useEffect(() => () => clearInterval(intervalRef.current), [])
 
-  if (loading) return (<><Navbar /><Loading /></>)
+  if (loading) return (<Loading />)
 
   return (
     <div className="page-wrapper">
-      <Navbar />
+      
       <div className="container" style={{ paddingTop: 32, paddingBottom: 40 }}>
         <h1 style={{ fontWeight: 700, fontSize: 22, marginBottom: 24 }}>Theo dõi đơn giao hàng #{shipmentId}</h1>
         {shipment && (

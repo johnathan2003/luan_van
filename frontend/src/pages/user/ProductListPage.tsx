@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import Navbar from '../../components/common/Navbar'
-import Footer from '../../components/common/Footer'
 import ProductList from '../../components/product/ProductList'
 import ProductFilter from '../../components/product/ProductFilter'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
@@ -28,7 +26,7 @@ const ProductListPage: React.FC = () => {
 
   return (
     <div className="page-wrapper">
-      <Navbar />
+
       <div className="container" style={{ paddingTop: 32, paddingBottom: 40 }}>
         <div style={{ display: 'flex', gap: 24 }}>
           {/* Filter sidebar */}
@@ -58,7 +56,7 @@ const ProductListPage: React.FC = () => {
           </div>
         </div>
       </div>
-      <Footer />
+
     </div>
   )
 }

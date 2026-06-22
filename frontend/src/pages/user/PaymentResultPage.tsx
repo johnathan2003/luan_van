@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import Navbar from '../../components/common/Navbar'
-import Footer from '../../components/common/Footer'
 
 const PaymentResultPage: React.FC = () => {
   const [params] = useSearchParams()
@@ -21,7 +19,7 @@ const PaymentResultPage: React.FC = () => {
 
   return (
     <div className="page-wrapper">
-      <Navbar />
+
       <div className="container" style={{ paddingTop: 60, paddingBottom: 60, textAlign: 'center' }}>
         {status === 'pending' ? (
           <div><div className="spinner" style={{ margin: '0 auto 20px' }} /><p>Đang kiểm tra...</p></div>
@@ -47,7 +45,7 @@ const PaymentResultPage: React.FC = () => {
           </div>
         )}
       </div>
-      <Footer />
+
     </div>
   )
 }
