@@ -63,9 +63,6 @@ def login_user(db: Session, login_data: UserLogin) -> dict:
     if not user or not verify_password(login_data.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
 
-    if user.status == "banned":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account has been banned")
-
     if user.status == "inactive":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive")
 

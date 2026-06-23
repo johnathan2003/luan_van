@@ -1,4 +1,4 @@
-export type OrderStatus = 'pending' | 'confirmed' | 'ready_to_ship' | 'shipping' | 'delivered' | 'completed' | 'cancelled'
+export type OrderStatus = 'pending' | 'confirmed' | 'ready_to_ship' | 'shipping' | 'delivered' | 'completed' | 'cancelled' | 'returned'
 export type PaymentMethod = 'momo' | 'cod' | 'vnpay'
 export type PaymentStatus = 'unpaid' | 'paid' | 'failed' | 'refunded'
 
@@ -65,3 +65,4 @@ export interface CheckoutData {
   voucher_code?: string
   note?: string
 }
+

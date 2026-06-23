@@ -1,0 +1,181 @@
+import type { Order } from '../types/order'
+
+/**
+ * Du lieu don hang GIA (demo) - dung de test UI khi backend chua co du lieu thuc.
+ * Cac order_id dung khoang 90001-90006 de khong dung voi id thuc tu DB.
+ */
+
+const img = (seed: string) => `https://picsum.photos/seed/${seed}/200/200`
+
+const hoursAgo = (h: number) => new Date(Date.now() - h * 3600 * 1000).toISOString()
+
+export const MOCK_ORDERS: Order[] = [
+  {
+    order_id: 90001,
+    user_id: 1,
+    shop_id: 1,
+    total_price: '459000',
+    discount: '20000',
+    final_price: '439000',
+    payment_method: 'cod',
+    payment_status: 'unpaid',
+    order_status: 'pending',
+    shipping_address: '12 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM',
+    recipient_name: 'Trần Quốc Anh',
+    recipient_phone: '0901234567',
+    note: 'Giao giờ hành chính giúp shop nha',
+    created_at: hoursAgo(1),
+    items: [
+      { order_item_id: 1, product_id: 11, product_name: 'Áo thun cotton basic', product_image: img('ao1'), quantity: 2, price_at_order: '149000' },
+      { order_item_id: 2, product_id: 12, product_name: 'Quần short kaki', product_image: img('quan1'), quantity: 1, price_at_order: '161000' },
+    ],
+  },
+  {
+    order_id: 90002,
+    user_id: 1,
+    shop_id: 2,
+    total_price: '899000',
+    discount: '50000',
+    final_price: '849000',
+    payment_method: 'vnpay',
+    payment_status: 'paid',
+    order_status: 'confirmed',
+    shipping_address: '12 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM',
+    recipient_name: 'Trần Quốc Anh',
+    recipient_phone: '0901234567',
+    created_at: hoursAgo(5),
+    items: [
+      { order_item_id: 3, product_id: 21, product_name: 'Tai nghe bluetooth chống ồn', product_image: img('tainghe1'), quantity: 1, price_at_order: '899000' },
+    ],
+  },
+  {
+    order_id: 90003,
+    user_id: 1,
+    shop_id: 1,
+    total_price: '320000',
+    discount: '0',
+    final_price: '320000',
+    payment_method: 'momo',
+    payment_status: 'paid',
+    order_status: 'ready_to_ship',
+    shipping_address: '12 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM',
+    recipient_name: 'Trần Quốc Anh',
+    recipient_phone: '0901234567',
+    created_at: hoursAgo(10),
+    items: [
+      { order_item_id: 4, product_id: 13, product_name: 'Giày sneaker trắng', product_image: img('giay1'), quantity: 1, price_at_order: '320000' },
+    ],
+  },
+  {
+    order_id: 90004,
+    user_id: 1,
+    shop_id: 3,
+    shipper_id: 7,
+    total_price: '650000',
+    discount: '30000',
+    final_price: '620000',
+    payment_method: 'cod',
+    payment_status: 'unpaid',
+    order_status: 'shipping',
+    shipping_address: '12 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM',
+    recipient_name: 'Trần Quốc Anh',
+    recipient_phone: '0901234567',
+    created_at: hoursAgo(30),
+    items: [
+      { order_item_id: 5, product_id: 31, product_name: 'Nồi chiên không dầu 5L', product_image: img('noi1'), quantity: 1, price_at_order: '650000' },
+    ],
+    shipment: {
+      shipment_id: 501,
+      status: 'shipping',
+      shipper_id: 7,
+      current_location: { lat: 10.7769, lng: 106.7009 },
+      pickup_time: hoursAgo(20),
+    },
+  },
+  {
+    order_id: 90005,
+    user_id: 1,
+    shop_id: 2,
+    shipper_id: 4,
+    total_price: '249000',
+    discount: '10000',
+    final_price: '239000',
+    payment_method: 'momo',
+    payment_status: 'paid',
+    order_status: 'delivered',
+    shipping_address: '12 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM',
+    recipient_name: 'Trần Quốc Anh',
+    recipient_phone: '0901234567',
+    created_at: hoursAgo(60),
+    items: [
+      { order_item_id: 6, product_id: 22, product_name: 'Chuột không dây Logitech', product_image: img('chuot1'), quantity: 1, price_at_order: '249000' },
+    ],
+    shipment: {
+      shipment_id: 502,
+      status: 'delivered',
+      shipper_id: 4,
+      pickup_time: hoursAgo(50),
+      delivery_time: hoursAgo(40),
+    },
+  },
+  {
+    order_id: 90006,
+    user_id: 1,
+    shop_id: 1,
+    total_price: '199000',
+    discount: '0',
+    final_price: '199000',
+    payment_method: 'cod',
+    payment_status: 'paid',
+    order_status: 'completed',
+    shipping_address: '12 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM',
+    recipient_name: 'Trần Quốc Anh',
+    recipient_phone: '0901234567',
+    created_at: hoursAgo(120),
+    items: [
+      { order_item_id: 7, product_id: 14, product_name: 'Mũ lưỡi trai thêu logo', product_image: img('mu1'), quantity: 1, price_at_order: '199000' },
+    ],
+  },
+  {
+    order_id: 90007,
+    user_id: 1,
+    shop_id: 2,
+    total_price: '150000',
+    discount: '0',
+    final_price: '150000',
+    payment_method: 'cod',
+    payment_status: 'unpaid',
+    order_status: 'cancelled',
+    shipping_address: '12 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM',
+    recipient_name: 'Trần Quốc Anh',
+    recipient_phone: '0901234567',
+    note: 'Khách đổi ý không mua nữa',
+    created_at: hoursAgo(80),
+    items: [
+      { order_item_id: 8, product_id: 15, product_name: 'Ví da nam', product_image: img('vi1'), quantity: 1, price_at_order: '150000' },
+    ],
+  },
+  {
+    order_id: 90008,
+    user_id: 1,
+    shop_id: 3,
+    total_price: '529000',
+    discount: '0',
+    final_price: '529000',
+    payment_method: 'momo',
+    payment_status: 'paid',
+    order_status: 'returned',
+    shipping_address: '12 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM',
+    recipient_name: 'Trần Quốc Anh',
+    recipient_phone: '0901234567',
+    note: 'Sản phẩm nhận được không đúng mô tả, đã gửi khiếu nại tới shop',
+    created_at: hoursAgo(48),
+    items: [
+      { order_item_id: 9, product_id: 33, product_name: 'Bàn ủi hơi nước cầm tay', product_image: img('banui1'), quantity: 1, price_at_order: '529000' },
+    ],
+  },
+]
+
+export const isMockOrderId = (id: number) => id >= 90000 && id < 91000
+
+export const findMockOrder = (id: number) => MOCK_ORDERS.find(o => o.order_id === id)

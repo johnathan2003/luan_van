@@ -38,6 +38,7 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
             "email": user.email,
             "full_name": user.full_name,
             "avatar_url": user.avatar_url,
+            "status": user.status,
             "roles": roles,
             "current_role": current_role,
         },

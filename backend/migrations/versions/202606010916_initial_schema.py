@@ -148,7 +148,7 @@ def upgrade() -> None:
     )
     op.create_table('products',
         sa.Column('product_id', sa.Integer(), primary_key=True, autoincrement=True, nullable=False),
-        sa.Column('shop_id', sa.Integer(), sa.ForeignKey('users.user_id'), nullable=False),
+        sa.Column('shop_id', sa.Integer(), sa.ForeignKey('shops.shop_id'), nullable=False),
         sa.Column('category_id', sa.Integer(), sa.ForeignKey('product_categories.category_id'), nullable=True),
         sa.Column('product_name', sa.String(255), nullable=False),
         sa.Column('description', sa.String(255), nullable=True),
@@ -188,15 +188,6 @@ def upgrade() -> None:
         sa.Column('helpful', sa.Integer(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=False), nullable=True, server_default=sa.text('now()')),
         sa.Column('updated_at', sa.DateTime(timezone=False), nullable=True, server_default=sa.text('now()')),
-    )
-    op.create_table('stock_reservations',
-        sa.Column('reservation_id', sa.Integer(), primary_key=True, autoincrement=True, nullable=False),
-        sa.Column('order_id', sa.Integer(), sa.ForeignKey('orders.order_id'), nullable=False),
-        sa.Column('product_id', sa.Integer(), sa.ForeignKey('products.product_id'), nullable=False),
-        sa.Column('quantity', sa.Integer(), nullable=False),
-        sa.Column('reserved_at', sa.DateTime(timezone=False), nullable=True, server_default=sa.text('now()')),
-        sa.Column('expires_at', sa.DateTime(timezone=False), nullable=True),
-        sa.Column('status', sa.String(50), nullable=True),
     )
     op.create_table('product_deletion_requests',
         sa.Column('deletion_req_id', sa.Integer(), primary_key=True, autoincrement=True, nullable=False),
@@ -260,7 +251,7 @@ def upgrade() -> None:
         sa.Column('order_id', sa.Integer(), primary_key=True, autoincrement=True, nullable=False),
         sa.Column('order_number', sa.String(50), unique=True, nullable=True),
         sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.user_id'), nullable=False),
-        sa.Column('shop_id', sa.Integer(), sa.ForeignKey('users.user_id'), nullable=True),
+        sa.Column('shop_id', sa.Integer(), sa.ForeignKey('shops.shop_id'), nullable=True),
         sa.Column('shipper_id', sa.Integer(), sa.ForeignKey('users.user_id'), nullable=True),
         sa.Column('total_price', sa.Numeric(10, 2), nullable=False),
         sa.Column('discount_amount', sa.Numeric(10, 2), nullable=True),
@@ -281,6 +272,15 @@ def upgrade() -> None:
         sa.Column('prepared_at', sa.DateTime(timezone=False), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=False), nullable=True, server_default=sa.text('now()')),
         sa.Column('updated_at', sa.DateTime(timezone=False), nullable=True, server_default=sa.text('now()')),
+    )
+    op.create_table('stock_reservations',
+        sa.Column('reservation_id', sa.Integer(), primary_key=True, autoincrement=True, nullable=False),
+        sa.Column('order_id', sa.Integer(), sa.ForeignKey('orders.order_id'), nullable=False),
+        sa.Column('product_id', sa.Integer(), sa.ForeignKey('products.product_id'), nullable=False),
+        sa.Column('quantity', sa.Integer(), nullable=False),
+        sa.Column('reserved_at', sa.DateTime(timezone=False), nullable=True, server_default=sa.text('now()')),
+        sa.Column('expires_at', sa.DateTime(timezone=False), nullable=True),
+        sa.Column('status', sa.String(50), nullable=True),
     )
     op.create_table('order_items',
         sa.Column('order_item_id', sa.Integer(), primary_key=True, autoincrement=True, nullable=False),
@@ -452,6 +452,7 @@ def downgrade() -> None:
     op.drop_table('disputes')
     op.drop_table('shipments')
     op.drop_table('payments')
+    op.drop_table('stock_reservations')
     op.drop_table('order_items')
     op.drop_table('orders')
     op.drop_table('carts')
@@ -459,7 +460,6 @@ def downgrade() -> None:
     op.drop_table('shipper_registrations')
     op.drop_table('product_deletion_audit_log')
     op.drop_table('product_deletion_requests')
-    op.drop_table('stock_reservations')
     op.drop_table('product_reviews')
     op.drop_table('product_variants')
     op.drop_table('products')

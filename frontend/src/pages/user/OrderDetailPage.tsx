@@ -1,7 +1,5 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import Navbar from '../../components/common/Navbar'
-import Footer from '../../components/common/Footer'
 import Loading from '../../components/common/Loading'
 import StatusBadge from '../../components/order/StatusBadge'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
@@ -9,16 +7,36 @@ import { fetchOrderById } from '../../store/slices/orderSlice'
 import { formatCurrency, formatDate, formatOrderId } from '../../utils/formatters'
 import { getImageUrl } from '../../utils/helpers'
 import { PAYMENT_METHOD_LABELS } from '../../utils/constants'
+import { findMockOrder, isMockOrderId } from '../../mocks/mockOrders'
+import ItemReviewBox from '../../components/order/ItemReviewBox'
+import ShipperReviewBox from '../../components/order/ShipperReviewBox'
 
 const OrderDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const dispatch = useAppDispatch()
-  const { selectedOrder: order, loading } = useAppSelector(s => s.order)
+  const { selectedOrder: realOrder, loading } = useAppSelector(s => s.order)
+  const [waited, setWaited] = useState(false)
 
-  useEffect(() => { if (id) dispatch(fetchOrderById(Number(id))) }, [id, dispatch])
+  const numId = Number(id)
+  const mockOrder = isMockOrderId(numId) ? findMockOrder(numId) : undefined
 
-  if (loading) return (<><Navbar /><Loading /></>)
-  if (!order) return (<><Navbar /><div className="container" style={{ padding: 40 }}>Không tìm thấy đơn hàng</div></>)
+  useEffect(() => {
+    if (!id || mockOrder) return
+    dispatch(fetchOrderById(numId))
+    // fetchOrderById khong co trang thai pending/rejected rieng -> doi 1 chut
+    // truoc khi ket luan "khong tim thay" de tranh nhay UI, rieng cho don demo
+    const t = setTimeout(() => setWaited(true), 500)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, dispatch])
+
+  const order = mockOrder || realOrder
+
+  if (!mockOrder && loading) return (<Loading />)
+  if (!order) {
+    if (!waited && !mockOrder) return (<Loading />)
+    return (<div className="container" style={{ padding: 40 }}>Không tìm thấy đơn hàng</div>)
+  }
 
   const steps = ['pending', 'confirmed', 'ready_to_ship', 'shipping', 'delivered', 'completed']
   const stepLabels = ['Đặt hàng', 'Xác nhận', 'Chuẩn bị', 'Đang giao', 'Đã giao', 'Hoàn thành']
@@ -26,7 +44,7 @@ const OrderDetailPage: React.FC = () => {
 
   return (
     <div className="page-wrapper">
-      <Navbar />
+      
       <div className="container" style={{ paddingTop: 32, paddingBottom: 40 }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -62,13 +80,15 @@ const OrderDetailPage: React.FC = () => {
             <div className="card" style={{ padding: 24, marginBottom: 16 }}>
               <h2 style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Sản phẩm</h2>
               {order.items.map(item => (
-                <div key={item.order_item_id} style={{ display: 'flex', gap: 14, padding: '12px 0', borderBottom: '1px solid var(--gray-100)' }}>
-                  <img src={getImageUrl(item.product_image)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 'var(--radius)' }} />
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: 500, marginBottom: 4 }}>{item.product_name}</p>
-                    <p style={{ fontSize: 13, color: 'var(--gray-500)' }}>x{item.quantity} · {formatCurrency(item.price_at_order)}/cái</p>
+                <div key={item.order_item_id} style={{ padding: '12px 0', borderBottom: '1px solid var(--gray-100)' }}>
+                  <div style={{ display: 'flex', gap: 14 }}>
+                    <img src={getImageUrl(item.product_image)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 'var(--radius)' }} />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: 500, marginBottom: 4 }}>{item.product_name}</p>
+                      <p style={{ fontSize: 13, color: 'var(--gray-500)' }}>x{item.quantity} · {formatCurrency(item.price_at_order)}/cái</p>
+                    </div>
+                    <p style={{ fontWeight: 700 }}>{formatCurrency(parseFloat(item.price_at_order) * item.quantity)}</p>
                   </div>
-                  <p style={{ fontWeight: 700 }}>{formatCurrency(parseFloat(item.price_at_order) * item.quantity)}</p>
                 </div>
               ))}
             </div>
@@ -110,8 +130,30 @@ const OrderDetailPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Danh gia - gop chung danh gia san pham va danh gia nguoi giao hang, rong full chieu ngang */}
+        {(order.order_status === 'delivered' || order.order_status === 'completed') && (
+          <div className="card" style={{ padding: 24, marginTop: 20 }}>
+            <h2 style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Đánh giá</h2>
+            <p style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 16 }}>Chia sẻ trải nghiệm của bạn về sản phẩm và người giao hàng</p>
+
+            {order.items.map(item => (
+              <div key={item.order_item_id} style={{ paddingBottom: 14, marginBottom: 14, borderBottom: '1px solid var(--gray-100)' }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <img src={getImageUrl(item.product_image)} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 'var(--radius)' }} />
+                  <p style={{ fontWeight: 500, fontSize: 14 }}>{item.product_name}</p>
+                </div>
+                <ItemReviewBox orderItemId={item.order_item_id} productName={item.product_name} />
+              </div>
+            ))}
+
+            {(order.shipment || order.shipper_id) && (
+              <ShipperReviewBox orderId={order.order_id} shipperId={order.shipper_id || order.shipment?.shipper_id} />
+            )}
+          </div>
+        )}
       </div>
-      <Footer />
+
     </div>
   )
 }

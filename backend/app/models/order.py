@@ -11,7 +11,7 @@ class Order(Base):
     # Prisma: orderNumber (unique string như "ORD-20240101-0001")
     order_number = Column(String(50), unique=True, index=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
-    shop_id = Column(Integer, ForeignKey("users.user_id"))
+    shop_id = Column(Integer, ForeignKey("shops.shop_id"))
     shipper_id = Column(Integer, ForeignKey("users.user_id"))
     # Prisma: Decimal(10,2) — đổi từ String sang Numeric
     total_price = Column(Numeric(10, 2), nullable=False)

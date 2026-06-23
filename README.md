@@ -7,7 +7,7 @@ Nen tang thuong mai dien tu da vai tro: Buyer, Seller, Shipper, Admin.
 | Layer     | Technology                          |
 |-----------|-------------------------------------|
 | Frontend  | React 18 + TypeScript + Vite        |
-| State     | Redux Toolkit + Zustand (legacy jsx)|
+| State     | Redux Toolkit + |
 | Backend   | FastAPI (Python 3.10)               |
 | ORM       | SQLAlchemy 2.0                      |
 | Migration | Alembic                             |

@@ -1,8 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
-import Navbar from '../components/common/Navbar'
-import Footer from '../components/common/Footer'
 import { userService } from '../services/userService'
 
 const ShopRegistration: React.FC = () => {
@@ -24,7 +22,7 @@ const ShopRegistration: React.FC = () => {
 
   return (
     <div className="page-wrapper">
-      <Navbar />
+
       <div className="container" style={{ paddingTop: 48, paddingBottom: 48, maxWidth: 600 }}>
         <div className="card" style={{ padding: 40 }}>
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
@@ -56,7 +54,7 @@ const ShopRegistration: React.FC = () => {
           </form>
         </div>
       </div>
-      <Footer />
+
     </div>
   )
 }

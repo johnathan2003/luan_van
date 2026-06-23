@@ -8,7 +8,10 @@ export interface Category {
 export interface Product {
   product_id: number
   shop_id: number
+  shop_name?: string
+  shop_rating?: string
   category_id?: number
+  category_name?: string
   product_name: string
   description?: string
   price: string

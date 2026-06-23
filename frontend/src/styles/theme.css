@@ -183,3 +183,68 @@
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.75);
   --shadow-card-hover: 0 14px 36px rgba(91, 33, 182, 0.25);
 }
+
+/* ══════════════════════════════════════════════════════════════
+   ROLE THEMES — ghi đè khi :root có data-role
+   User giữ nguyên light/dark ở trên, không set data-role
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Admin — chỉ giữ màu topbar + primary, nền/chữ theo light/dark ── */
+:root[data-role='admin'] {
+  --bg-topbar: #1E3A8A;
+  --topbar-gradient: linear-gradient(105deg, #1E3A8A 0%, #1D4ED8 60%, #3B82F6 100%);
+  --topbar-shadow: 0 4px 24px rgba(30, 58, 138, 0.4);
+  --text-on-topbar: #FFFFFF;
+
+  --primary: #1D4ED8;
+  --primary-dark: #1E3A8A;
+  --primary-light: #3B82F6;
+  --role-active-bg: rgba(29, 78, 216, 0.12);
+  --role-active-color: #1D4ED8;
+  --role-active-border: #3B82F6;
+
+  --cta-bg: #1D4ED8;
+  --cta-bg-hover: #1E3A8A;
+  --cta-text: #FFFFFF;
+  --cta-shadow: 0 4px 16px rgba(29, 78, 216, 0.35);
+}
+
+/* ── Shipper — chỉ giữ màu topbar + primary ─────────────────── */
+:root[data-role='shipper'] {
+  --bg-topbar: #78350F;
+  --topbar-gradient: linear-gradient(105deg, #78350F 0%, #D97706 60%, #F59E0B 100%);
+  --topbar-shadow: 0 4px 24px rgba(120, 53, 15, 0.4);
+  --text-on-topbar: #FFFFFF;
+
+  --primary: #D97706;
+  --primary-dark: #78350F;
+  --primary-light: #F59E0B;
+  --role-active-bg: rgba(217, 119, 6, 0.12);
+  --role-active-color: #D97706;
+  --role-active-border: #F59E0B;
+
+  --cta-bg: #D97706;
+  --cta-bg-hover: #B45309;
+  --cta-text: #FFFFFF;
+  --cta-shadow: 0 4px 16px rgba(217, 119, 6, 0.35);
+}
+
+/* ── Shop — chỉ giữ màu topbar + primary ────────────────────── */
+:root[data-role='shop'] {
+  --bg-topbar: #14532D;
+  --topbar-gradient: linear-gradient(105deg, #14532D 0%, #16A34A 60%, #22C55E 100%);
+  --topbar-shadow: 0 4px 24px rgba(20, 83, 45, 0.4);
+  --text-on-topbar: #FFFFFF;
+
+  --primary: #16A34A;
+  --primary-dark: #14532D;
+  --primary-light: #22C55E;
+  --role-active-bg: rgba(22, 163, 74, 0.12);
+  --role-active-color: #16A34A;
+  --role-active-border: #22C55E;
+
+  --cta-bg: #16A34A;
+  --cta-bg-hover: #15803D;
+  --cta-text: #FFFFFF;
+  --cta-shadow: 0 4px 16px rgba(22, 163, 74, 0.35);
+}

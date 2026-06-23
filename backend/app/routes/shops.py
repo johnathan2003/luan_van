@@ -17,6 +17,51 @@ from app.services.product_service import get_products
 router = APIRouter()
 
 
+@router.get("/public/{shop_id}")
+def get_public_shop(shop_id: int, db: Session = Depends(get_db)):
+    """Public shop profile — no auth required."""
+    from app.models.product import Product
+    from fastapi import HTTPException
+    shop = db.query(Shop).filter(Shop.shop_id == shop_id).first()
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop not found")
+    products = (
+        db.query(Product)
+        .filter(Product.shop_id == shop_id, Product.status == "active", Product.deleted_at.is_(None))
+        .order_by(Product.sales_count.desc())
+        .all()
+    )
+    return {
+        "shop_id": shop.shop_id,
+        "shop_name": shop.shop_name,
+        "description": shop.description,
+        "avatar_url": shop.avatar_url,
+        "address": shop.address,
+        "phone": shop.phone,
+        "rating": str(shop.rating) if shop.rating else "0.0",
+        "total_followers": shop.total_followers or 0,
+        "total_orders": shop.total_orders or 0,
+        "verification_status": shop.verification_status,
+        "verified_at": str(shop.verified_at) if shop.verified_at else None,
+        "created_at": str(shop.created_at) if shop.created_at else None,
+        "products": [
+            {
+                "product_id": p.product_id,
+                "product_name": p.product_name,
+                "price": str(p.price),
+                "image_urls": p.image_urls,
+                "rating": str(p.rating) if p.rating else "0.0",
+                "total_reviews": p.total_reviews or 0,
+                "sales_count": p.sales_count or 0,
+                "stock_quantity": p.stock_quantity,
+                "category_id": p.category_id,
+                "category_name": p.category.category_name if p.category else None,
+            }
+            for p in products
+        ],
+    }
+
+
 @router.get("/me")
 def my_shop(current_user: User = Depends(require_shop_owner), db: Session = Depends(get_db)):
     shop = get_shop(db, current_user.user_id)

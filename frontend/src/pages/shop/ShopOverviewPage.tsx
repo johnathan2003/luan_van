@@ -7,12 +7,20 @@ import { Link } from 'react-router-dom'
 import Loading from '../../components/common/Loading'
 import { shopService } from '../../services/shopService'
 import { formatCurrency } from '../../utils/formatters'
+import { useAppSelector } from '../../store/hooks'
+import { getDisputesByComplainant, getDisputesByTarget } from '../../utils/disputeStore'
 
 const ShopOverviewPage: React.FC = () => {
+  const { user } = useAppSelector(s => s.auth)
   const [shop, setShop]       = useState<any>(null)
   const [analytics, setAnalytics] = useState<any>(null)
   const [orders, setOrders]   = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+
+  const sentDisputes = user ? getDisputesByComplainant('shop', user.user_id) : []
+  const receivedDisputes = user ? getDisputesByTarget('shop', user.user_id) : []
+  const allDisputes = [...sentDisputes, ...receivedDisputes]
+  const pendingDisputes = allDisputes.filter(d => d.status === 'pending' || d.status === 'reviewing')
 
   useEffect(() => {
     Promise.all([
@@ -36,16 +44,24 @@ const ShopOverviewPage: React.FC = () => {
           <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>{shop?.shop_name}</h1>
           <p style={{ color: 'var(--gray-500)', fontSize: 14 }}>📍 {shop?.address}</p>
         </div>
-        <Link to="/shop/products" className="btn btn-primary">+ Thêm sản phẩm</Link>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {shop?.shop_id && (
+            <Link to={`/shops/${shop.shop_id}`} className="btn btn-outline">
+              🏪 Xem trang shop
+            </Link>
+          )}
+          <Link to="/shop/products" className="btn btn-primary">+ Thêm sản phẩm</Link>
+        </div>
       </div>
 
       {/* KPI */}
       {analytics && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
           {[
             { label: 'Doanh thu (30 ngày)', value: formatCurrency(analytics.total_revenue), icon: '💰', color: 'var(--primary)', path: '/shop/analytics' },
             { label: 'Tổng đơn hàng',       value: analytics.total_orders,                 icon: '📦', color: 'var(--info)',    path: '/shop/orders' },
             { label: 'Sản phẩm',            value: analytics.total_products,               icon: '🏷️', color: 'var(--success)', path: '/shop/products' },
+            { label: 'Khiếu nại đang chờ',  value: pendingDisputes.length,                 icon: '⚠️', color: '#dc2626',        path: '/complaints' },
           ].map(k => (
             <Link key={k.label} to={k.path} style={{ textDecoration: 'none' }}>
               <div className="card" style={{ padding: 20, borderTop: `4px solid ${k.color}`, transition: 'transform 0.15s' }}
@@ -92,19 +108,6 @@ const ShopOverviewPage: React.FC = () => {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Quick links */}
-      <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
-        {[
-          { icon: '👥', label: 'Quản lý nhân viên', path: '/shop/employees' },
-          { icon: '🎫', label: 'Tạo voucher',        path: '/shop/vouchers' },
-          { icon: '⚙️', label: 'Cài đặt shop',      path: '/profile' },
-        ].map(l => (
-          <Link key={l.path} to={l.path} className="btn btn-outline btn-sm" style={{ gap: 6 }}>
-            {l.icon} {l.label}
-          </Link>
-        ))}
       </div>
     </div>
   )

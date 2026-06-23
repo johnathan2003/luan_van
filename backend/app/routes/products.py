@@ -60,9 +60,12 @@ def list_categories(db: Session = Depends(get_db)):
 @router.get("/{product_id}")
 def get_product(product_id: int, db: Session = Depends(get_db)):
     product = get_product_by_id(db, product_id)
+    shop = product.shop if hasattr(product, 'shop') else None
     return {
         "product_id": product.product_id,
         "shop_id": product.shop_id,
+        "shop_name": shop.shop_name if shop else None,
+        "shop_rating": str(shop.rating) if shop and shop.rating else None,
         "product_name": product.product_name,
         "description": product.description,
         "price": product.price,
@@ -75,6 +78,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
         "views_count": product.views_count,
         "sales_count": product.sales_count,
         "category_id": product.category_id,
+        "category_name": product.category.category_name if product.category else None,
         "created_at": str(product.created_at) if product.created_at else None,
     }
 

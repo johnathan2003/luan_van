@@ -9,7 +9,11 @@ export function useTheme() {
   const { themeMode, resolvedTheme } = useAppSelector(s => s.ui)
 
   useEffect(() => {
+    const html = document.documentElement
+    html.classList.add('theme-transitioning')
     applyThemeToDocument(resolvedTheme)
+    const t = window.setTimeout(() => html.classList.remove('theme-transitioning'), 3100)
+    return () => window.clearTimeout(t)
   }, [resolvedTheme])
 
   useEffect(() => {

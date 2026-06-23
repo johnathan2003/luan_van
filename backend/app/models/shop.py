@@ -54,7 +54,7 @@ class ShopEmployee(Base):
 
     employee_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, unique=True)
-    shop_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    shop_id = Column(Integer, ForeignKey("shops.shop_id"), nullable=False)
     employee_name = Column(String(255))
     position = Column(String(100))
     status = Column(Enum("active", "inactive", "suspended"), default="active", index=True)
