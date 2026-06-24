@@ -24,6 +24,7 @@ const SHOP_NAV = [
   { icon: '👥', label: 'Nhân viên',   path: '/shop/employees' },
   { icon: '📈', label: 'Thống kê',    path: '/shop/analytics' },
   { icon: '🎫', label: 'Voucher',     path: '/shop/vouchers' },
+  { icon: '🏆', label: 'Đấu giá banner', path: '/shop/banner-auction' },
   { icon: '⚠️', label: 'Khiếu nại',   path: '/complaints' },
 ]
 

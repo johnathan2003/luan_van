@@ -35,6 +35,7 @@ import OrderManagementPage      from './pages/shop/OrderManagementPage'
 import EmployeeManagementPage   from './pages/shop/EmployeeManagementPage'
 import AnalyticsPage            from './pages/shop/AnalyticsPage'
 import VoucherManagementPage    from './pages/shop/VoucherManagementPage'
+import BannerAuctionPage        from './pages/shop/BannerAuctionPage'
 import VoucherCenterPage        from './pages/VoucherCenterPage'
 
 // ── ⚙️ Admin pages ────────────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ import ProductAdminPage         from './pages/admin/ProductAdminPage'
 import OrderAdminPage           from './pages/admin/OrderAdminPage'
 import VoucherAdminPage         from './pages/admin/VoucherAdminPage'
 import BannerAdminPage          from './pages/admin/BannerAdminPage'
+import AuctionManagementPage    from './pages/admin/AuctionManagementPage'
 import FinancePage              from './pages/admin/FinancePage'
 import SystemNotificationPage   from './pages/admin/SystemNotificationPage'
 import ShippingConfigPage       from './pages/admin/ShippingConfigPage'
@@ -108,6 +110,7 @@ const Router: React.FC = () => (
       <Route path="/shop/employees"    element={inShop(<EmployeeManagementPage />)} />
       <Route path="/shop/analytics"    element={inShop(<AnalyticsPage />)} />
       <Route path="/shop/vouchers"     element={inShop(<VoucherManagementPage />)} />
+      <Route path="/shop/banner-auction" element={inShop(<BannerAuctionPage />)} />
     </Route>
 
     {/* ── ⚙️ Admin ─────────────────────────────────────────────────────────── */}
@@ -131,6 +134,7 @@ const Router: React.FC = () => (
       <Route path="/admin/vouchers"           element={inAdmin(<VoucherAdminPage />)} />
       {/* Nội dung */}
       <Route path="/admin/banners"            element={inAdmin(<BannerAdminPage />)} />
+      <Route path="/admin/banner-auction"     element={inAdmin(<AuctionManagementPage />)} />
       <Route path="/admin/notifications"      element={inAdmin(<SystemNotificationPage />)} />
       {/* Vận hành */}
       <Route path="/admin/shipping-config"    element={inAdmin(<ShippingConfigPage />)} />

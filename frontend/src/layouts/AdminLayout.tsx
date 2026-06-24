@@ -62,6 +62,7 @@ const ADMIN_NAV: NavGroup[] = [
     group: 'Nội dung',
     items: [
       { icon: '🖼️', label: 'Banner QC',        path: '/admin/banners' },
+      { icon: '🏆', label: 'Đấu giá Banner',   path: '/admin/banner-auction' },
       { icon: '📣', label: 'Thông báo HT',     path: '/admin/notifications' },
     ],
   },
