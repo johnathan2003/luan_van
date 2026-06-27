@@ -1,8 +1,7 @@
 from sqlalchemy.orm import Session
 from app.models.notification import Notification, NotificationPreference
-from app.websocket.connection_manager import send_to_user
+from app.websocket.connection_manager import send_to_user, fire
 from app.utils.helpers import paginate
-import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,19 +32,14 @@ def create_notification(
     db.commit()
     db.refresh(notif)
 
-    # Send real-time
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            loop.create_task(send_to_user(user_id, "notification", {
-                "notification_id": notif.notification_id,
-                "title": title,
-                "message": message,
-                "type": notif_type,
-                "data": data,
-            }))
-    except Exception as e:
-        logger.error(f"Failed to send real-time notification: {e}")
+    # Send real-time (thread-safe)
+    fire(send_to_user(user_id, "notification", {
+        "notification_id": notif.notification_id,
+        "title": title,
+        "message": message,
+        "type": notif_type,
+        "data": data,
+    }))
 
     return notif
 

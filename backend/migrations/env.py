@@ -13,7 +13,7 @@ load_dotenv()
 from app.database import Base
 from app.models import (  # noqa: F401
     user, shop, product, order, cart,
-    payment, shipment, notification, voucher, dispute, logs
+    payment, shipment, notification, voucher, dispute, logs, chat
 )
 
 config = context.config

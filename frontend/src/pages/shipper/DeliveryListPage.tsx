@@ -7,26 +7,19 @@ const C = {
   success: '#16A34A', error: '#DC2626',
 }
 
-const MOCK_DELIVERIES = [
-  { shipment_id: 1, order_id: 2031, status: 'in_transit',  pickup_location: 'TechWorld Store, 42 Nguyễn Huệ, Q1', delivery_location: '12 Lê Lợi, Q1, HCM',            recipient: 'Nguyễn Văn A', phone: '0901111111', amount: 9200000, payment_method: 'momo',         created_at: '2026-06-14T09:30:00' },
-  { shipment_id: 2, order_id: 2025, status: 'pending',     pickup_location: 'TechWorld Store, 42 Nguyễn Huệ, Q1', delivery_location: '100 Trần Hưng Đạo, Q5, HCM',    recipient: 'Trần Thị B',   phone: '0902222222', amount: 504000,  payment_method: 'cod',          created_at: '2026-06-14T07:00:00' },
-  { shipment_id: 3, order_id: 2030, status: 'delivered',   pickup_location: 'TechWorld Store, 42 Nguyễn Huệ, Q1', delivery_location: '88 Nguyễn Huệ, Q1, HCM',        recipient: 'Lê Văn C',     phone: '0903333333', amount: 320000,  payment_method: 'bank_transfer', created_at: '2026-06-14T08:15:00' },
-  { shipment_id: 4, order_id: 2028, status: 'delivered',   pickup_location: 'OrganicFood, 88 Phan Đăng Lưu',      delivery_location: '5 Phạm Ngũ Lão, Q1, HCM',       recipient: 'Phạm Thị D',   phone: '0904444444', amount: 150000,  payment_method: 'cod',          created_at: '2026-06-13T16:00:00' },
-  { shipment_id: 5, order_id: 2019, status: 'failed',      pickup_location: 'SportZone, 120 Nguyễn Xí',           delivery_location: '77 Lý Thường Kiệt, Q10, HCM',   recipient: 'Hoàng Văn E',  phone: '0905555555', amount: 850000,  payment_method: 'momo',         created_at: '2026-06-12T11:00:00' },
-]
-
 const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }> = {
-  pending:    { label: '⏳ Chờ lấy',   color: C.blue,    bg: '#DBEAFE' },
-  in_transit: { label: '🚚 Đang giao', color: C.amber,   bg: C.light   },
-  delivered:  { label: '✓ Đã giao',   color: C.success, bg: '#DCFCE7' },
-  failed:     { label: '✗ Thất bại',  color: C.error,   bg: '#FEE2E2' },
+  assigned:   { label: '📦 Cần lấy tại shop', color: '#7C3AED', bg: '#EDE9FE' },
+  pending:    { label: '⏳ Chờ lấy',          color: C.blue,    bg: '#DBEAFE' },
+  in_transit: { label: '🚚 Đang giao',        color: C.amber,   bg: C.light   },
+  delivered:  { label: '✓ Đã giao',           color: C.success, bg: '#DCFCE7' },
+  failed:     { label: '✗ Thất bại',          color: C.error,   bg: '#FEE2E2' },
 }
 
 const QUICK_FAIL = ['Không tìm được địa chỉ', 'Khách không nghe máy', 'Khách từ chối nhận hàng', 'Địa chỉ không chính xác']
 
 const DeliveryListPage: React.FC = () => {
-  const [deliveries, setDeliveries] = useState<any[]>(MOCK_DELIVERIES)
-  const [loading, setLoading]       = useState(false)
+  const [deliveries, setDeliveries] = useState<any[]>([])
+  const [loading, setLoading]       = useState(true)
   const [filter, setFilter]         = useState('all')
   const [confirmId, setConfirmId]   = useState<number | null>(null)
   const [confirmType, setConfirmType] = useState<'pickup'|'deliver'|'fail'|null>(null)
@@ -34,12 +27,12 @@ const DeliveryListPage: React.FC = () => {
 
   useEffect(() => {
     setLoading(true)
-    shipmentService.getMyDeliveries()
+    shipmentService.getMyDeliveries({ limit: 100 })
       .then((r: any) => {
-        const list = r.data?.deliveries || r.data
-        if (Array.isArray(list) && list.length > 0) setDeliveries(list)
+        const list = r.data?.deliveries ?? r.data
+        if (Array.isArray(list)) setDeliveries(list)
       })
-      .catch(() => {})
+      .catch(() => setDeliveries([]))
       .finally(() => setLoading(false))
   }, [])
 
@@ -51,7 +44,8 @@ const DeliveryListPage: React.FC = () => {
   }
 
   const counts: Record<string, number> = {
-    all: deliveries.length,
+    all:        deliveries.length,
+    assigned:   deliveries.filter(d => d.status === 'assigned').length,
     pending:    deliveries.filter(d => d.status === 'pending').length,
     in_transit: deliveries.filter(d => d.status === 'in_transit').length,
     delivered:  deliveries.filter(d => d.status === 'delivered').length,
@@ -67,17 +61,18 @@ const DeliveryListPage: React.FC = () => {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
         {[
-          { key:'pending',    label:'Chờ lấy',  color: C.blue    },
+          { key:'assigned',   label:'Cần lấy',   color: '#7C3AED' },
+          { key:'pending',    label:'Chờ lấy',   color: C.blue    },
           { key:'in_transit', label:'Đang giao', color: C.amber   },
           { key:'delivered',  label:'Đã giao',   color: C.success },
           { key:'failed',     label:'Thất bại',  color: C.error   },
         ].map(s => (
           <div key={s.key} onClick={() => setFilter(filter === s.key ? 'all' : s.key)}
-            style={{ background: 'var(--bg-card)', borderRadius: 12, padding: '12px 16px', borderLeft: `3px solid ${s.color}`, cursor: 'pointer',
+            style={{ background: 'var(--bg-card)', borderRadius: 12, padding: '12px 14px', borderLeft: `3px solid ${s.color}`, cursor: 'pointer',
               boxShadow: filter === s.key ? `0 0 0 2px ${s.color}` : '0 1px 3px rgba(0,0,0,0.07)' }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: C.gray, textTransform: 'uppercase' }}>{s.label}</p>
+            <p style={{ fontSize: 10, fontWeight: 600, color: C.gray, textTransform: 'uppercase' }}>{s.label}</p>
             <p style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{counts[s.key]}</p>
           </div>
         ))}
@@ -85,7 +80,7 @@ const DeliveryListPage: React.FC = () => {
 
       {/* Filter tabs */}
       <div style={{ display: 'flex', gap: 8, background: 'var(--bg-card)', padding: '10px 14px', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', flexWrap: 'wrap' }}>
-        {[['all','Tất cả'],['pending','Chờ lấy'],['in_transit','Đang giao'],['delivered','Đã giao'],['failed','Thất bại']].map(([k,l]) => (
+        {[['all','Tất cả'],['assigned','Cần lấy'],['pending','Chờ lấy'],['in_transit','Đang giao'],['delivered','Đã giao'],['failed','Thất bại']].map(([k,l]) => (
           <button key={k} onClick={() => setFilter(k)} style={{
             padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
             background: filter === k ? C.amber : '#F1F5F9', color: filter === k ? 'white' : C.gray,
@@ -112,8 +107,12 @@ const DeliveryListPage: React.FC = () => {
                   <p style={{ fontSize: 12, color: C.gray, margin: 0 }}>🕐 {d.created_at?.slice(0,16)?.replace('T',' ')}</p>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <p style={{ fontWeight: 800, fontSize: 16, color: C.amber, margin: 0 }}>{d.amount?.toLocaleString('vi-VN')}₫</p>
-                  <span style={{ fontSize: 11, color: C.gray }}>{d.payment_method === 'cod' ? '💵 COD' : '💳 Online'}</span>
+                  {d.amount != null && (
+                    <p style={{ fontWeight: 800, fontSize: 16, color: C.amber, margin: 0 }}>{d.amount.toLocaleString('vi-VN')}₫</p>
+                  )}
+                  {d.payment_method && (
+                    <span style={{ fontSize: 11, color: C.gray }}>{d.payment_method === 'cod' ? '💵 COD' : '💳 Online'}</span>
+                  )}
                 </div>
               </div>
 
@@ -128,13 +127,17 @@ const DeliveryListPage: React.FC = () => {
                 </div>
               </div>
 
-              <p style={{ fontSize: 13, color: C.gray, marginBottom: 12 }}>👤 {d.recipient} · 📞 {d.phone}</p>
+              {(d.recipient || d.phone) && (
+                <p style={{ fontSize: 13, color: C.gray, marginBottom: 12 }}>
+                  {d.recipient ? `👤 ${d.recipient}` : ''}{d.recipient && d.phone ? ' · ' : ''}{d.phone ? `📞 ${d.phone}` : ''}
+                </p>
+              )}
 
               <div style={{ display: 'flex', gap: 8 }}>
-                {d.status === 'pending' && (
+                {(d.status === 'assigned' || d.status === 'pending') && (
                   <button onClick={() => { setConfirmId(d.shipment_id); setConfirmType('pickup') }}
-                    style={{ flex: 1, padding: '10px', background: C.blue, color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                    📦 Đã lấy hàng
+                    style={{ flex: 1, padding: '10px', background: d.status === 'assigned' ? '#7C3AED' : C.blue, color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                    📦 Xác nhận đã lấy hàng tại shop
                   </button>
                 )}
                 {d.status === 'in_transit' && (
@@ -163,15 +166,17 @@ const DeliveryListPage: React.FC = () => {
       {/* Modals */}
       {confirmId && confirmType === 'pickup' && (
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center' }} onClick={() => setConfirmId(null)}>
-          <div style={{ background:'var(--bg-card)',borderRadius:16,padding:28,width:380 }} onClick={e=>e.stopPropagation()}>
-            <h3 style={{ fontWeight:800,fontSize:18,color:C.navy,marginBottom:12 }}>📦 Xác nhận lấy hàng</h3>
-            <p style={{ fontSize:14,color:C.gray,marginBottom:16 }}>Đã quét QR và đối chiếu thông tin đơn #{confirmId}?</p>
-            <div style={{ background:C.tint,borderRadius:10,padding:'12px 16px',marginBottom:20,fontSize:13,color:C.amber }}>
-              💡 Quét QR → Kiểm tra thông tin → Xác nhận lấy hàng
+          <div style={{ background:'var(--bg-card)',borderRadius:16,padding:28,width:400 }} onClick={e=>e.stopPropagation()}>
+            <h3 style={{ fontWeight:800,fontSize:18,color:C.navy,marginBottom:12 }}>📦 Xác nhận đã lấy hàng</h3>
+            <p style={{ fontSize:14,color:C.gray,marginBottom:12 }}>Bạn đã tới shop và nhận đơn hàng #{confirmId}?</p>
+            <div style={{ background:'#EDE9FE',borderRadius:10,padding:'12px 16px',marginBottom:20,fontSize:13,color:'#7C3AED' }}>
+              📋 Sau khi xác nhận:<br/>
+              • Trạng thái đơn chuyển sang <strong>"Đang giao"</strong><br/>
+              • Khách hàng nhận được thông báo
             </div>
             <div style={{ display:'flex',gap:10 }}>
               <button onClick={() => setConfirmId(null)} style={{ flex:1,padding:10,background:'#F1F5F9',color:C.gray,border:'none',borderRadius:9,fontWeight:600,cursor:'pointer' }}>Hủy</button>
-              <button onClick={() => handleAction(confirmId,'in_transit')} style={{ flex:2,padding:10,background:C.blue,color:'white',border:'none',borderRadius:9,fontWeight:700,cursor:'pointer' }}>✅ Xác nhận lấy hàng</button>
+              <button onClick={() => handleAction(confirmId,'in_transit')} style={{ flex:2,padding:10,background:'#7C3AED',color:'white',border:'none',borderRadius:9,fontWeight:700,cursor:'pointer' }}>🚚 Đã lấy hàng — Bắt đầu giao</button>
             </div>
           </div>
         </div>

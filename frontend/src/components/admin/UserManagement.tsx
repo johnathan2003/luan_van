@@ -5,34 +5,17 @@ import Loading from '../common/Loading'
 const C = { navy: '#1E3A8A', blue: '#1D4ED8', light: '#DBEAFE', tint: '#EFF6FF', gray: '#64748B', success: '#16A34A', warning: '#D97706', error: '#DC2626' }
 
 const ROLE_COLOR: Record<string, { color: string; bg: string }> = {
-  admin:    { color: C.blue,    bg: C.light   },
-  shop:     { color: '#16A34A', bg: '#DCFCE7' },
-  shipper:  { color: C.warning, bg: '#FEF3C7' },
-  customer: { color: '#7C3AED', bg: '#EDE9FE' },
-  user:     { color: C.gray,    bg: '#F1F5F9' },
+  admin:      { color: C.blue,    bg: C.light   },
+  shop:       { color: '#16A34A', bg: '#DCFCE7' },
+  shipper:    { color: C.warning, bg: '#FEF3C7' },
+  user:       { color: '#7C3AED', bg: '#EDE9FE' },  // "user" = người dùng thường
+  superadmin: { color: '#DC2626', bg: '#FEE2E2' },
+  employee:   { color: C.gray,    bg: '#F1F5F9' },
 }
 
-const MOCK_USERS = [
-  { user_id:1,  full_name:'Nguyễn Văn Admin',   email:'admin@example.com',     roles:['admin'],    status:'active',   created_at:'2024-01-01' },
-  { user_id:2,  full_name:'Trần Thị Chủ Shop',  email:'owner@example.com',     roles:['shop'],     status:'active',   created_at:'2024-02-10' },
-  { user_id:3,  full_name:'Lê Văn Shipper',     email:'shipper1@example.com',  roles:['shipper'],  status:'active',   created_at:'2024-03-15' },
-  { user_id:4,  full_name:'Hoàng Văn An',       email:'customer1@example.com', roles:['customer'], status:'active',   created_at:'2024-04-01' },
-  { user_id:5,  full_name:'Nguyễn Thị B',       email:'user2@example.com',     roles:['customer'], status:'active',   created_at:'2024-04-20' },
-  { user_id:6,  full_name:'Trần Minh C',        email:'user3@example.com',     roles:['customer'], status:'inactive', created_at:'2024-05-05' },
-  { user_id:7,  full_name:'Phạm Văn D',         email:'user4@example.com',     roles:['customer'], status:'banned',   created_at:'2024-05-10', violation_reason: 'Đặt hàng rồi "bom" hàng (không nhận, không thanh toán) nhiều lần' },
-  { user_id:8,  full_name:'Vũ Thị E',           email:'shop2@example.com',     roles:['shop'],     status:'active',   created_at:'2024-06-01' },
-  { user_id:9,  full_name:'Đinh Văn F',         email:'shipper2@example.com',  roles:['shipper'],  status:'active',   created_at:'2024-06-15' },
-  { user_id:10, full_name:'Bùi Thị G',          email:'user5@example.com',     roles:['customer'], status:'active',   created_at:'2024-07-01' },
-  // ── Tài khoản vi phạm (demo) — phục vụ test luồng khiếu nại/xử lý vi phạm ──
-  { user_id:11, full_name:'Shop Hàng Giả 247',  email:'shopvipham1@example.com', roles:['shop'],    status:'banned',   created_at:'2024-08-02', violation_reason: 'Bán hàng giả/hàng nhái, bị khiếu nại xác minh 3 lần' },
-  { user_id:12, full_name:'Đỗ Văn Gian',        email:'shipperVP1@example.com',  roles:['shipper'], status:'banned',   created_at:'2024-08-10', violation_reason: 'Giao hàng gian dối (báo đã giao nhưng khách chưa nhận), bị khiếu nại 5 lần' },
-  { user_id:13, full_name:'Ngô Thị Lừa',        email:'uservipham1@example.com', roles:['customer'],status:'banned',   created_at:'2024-08-18', violation_reason: 'Khiếu nại sai sự thật nhiều lần nhằm trục lợi hoàn tiền' },
-  { user_id:14, full_name:'Shop Trốn Đơn',      email:'shopvipham2@example.com', roles:['shop'],    status:'banned',   created_at:'2024-09-01', violation_reason: 'Tự ý hủy đơn hàng loạt sau khi khách đã thanh toán' },
-]
-
 const UserManagement: React.FC = () => {
-  const [users, setUsers]   = useState<any[]>(MOCK_USERS)
-  const [loading, setLoading] = useState(false)
+  const [users, setUsers]   = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -40,8 +23,8 @@ const UserManagement: React.FC = () => {
   useEffect(() => {
     setLoading(true)
     adminService.getUsers()
-      .then(res => setUsers(res.data?.users || res.data || MOCK_USERS))
-      .catch(() => setUsers(MOCK_USERS))
+      .then(res => { const d = res.data?.users ?? res.data; if (Array.isArray(d)) setUsers(d) })
+      .catch(() => setUsers([]))
       .finally(() => setLoading(false))
   }, [])
 
@@ -92,7 +75,7 @@ const UserManagement: React.FC = () => {
           <option value="admin">Admin</option>
           <option value="shop">Cửa hàng</option>
           <option value="shipper">Shipper</option>
-          <option value="customer">Khách hàng</option>
+          <option value="user">Khách hàng</option>
         </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
           style={{ padding: '8px 14px', border: `1px solid ${C.light}`, borderRadius: 8, fontSize: 13, outline: 'none' }}>

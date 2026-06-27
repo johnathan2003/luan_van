@@ -16,8 +16,8 @@ const initialState: CartState = {
 
 export const fetchCart = createAsyncThunk('cart/fetch', async (_, { rejectWithValue }) => {
   try {
-    const res = await API.get('/api/v1/carts/me')
-    return res.data
+    const res = await API.get('/api/v1/carts')
+    return res.data.data ?? res.data
   } catch (err: any) {
     return rejectWithValue(err.response?.data?.detail || 'Lỗi tải giỏ hàng')
   }
@@ -60,7 +60,7 @@ export const removeFromCart = createAsyncThunk(
 )
 
 export const clearCart = createAsyncThunk('cart/clear', async (_, { dispatch }) => {
-  await API.delete('/api/v1/carts/clear')
+  await API.delete('/api/v1/carts')
   dispatch(fetchCart())
 })
 

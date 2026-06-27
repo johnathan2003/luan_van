@@ -2,45 +2,115 @@
  * 🚚 Shipping Config Admin — Cấu hình vận chuyển
  * Nhóm 8: thêm, sửa vùng/phương thức vận chuyển, cấu hình phí
  */
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { adminService } from '../../services/adminService'
 
 const C = { navy: '#1E3A8A', blue: '#1D4ED8', light: '#DBEAFE', tint: '#EFF6FF', gray: '#64748B', success: '#16A34A', warning: '#D97706', error: '#DC2626' }
 
-const EMPTY_ZONE = { name: '', provinces: '', base_fee: '', per_kg: '', estimated_days: '' }
+const EMPTY_ZONE   = { name: '', provinces: '', base_fee: '', per_kg: '', estimated_days: '' }
 const EMPTY_METHOD = { name: '', code: '', description: '', is_active: true }
 
 const ShippingConfigPage: React.FC = () => {
-  const [zones, setZones]           = useState(MOCK_ZONES)
-  const [methods, setMethods]       = useState(MOCK_METHODS)
+  const [zones, setZones]     = useState<any[]>([])
+  const [methods, setMethods] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab]   = useState<'zones' | 'methods'>('zones')
   const [showZoneForm, setShowZoneForm]     = useState(false)
   const [showMethodForm, setShowMethodForm] = useState(false)
-  const [editZoneId, setEditZoneId]   = useState<number | null>(null)
+  const [editZoneId, setEditZoneId]     = useState<number | null>(null)
   const [editMethodId, setEditMethodId] = useState<number | null>(null)
-  const [zoneForm, setZoneForm]       = useState<any>(EMPTY_ZONE)
-  const [methodForm, setMethodForm]   = useState<any>(EMPTY_METHOD)
+  const [zoneForm, setZoneForm]     = useState<any>(EMPTY_ZONE)
+  const [methodForm, setMethodForm] = useState<any>(EMPTY_METHOD)
+  const [error, setError] = useState('')
 
   const fmt = (n: number) => n.toLocaleString('vi-VN') + '₫'
 
+  const loadData = async () => {
+    try {
+      const [zRes, mRes] = await Promise.all([
+        adminService.getShippingZones(),
+        adminService.getShippingMethods(),
+      ])
+      setZones(zRes.data?.zones ?? zRes.data ?? [])
+      setMethods(mRes.data?.methods ?? mRes.data ?? [])
+    } catch {
+      setZones([])
+      setMethods([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadData() }, [])
+
   // Zone handlers
-  const openAddZone   = () => { setZoneForm(EMPTY_ZONE); setEditZoneId(null); setShowZoneForm(true) }
-  const openEditZone  = (z: any) => { setZoneForm({ ...z }); setEditZoneId(z.id); setShowZoneForm(true) }
-  const removeZone    = (id: number) => { if (window.confirm('Xóa vùng vận chuyển?')) setZones(zs => zs.filter(z => z.id !== id)) }
-  const saveZone = () => {
-    if (editZoneId !== null) setZones(zs => zs.map(z => z.id === editZoneId ? { ...z, ...zoneForm } : z))
-    else setZones(zs => [...zs, { ...zoneForm, id: Date.now() }])
-    setShowZoneForm(false)
+  const openAddZone  = () => { setZoneForm(EMPTY_ZONE); setEditZoneId(null); setShowZoneForm(true); setError('') }
+  const openEditZone = (z: any) => {
+    setZoneForm({ name: z.name, provinces: z.provinces, base_fee: z.base_fee, per_kg: z.per_kg, estimated_days: z.estimated_days })
+    setEditZoneId(z.zone_id)
+    setShowZoneForm(true)
+    setError('')
+  }
+  const removeZone = async (id: number) => {
+    if (!window.confirm('Xóa vùng vận chuyển?')) return
+    await adminService.deleteShippingZone(id)
+    setZones(zs => zs.filter(z => z.zone_id !== id))
+  }
+  const saveZone = async () => {
+    setError('')
+    const payload = {
+      name: zoneForm.name,
+      provinces: zoneForm.provinces,
+      base_fee: Number(zoneForm.base_fee) || 0,
+      per_kg:   Number(zoneForm.per_kg) || 0,
+      estimated_days: zoneForm.estimated_days,
+    }
+    try {
+      if (editZoneId !== null) {
+        await adminService.updateShippingZone(editZoneId, payload)
+      } else {
+        await adminService.createShippingZone(payload)
+      }
+      setShowZoneForm(false)
+      loadData()
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || 'Lỗi khi lưu vùng vận chuyển')
+    }
   }
 
   // Method handlers
-  const openAddMethod   = () => { setMethodForm(EMPTY_METHOD); setEditMethodId(null); setShowMethodForm(true) }
-  const openEditMethod  = (m: any) => { setMethodForm({ ...m }); setEditMethodId(m.id); setShowMethodForm(true) }
-  const removeMethod    = (id: number) => { if (window.confirm('Xóa phương thức vận chuyển?')) setMethods(ms => ms.filter(m => m.id !== id)) }
-  const saveMethod = () => {
-    if (editMethodId !== null) setMethods(ms => ms.map(m => m.id === editMethodId ? { ...m, ...methodForm } : m))
-    else setMethods(ms => [...ms, { ...methodForm, id: Date.now() }])
-    setShowMethodForm(false)
+  const openAddMethod  = () => { setMethodForm(EMPTY_METHOD); setEditMethodId(null); setShowMethodForm(true); setError('') }
+  const openEditMethod = (m: any) => {
+    setMethodForm({ name: m.name, code: m.code, description: m.description, is_active: m.is_active })
+    setEditMethodId(m.method_id)
+    setShowMethodForm(true)
+    setError('')
   }
+  const removeMethod = async (id: number) => {
+    if (!window.confirm('Xóa phương thức vận chuyển?')) return
+    await adminService.deleteShippingMethod(id)
+    setMethods(ms => ms.filter(m => m.method_id !== id))
+  }
+  const toggleMethod = async (m: any) => {
+    await adminService.updateShippingMethod(m.method_id, { is_active: !m.is_active })
+    setMethods(ms => ms.map(x => x.method_id === m.method_id ? { ...x, is_active: !x.is_active } : x))
+  }
+  const saveMethod = async () => {
+    setError('')
+    try {
+      if (editMethodId !== null) {
+        await adminService.updateShippingMethod(editMethodId, methodForm)
+      } else {
+        await adminService.createShippingMethod(methodForm)
+      }
+      setShowMethodForm(false)
+      loadData()
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || 'Lỗi khi lưu phương thức')
+    }
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: C.gray }}>Đang tải...</div>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -78,8 +148,10 @@ const ShippingConfigPage: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {zones.map(z => (
-                <tr key={z.id} style={{ borderBottom: `1px solid ${C.tint}` }}
+              {zones.length === 0 ? (
+                <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: C.gray }}>Chưa có vùng nào. Nhấn "+ Thêm mới" để bắt đầu.</td></tr>
+              ) : zones.map(z => (
+                <tr key={z.zone_id} style={{ borderBottom: `1px solid ${C.tint}` }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFF')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                   <td style={{ padding: '13px 16px', fontWeight: 700, fontSize: 14, color: C.navy }}>{z.name}</td>
@@ -90,7 +162,7 @@ const ShippingConfigPage: React.FC = () => {
                   <td style={{ padding: '13px 16px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => openEditZone(z)} style={{ padding: '5px 10px', background: C.light, color: C.blue, border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✏️ Sửa</button>
-                      <button onClick={() => removeZone(z.id)} style={{ padding: '5px 10px', background: '#FEE2E2', color: C.error, border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>🗑️</button>
+                      <button onClick={() => removeZone(z.zone_id)} style={{ padding: '5px 10px', background: '#FEE2E2', color: C.error, border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>🗑️</button>
                     </div>
                   </td>
                 </tr>
@@ -103,8 +175,12 @@ const ShippingConfigPage: React.FC = () => {
       {/* Methods tab */}
       {activeTab === 'methods' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
-          {methods.map(m => (
-            <div key={m.id} className="card" style={{ padding: '18px 20px', borderLeft: `4px solid ${m.is_active ? C.success : C.gray}` }}>
+          {methods.length === 0 ? (
+            <div className="card" style={{ padding: 40, textAlign: 'center', color: C.gray, gridColumn: '1/-1' }}>
+              Chưa có phương thức nào. Nhấn "+ Thêm mới" để bắt đầu.
+            </div>
+          ) : methods.map(m => (
+            <div key={m.method_id} className="card" style={{ padding: '18px 20px', borderLeft: `4px solid ${m.is_active ? C.success : C.gray}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                 <div>
                   <p style={{ fontWeight: 700, fontSize: 15, color: C.navy }}>{m.name}</p>
@@ -117,11 +193,11 @@ const ShippingConfigPage: React.FC = () => {
               <p style={{ fontSize: 13, color: C.gray, marginBottom: 14 }}>{m.description}</p>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => openEditMethod(m)} style={{ flex: 1, padding: '7px', background: C.light, color: C.blue, border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✏️ Sửa</button>
-                <button onClick={() => setMethods(ms => ms.map(x => x.id === m.id ? { ...x, is_active: !x.is_active } : x))}
+                <button onClick={() => toggleMethod(m)}
                   style={{ flex: 1, padding: '7px', background: m.is_active ? '#FEE2E2' : '#DCFCE7', color: m.is_active ? C.error : C.success, border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   {m.is_active ? '⏸️ Tắt' : '▶️ Bật'}
                 </button>
-                <button onClick={() => removeMethod(m.id)} style={{ padding: '7px 10px', background: '#FEE2E2', color: C.error, border: 'none', borderRadius: 7, fontSize: 12, cursor: 'pointer' }}>🗑️</button>
+                <button onClick={() => removeMethod(m.method_id)} style={{ padding: '7px 10px', background: '#FEE2E2', color: C.error, border: 'none', borderRadius: 7, fontSize: 12, cursor: 'pointer' }}>🗑️</button>
               </div>
             </div>
           ))}
@@ -136,13 +212,14 @@ const ShippingConfigPage: React.FC = () => {
               <h2 style={{ fontSize:18, fontWeight:800, color:C.navy }}>{editZoneId ? 'Sửa vùng vận chuyển' : 'Thêm vùng mới'}</h2>
               <button onClick={() => setShowZoneForm(false)} style={{ border:'none', background:'none', fontSize:20, cursor:'pointer', color:C.gray }}>✕</button>
             </div>
+            {error && <div style={{ padding:'8px 12px', background:'#FEE2E2', color:C.error, borderRadius:8, marginBottom:12, fontSize:13 }}>{error}</div>}
             <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
               {[
-                { key:'name', label:'Tên vùng', type:'text', placeholder:'VD: Nội thành HCM' },
-                { key:'provinces', label:'Tỉnh/TP áp dụng', type:'text', placeholder:'VD: HCM, Bình Dương' },
-                { key:'base_fee', label:'Phí cơ bản (₫)', type:'number', placeholder:'VD: 30000' },
-                { key:'per_kg', label:'Phí/kg thêm (₫)', type:'number', placeholder:'VD: 5000' },
-                { key:'estimated_days', label:'Thời gian ước tính (ngày)', type:'number', placeholder:'VD: 1-2' },
+                { key:'name',           label:'Tên vùng',                  type:'text',   placeholder:'VD: Nội thành HCM' },
+                { key:'provinces',      label:'Tỉnh/TP áp dụng',           type:'text',   placeholder:'VD: HCM, Bình Dương' },
+                { key:'base_fee',       label:'Phí cơ bản (₫)',            type:'number', placeholder:'VD: 30000' },
+                { key:'per_kg',         label:'Phí/kg thêm (₫)',           type:'number', placeholder:'VD: 5000' },
+                { key:'estimated_days', label:'Thời gian ước tính (ngày)', type:'text',   placeholder:'VD: 1-2' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ fontSize:12, fontWeight:600, color:C.gray, display:'block', marginBottom:4 }}>{f.label}</label>
@@ -168,11 +245,12 @@ const ShippingConfigPage: React.FC = () => {
               <h2 style={{ fontSize:18, fontWeight:800, color:C.navy }}>{editMethodId ? 'Sửa phương thức' : 'Thêm phương thức'}</h2>
               <button onClick={() => setShowMethodForm(false)} style={{ border:'none', background:'none', fontSize:20, cursor:'pointer', color:C.gray }}>✕</button>
             </div>
+            {error && <div style={{ padding:'8px 12px', background:'#FEE2E2', color:C.error, borderRadius:8, marginBottom:12, fontSize:13 }}>{error}</div>}
             <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
               {[
-                { key:'name', label:'Tên phương thức', type:'text', placeholder:'VD: Giao hàng nhanh' },
-                { key:'code', label:'Mã (code)', type:'text', placeholder:'VD: EXPRESS' },
-                { key:'description', label:'Mô tả', type:'text', placeholder:'VD: Giao trong 2-4 giờ' },
+                { key:'name',        label:'Tên phương thức', type:'text', placeholder:'VD: Giao hàng nhanh' },
+                { key:'code',        label:'Mã (code)',        type:'text', placeholder:'VD: EXPRESS' },
+                { key:'description', label:'Mô tả',           type:'text', placeholder:'VD: Giao trong 2-4 giờ' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ fontSize:12, fontWeight:600, color:C.gray, display:'block', marginBottom:4 }}>{f.label}</label>
@@ -196,20 +274,5 @@ const ShippingConfigPage: React.FC = () => {
     </div>
   )
 }
-
-const MOCK_ZONES = [
-  { id:1, name:'Nội thành HCM',  provinces:'TP.HCM',                      base_fee:25000, per_kg:4000, estimated_days:'1-2' },
-  { id:2, name:'Vùng lân cận',   provinces:'Bình Dương, Đồng Nai, Long An',base_fee:35000, per_kg:5000, estimated_days:'2-3' },
-  { id:3, name:'Miền Tây',       provinces:'Cần Thơ, An Giang, Vĩnh Long', base_fee:45000, per_kg:6000, estimated_days:'3-4' },
-  { id:4, name:'Miền Bắc',       provinces:'Hà Nội, Hải Phòng, Hải Dương',base_fee:50000, per_kg:7000, estimated_days:'3-5' },
-  { id:5, name:'Miền Trung',     provinces:'Đà Nẵng, Huế, Quảng Nam',     base_fee:45000, per_kg:6500, estimated_days:'3-4' },
-]
-
-const MOCK_METHODS = [
-  { id:1, name:'Giao hàng tiêu chuẩn', code:'STANDARD', description:'Giao hàng trong 3-5 ngày làm việc.',        is_active: true },
-  { id:2, name:'Giao hàng nhanh',      code:'EXPRESS',  description:'Giao trong vòng 24 giờ kể từ lúc lấy hàng.', is_active: true },
-  { id:3, name:'Hỏa tốc',             code:'SAMEDAY',  description:'Giao trong 2-4 giờ (chỉ nội thành HCM).',    is_active: true },
-  { id:4, name:'Giao hàng quốc tế',    code:'INTL',     description:'Dành cho đơn hàng quốc tế, 7-14 ngày.',      is_active: false },
-]
 
 export default ShippingConfigPage

@@ -7,7 +7,6 @@ import { fetchOrderById } from '../../store/slices/orderSlice'
 import { formatCurrency, formatDate, formatOrderId } from '../../utils/formatters'
 import { getImageUrl } from '../../utils/helpers'
 import { PAYMENT_METHOD_LABELS } from '../../utils/constants'
-import { findMockOrder, isMockOrderId } from '../../mocks/mockOrders'
 import ItemReviewBox from '../../components/order/ItemReviewBox'
 import ShipperReviewBox from '../../components/order/ShipperReviewBox'
 
@@ -18,28 +17,25 @@ const OrderDetailPage: React.FC = () => {
   const [waited, setWaited] = useState(false)
 
   const numId = Number(id)
-  const mockOrder = isMockOrderId(numId) ? findMockOrder(numId) : undefined
 
   useEffect(() => {
-    if (!id || mockOrder) return
+    if (!id) return
     dispatch(fetchOrderById(numId))
-    // fetchOrderById khong co trang thai pending/rejected rieng -> doi 1 chut
-    // truoc khi ket luan "khong tim thay" de tranh nhay UI, rieng cho don demo
     const t = setTimeout(() => setWaited(true), 500)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, dispatch])
 
-  const order = mockOrder || realOrder
+  const order = realOrder
 
-  if (!mockOrder && loading) return (<Loading />)
+  if (loading) return (<Loading />)
   if (!order) {
-    if (!waited && !mockOrder) return (<Loading />)
+    if (!waited) return (<Loading />)
     return (<div className="container" style={{ padding: 40 }}>Không tìm thấy đơn hàng</div>)
   }
 
-  const steps = ['pending', 'confirmed', 'ready_to_ship', 'shipping', 'delivered', 'completed']
-  const stepLabels = ['Đặt hàng', 'Xác nhận', 'Chuẩn bị', 'Đang giao', 'Đã giao', 'Hoàn thành']
+  const steps = ['pending', 'confirmed', 'ready_to_ship', 'shipped', 'delivered', 'completed']
+  const stepLabels = ['Đặt hàng', 'Xác nhận', 'Đóng hàng', 'Đang giao', 'Đã giao', 'Hoàn thành']
   const currentStep = steps.indexOf(order.order_status)
 
   return (
@@ -101,6 +97,61 @@ const OrderDetailPage: React.FC = () => {
               <p style={{ fontSize: 14, marginBottom: 6 }}>📍 {order.shipping_address}</p>
               {order.note && <p style={{ fontSize: 14, color: 'var(--gray-500)' }}>📝 {order.note}</p>}
             </div>
+
+            {/* Shipper info — hiện khi đã gán shipper */}
+            {(['ready_to_ship', 'shipped', 'delivered', 'completed'] as string[]).includes(order.order_status) && (
+              <div className="card" style={{ padding: 24, marginTop: 16 }}>
+                <h2 style={{ fontWeight: 700, fontSize: 16, marginBottom: 14 }}>🚚 Thông tin vận chuyển</h2>
+
+                {/* Tuyến lấy → giao */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                  <div style={{ background: '#F0FDF4', borderRadius: 10, padding: '12px 14px' }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: '#059669', marginBottom: 4 }}>📦 LẤY HÀNG TẠI</p>
+                    <p style={{ fontSize: 13, color: '#065F46', fontWeight: 500 }}>
+                      {order.shipment?.pickup_location || order.shop_address || '—'}
+                    </p>
+                    {order.shop_name && <p style={{ fontSize: 11, color: '#6B7280', marginTop: 3 }}>{order.shop_name}</p>}
+                  </div>
+                  <div style={{ background: '#EFF6FF', borderRadius: 10, padding: '12px 14px' }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: '#1D4ED8', marginBottom: 4 }}>📍 GIAO ĐẾN</p>
+                    <p style={{ fontSize: 13, color: '#1E3A8A', fontWeight: 500 }}>
+                      {order.shipment?.delivery_location || order.shipping_address}
+                    </p>
+                    <p style={{ fontSize: 11, color: '#6B7280', marginTop: 3 }}>{order.recipient_name}</p>
+                  </div>
+                </div>
+
+                {/* Shipper card */}
+                {order.shipper_info ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#FAFAFA', border: '1px solid #E5E7EB', borderRadius: 10, padding: '12px 16px' }}>
+                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
+                      🛵
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: 700, fontSize: 15, color: '#111827', marginBottom: 3 }}>{order.shipper_info.name}</p>
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                        {order.shipper_info.phone && (
+                          <a href={`tel:${order.shipper_info.phone}`} style={{ fontSize: 13, color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
+                            📞 {order.shipper_info.phone}
+                          </a>
+                        )}
+                        {order.shipper_info.vehicle_type && (
+                          <span style={{ fontSize: 12, color: '#6B7280' }}>🏍️ {order.shipper_info.vehicle_type}</span>
+                        )}
+                        {order.shipper_info.license_plate && (
+                          <span style={{ fontSize: 12, color: '#6B7280' }}>🔢 {order.shipper_info.license_plate}</span>
+                        )}
+                        <span style={{ fontSize: 12, color: '#F59E0B' }}>⭐ {parseFloat(order.shipper_info.rating).toFixed(1)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ padding: '10px 14px', background: '#FEF9C3', borderRadius: 8, fontSize: 13, color: '#92400E' }}>
+                    ⏳ Đang tìm shipper phù hợp...
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Summary */}

@@ -18,7 +18,7 @@ const initialState: NotificationState = {
 
 export const fetchNotifications = createAsyncThunk('notification/fetch', async () => {
   const res = await API.get('/api/v1/notifications?limit=50')
-  return res.data
+  return res.data.data ?? res.data
 })
 
 export const markAsRead = createAsyncThunk('notification/markRead', async (id: number) => {

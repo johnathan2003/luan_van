@@ -1,4 +1,4 @@
-export type OrderStatus = 'pending' | 'confirmed' | 'ready_to_ship' | 'shipping' | 'delivered' | 'completed' | 'cancelled' | 'returned'
+export type OrderStatus = 'pending' | 'confirmed' | 'ready_to_ship' | 'shipped' | 'delivered' | 'completed' | 'cancelled' | 'returned'
 export type PaymentMethod = 'momo' | 'cod' | 'vnpay'
 export type PaymentStatus = 'unpaid' | 'paid' | 'failed' | 'refunded'
 
@@ -11,10 +11,21 @@ export interface OrderItem {
   price_at_order: string
 }
 
+export interface ShipperInfo {
+  shipper_id: number
+  name: string
+  phone?: string
+  vehicle_type?: string
+  license_plate?: string
+  rating: string
+}
+
 export interface Shipment {
   shipment_id: number
   status: string
   shipper_id?: number
+  pickup_location?: string
+  delivery_location?: string
   current_location?: { lat: number; lng: number }
   pickup_time?: string
   delivery_time?: string
@@ -22,9 +33,13 @@ export interface Shipment {
 
 export interface Order {
   order_id: number
+  order_number?: string
   user_id: number
   shop_id?: number
+  shop_name?: string
+  shop_address?: string
   shipper_id?: number
+  shipper_info?: ShipperInfo
   total_price: string
   discount: string
   final_price: string
@@ -48,6 +63,8 @@ export interface CartItem {
   price: string
   quantity: number
   shop_id?: number
+  shop_name?: string
+  stock_quantity?: number
 }
 
 export interface Cart {

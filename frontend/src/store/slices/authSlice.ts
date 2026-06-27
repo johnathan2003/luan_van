@@ -17,9 +17,19 @@ export const login = createAsyncThunk(
   async (data: LoginRequest, { rejectWithValue }) => {
     try {
       const res = await API.post('/api/v1/auth/login', data)
-      return res.data
+      console.log('[LOGIN] raw response:', res.data)
+      const payload = res.data.data ?? res.data
+      console.log('[LOGIN] payload:', payload)
+      return payload
     } catch (err: any) {
-      return rejectWithValue(err.response?.data?.detail || 'Đăng nhập thất bại')
+      const detail = err.response?.data?.detail
+      const errors = err.response?.data?.errors
+      const status = err.response?.status
+      console.error('[LOGIN] error:', { status, detail, errors, full: err.response?.data })
+      const msg = typeof detail === 'string' ? detail
+        : errors?.map((e: any) => e.message).join(', ')
+        || 'Đăng nhập thất bại'
+      return rejectWithValue(msg)
     }
   }
 )
@@ -29,7 +39,7 @@ export const register = createAsyncThunk(
   async (data: RegisterRequest, { rejectWithValue }) => {
     try {
       const res = await API.post('/api/v1/auth/register', data)
-      return res.data
+      return res.data.data ?? res.data
     } catch (err: any) {
       return rejectWithValue(err.response?.data?.detail || 'Đăng ký thất bại')
     }
@@ -39,7 +49,8 @@ export const register = createAsyncThunk(
 export const checkAuth = createAsyncThunk('auth/checkAuth', async (_, { rejectWithValue }) => {
   try {
     const res = await API.get('/api/v1/users/me')
-    return res.data
+    // Backend trả { success, data: <user_object>, message }
+    return res.data.data ?? res.data
   } catch {
     return rejectWithValue('Not authenticated')
   }
@@ -51,7 +62,7 @@ export const updateProfile = createAsyncThunk(
     try {
       await API.put('/api/v1/users/me', data)
       const res = await API.get('/api/v1/users/me')
-      return res.data
+      return res.data.data ?? res.data
     } catch (err: any) {
       return rejectWithValue(err.response?.data?.detail || 'Cập nhật thất bại')
     }

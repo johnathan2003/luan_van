@@ -8,7 +8,7 @@ const C = { navy: '#1E3A8A', blue: '#1D4ED8', light: '#DBEAFE', tint: '#EFF6FF',
 
 const AUDIENCE_OPTS = [
   { value: 'all',      label: '🌐 Tất cả người dùng' },
-  { value: 'customer', label: '👤 Khách hàng' },
+  { value: 'user', label: '👤 Khách hàng' },
   { value: 'shop',     label: '🏪 Cửa hàng' },
   { value: 'shipper',  label: '🚚 Shipper' },
 ]

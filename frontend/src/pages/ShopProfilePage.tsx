@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { formatCurrency } from '../utils/formatters'
 import { getImageUrl } from '../utils/helpers'
 import { useAuth } from '../hooks/useAuth'
@@ -346,7 +346,8 @@ const EditorModal: React.FC<EditorModalProps> = ({ type, onConfirm, onClose }) =
 // ─── Main page ────────────────────────────────────────────────────────────────
 const ShopProfilePage: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>()
-  const { currentRole } = useAuth()
+  const { currentRole, isAuthenticated } = useAuth()
+  const navigate = useNavigate()
   const isShopOwner = currentRole === 'shop'
 
   const [shop,    setShop]    = useState<any>(null)
@@ -625,18 +626,35 @@ const ShopProfilePage: React.FC = () => {
                   &#10003; Luu thay doi
                 </button>
               ) : (
-                <button
-                  onClick={handleToggleFollow}
-                  className="btn"
-                  style={{
-                    padding: '10px 24px', fontWeight: 700, cursor: 'pointer',
-                    background: following ? 'white' : C.blue,
-                    color: following ? C.blue : 'white',
-                    border: following ? `1.5px solid ${C.blue}` : `1.5px solid ${C.blue}`,
-                  }}
-                >
-                  {following ? '✓ Đang theo dõi' : '+ Theo dõi'}
-                </button>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    onClick={handleToggleFollow}
+                    className="btn"
+                    style={{
+                      padding: '10px 24px', fontWeight: 700, cursor: 'pointer',
+                      background: following ? 'white' : C.blue,
+                      color: following ? C.blue : 'white',
+                      border: following ? `1.5px solid ${C.blue}` : `1.5px solid ${C.blue}`,
+                    }}
+                  >
+                    {following ? '✓ Đang theo dõi' : '+ Theo dõi'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!isAuthenticated) { navigate('/login'); return }
+                      navigate(`/chat?shop=${shopId}`)
+                    }}
+                    className="btn"
+                    style={{
+                      padding: '10px 20px', fontWeight: 700, cursor: 'pointer',
+                      background: 'white', color: C.navy,
+                      border: `1.5px solid ${C.navy}`,
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    💬 Nhắn tin
+                  </button>
+                </div>
               )}
             </div>
           </div>

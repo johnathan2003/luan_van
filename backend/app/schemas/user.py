@@ -1,25 +1,57 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
 import re
 
+# Ký tự bị cấm trong email/username và password
+_DANGEROUS = re.compile(r'[<>?/:;"\'|\\]')
+
+
+def _block_dangerous(v: str, field: str = "Giá trị") -> str:
+    if _DANGEROUS.search(v):
+        raise ValueError(f"{field} không được chứa ký tự đặc biệt: < > ? / : ; \" ' | \\")
+    return v
+
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: str          # Cho phép username hoặc email, không bắt buộc định dạng @
     password: str
     full_name: str
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError("Email / tên đăng nhập không được để trống")
+        return _block_dangerous(v, "Email")
+
     @field_validator("password")
     @classmethod
-    def password_strength(cls, v):
-        if len(v) < 6:
-            raise ValueError("Password must be at least 6 characters")
-        return v
+    def validate_password(cls, v):
+        if len(v) < 3:
+            raise ValueError("Mật khẩu tối thiểu 3 ký tự")
+        return _block_dangerous(v, "Mật khẩu")
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, v):
+        return _block_dangerous(v.strip(), "Họ tên")
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: str          # Chấp nhận cả username lẫn email
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v):
+        return _block_dangerous(v.strip(), "Email")
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v):
+        return _block_dangerous(v, "Mật khẩu")
 
 
 class UserUpdate(BaseModel):
@@ -36,13 +68,18 @@ class PasswordChange(BaseModel):
     @field_validator("new_password")
     @classmethod
     def password_strength(cls, v):
-        if len(v) < 6:
-            raise ValueError("Password must be at least 6 characters")
-        return v
+        if len(v) < 3:
+            raise ValueError("Mật khẩu tối thiểu 3 ký tự")
+        return _block_dangerous(v, "Mật khẩu")
 
 
 class ForgotPassword(BaseModel):
-    email: EmailStr
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v):
+        return _block_dangerous(v.strip(), "Email")
 
 
 class ResetPassword(BaseModel):

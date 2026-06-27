@@ -27,8 +27,10 @@ import OrderHistoryPage   from './pages/user/OrderHistoryPage'
 import OrderDetailPage    from './pages/user/OrderDetailPage'
 import EventsPage         from './pages/user/EventsPage'
 import MyDisputesPage     from './pages/user/MyDisputesPage'
+import ChatPage           from './pages/user/ChatPage'
 
 // ── 🏪 Shop (chủ shop / nhân viên shop) pages ─────────────────────────────────
+import ShopChatPage             from './pages/shop/ChatPage'
 import ShopOverviewPage         from './pages/shop/ShopOverviewPage'
 import ProductManagementPage    from './pages/shop/ProductManagementPage'
 import OrderManagementPage      from './pages/shop/OrderManagementPage'
@@ -54,8 +56,18 @@ import BannerAdminPage          from './pages/admin/BannerAdminPage'
 import FinancePage              from './pages/admin/FinancePage'
 import SystemNotificationPage   from './pages/admin/SystemNotificationPage'
 import ShippingConfigPage       from './pages/admin/ShippingConfigPage'
+import MallRequestsPage         from './pages/admin/MallRequestsPage'
 import ReportsPage              from './pages/admin/ReportsPage'
 import FeedbackPage             from './pages/admin/FeedbackPage'
+
+// ── ⚡ Superadmin (nằm ngoài hệ thống, không ghi log) ────────────────────────
+import SuperRouter from '@super/SuperRouter'
+
+// ── 👷 Employee pages ─────────────────────────────────────────────────────────
+import EmployeeDashboard     from './pages/employee/EmployeeDashboard'
+import EmployeeOrdersPage    from './pages/employee/EmployeeOrdersPage'
+import EmployeeProductsPage  from './pages/employee/EmployeeProductsPage'
+import EmployeeChatPage      from './pages/employee/EmployeeChatPage'
 
 // ── 🚚 Shipper pages ──────────────────────────────────────────────────────────
 import ShipperOverviewPage from './pages/shipper/ShipperOverviewPage'
@@ -67,11 +79,11 @@ import BenefitsPage        from './pages/shipper/BenefitsPage'
 import TrackingPage        from './pages/shipper/TrackingPage'
 
 // ── Helper: bọc page trong layout ─────────────────────────────────────────────
-const inPublic  = (el: React.ReactNode) => <PublicLayout>{el}</PublicLayout>
-const inUser    = (el: React.ReactNode, sub?: string) => <UserLayout subtitle={sub}>{el}</UserLayout>
-const inAdmin   = (el: React.ReactNode) => <AdminLayout>{el}</AdminLayout>
-const inShop    = (el: React.ReactNode) => <ShopLayout>{el}</ShopLayout>
-const inShipper = (el: React.ReactNode) => <ShipperLayout>{el}</ShipperLayout>
+const inPublic   = (el: React.ReactNode) => <PublicLayout>{el}</PublicLayout>
+const inUser     = (el: React.ReactNode, sub?: string) => <UserLayout subtitle={sub}>{el}</UserLayout>
+const inAdmin    = (el: React.ReactNode) => <AdminLayout>{el}</AdminLayout>
+const inShop     = (el: React.ReactNode) => <ShopLayout>{el}</ShopLayout>
+const inShipper  = (el: React.ReactNode) => <ShipperLayout>{el}</ShipperLayout>
 
 const Router: React.FC = () => (
   <Routes>
@@ -96,6 +108,7 @@ const Router: React.FC = () => (
       <Route path="/orders/:id"       element={inUser(<OrderDetailPage />,     'Chi tiết đơn hàng')} />
       <Route path="/events"           element={inUser(<EventsPage />,          'Sự kiện')} />
       <Route path="/complaints"       element={inUser(<MyDisputesPage />,      'Khiếu nại của tôi')} />
+      <Route path="/chat"             element={inUser(<ChatPage />,            'Tin nhắn')} />
       <Route path="/register-shop"    element={inUser(<ShopRegistration />,    'Đăng ký mở shop')} />
       <Route path="/register-shipper" element={inUser(<ShipperRegistration />, 'Đăng ký làm shipper')} />
     </Route>
@@ -108,6 +121,7 @@ const Router: React.FC = () => (
       <Route path="/shop/employees"    element={inShop(<EmployeeManagementPage />)} />
       <Route path="/shop/analytics"    element={inShop(<AnalyticsPage />)} />
       <Route path="/shop/vouchers"     element={inShop(<VoucherManagementPage />)} />
+      <Route path="/shop/chat"         element={inShop(<ShopChatPage />)} />
     </Route>
 
     {/* ── ⚙️ Admin ─────────────────────────────────────────────────────────── */}
@@ -135,10 +149,19 @@ const Router: React.FC = () => (
       {/* Vận hành */}
       <Route path="/admin/shipping-config"    element={inAdmin(<ShippingConfigPage />)} />
       <Route path="/admin/system-employees"   element={inAdmin(<SystemEmployeePage />)} />
+      <Route path="/admin/mall-requests"      element={inAdmin(<MallRequestsPage />)} />
       {/* Báo cáo & Log */}
       <Route path="/admin/reports"            element={inAdmin(<ReportsPage />)} />
       <Route path="/admin/feedback"           element={inAdmin(<FeedbackPage />)} />
       <Route path="/admin/logs"               element={inAdmin(<AuditLogsPage />)} />
+    </Route>
+
+    {/* ── 👷 Employee (nhân viên shop) ────────────────────────────────────── */}
+    <Route element={<ProtectedRoute requiredRole="employee" />}>
+      <Route path="/employee"          element={<EmployeeDashboard />} />
+      <Route path="/employee/orders"   element={<EmployeeOrdersPage />} />
+      <Route path="/employee/products" element={<EmployeeProductsPage />} />
+      <Route path="/employee/messages" element={<EmployeeChatPage />} />
     </Route>
 
     {/* ── 🚚 Shipper ──────────────────────────────────────────────────────── */}
@@ -151,6 +174,9 @@ const Router: React.FC = () => (
       <Route path="/shipper/benefits"              element={inShipper(<BenefitsPage />)} />
       <Route path="/shipper/tracking/:shipmentId"  element={inShipper(<TrackingPage />)} />
     </Route>
+
+    {/* ── ⚡ Superadmin — tách biệt, layout riêng, không dùng Redux auth ─── */}
+    <Route path="/super/*" element={<SuperRouter />} />
 
     <Route path="*" element={inPublic(<NotFoundPage />)} />
   </Routes>

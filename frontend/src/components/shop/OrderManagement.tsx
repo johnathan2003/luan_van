@@ -40,9 +40,18 @@ const OrderManagement: React.FC = () => {
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {['', 'pending', 'confirmed', 'ready_to_ship', 'shipping', 'completed', 'cancelled'].map(s => (
-          <button key={s} onClick={() => setFilter(s)} className={`btn btn-sm ${filter === s ? 'btn-primary' : 'btn-outline'}`}>
-            {s === '' ? 'Tất cả' : s === 'pending' ? 'Chờ xác nhận' : s === 'confirmed' ? 'Đã xác nhận' : s === 'ready_to_ship' ? 'Chuẩn bị giao' : s === 'shipping' ? 'Đang giao' : s === 'completed' ? 'Hoàn thành' : 'Đã hủy'}
+        {[
+          { v: '',              l: 'Tất cả' },
+          { v: 'pending',       l: '📋 Chờ xác nhận' },
+          { v: 'confirmed',     l: '📦 Đang đóng hàng' },
+          { v: 'ready_to_ship', l: '🚚 Chờ shipper' },
+          { v: 'shipped',       l: '🛵 Đang giao' },
+          { v: 'delivered',     l: '✅ Đã giao' },
+          { v: 'completed',     l: '🎉 Hoàn thành' },
+          { v: 'cancelled',     l: '❌ Đã hủy' },
+        ].map(({ v, l }) => (
+          <button key={v} onClick={() => setFilter(v)} className={`btn btn-sm ${filter === v ? 'btn-primary' : 'btn-outline'}`}>
+            {l}
           </button>
         ))}
       </div>

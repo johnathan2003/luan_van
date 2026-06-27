@@ -22,7 +22,8 @@ from sqlalchemy import create_engine, text, event
 from sqlalchemy.orm import sessionmaker
 
 from app.utils.security import hash_password
-from app.models.user import User, Role, UserRole
+from app.utils.constants import DEFAULT_PERMISSIONS
+from app.models.user import User, Role, UserRole, Permission, RolePermission
 from app.models.shop import Shop, ShopEmployee, EmployeeRolePermission
 from app.models.product import Product, ProductCategory
 from app.models.order import Order, OrderItem
@@ -100,17 +101,66 @@ def seed():
 
     try:
         # ROLES
-        for name in ("admin", "shop", "shipper", "customer", "employee"):
+        for name in ("admin", "superadmin", "shop", "shipper", "user", "employee"):
             upsert(db, Role, {"role_name": name})
         db.commit()
         roles = {r.role_name: r for r in db.query(Role).all()}
 
-        # USERS
+        # PERMISSIONS
+        for pcode, category, desc in DEFAULT_PERMISSIONS:
+            upsert(db, Permission, {"permission_code": pcode},
+                category=category, description=desc)
+        db.commit()
+        perms = {p.permission_code: p for p in db.query(Permission).all()}
+
+        # ROLE-PERMISSIONS
+        # superadmin: toàn quyền — không bị ghi log
+        for perm in perms.values():
+            upsert(db, RolePermission,
+                {"role_id": roles["superadmin"].role_id, "permission_id": perm.permission_id})
+
+        # admin: quyền quản trị (được ghi log)
+        for pcode in [
+            "user:manage", "user:ban", "dispute:resolve",
+            "product:approve", "product:read",
+            "order:read", "shipment:read", "shipment:assign",
+            "payment:process", "message:read",
+        ]:
+            if pcode in perms:
+                upsert(db, RolePermission,
+                    {"role_id": roles["admin"].role_id, "permission_id": perms[pcode].permission_id})
+
+        # shop role
+        for pcode in [
+            "product:create", "product:read", "product:update", "product:delete",
+            "order:read", "order:confirm", "order:cancel", "order:update",
+            "shop:manage", "shop:analytics", "shop:employees",
+            "message:read", "message:send",
+        ]:
+            if pcode in perms:
+                upsert(db, RolePermission,
+                    {"role_id": roles["shop"].role_id, "permission_id": perms[pcode].permission_id})
+
+        # shipper role
+        for pcode in ["shipment:read", "order:read", "message:read", "message:send"]:
+            if pcode in perms:
+                upsert(db, RolePermission,
+                    {"role_id": roles["shipper"].role_id, "permission_id": perms[pcode].permission_id})
+
+        # user (customer) role
+        for pcode in ["order:create", "order:cancel", "message:read", "message:send", "payment:process"]:
+            if pcode in perms:
+                upsert(db, RolePermission,
+                    {"role_id": roles["user"].role_id, "permission_id": perms[pcode].permission_id})
+
+        db.commit()
+
+        # USERS — tài khoản đầy đủ (email thật)
         users_data = [
-            ("admin@example.com",     "Admin@123", "Admin User",     "0901111111", "15 Le Loi, Q1, HCM",    "admin"),
+            ("admin@example.com",     "Admin@123", "Admin Example",  "0901111112", "15 Le Loi, Q1, HCM",    "admin"),
             ("owner@example.com",     "Shop@123",  "Tran Van Minh",  "0902222221", "42 Nguyen Hue, Q1, HCM", "shop"),
             ("shipper1@example.com",  "Ship@123",  "Vo Van Toc",     "0904444441", "11 Truong Chinh, HCM",   "shipper"),
-            ("customer1@example.com", "User@123",  "Hoang Van An",   "0905555551", "99 CMT8, Q3, HCM",       "customer"),
+            ("customer1@example.com", "User@123",  "Hoang Van An",   "0905555551", "99 CMT8, Q3, HCM",       "user"),
         ]
         users = {}
         for email, pw, name, phone, addr, role_name in users_data:
@@ -123,21 +173,56 @@ def seed():
         admin    = users["admin"]
         owner    = users["shop"]
         shipper  = users["shipper"]
-        customer = users["customer"]
+        customer = users["user"]
 
         for u, role_name in [
             (admin, "admin"), (owner, "shop"),
-            (shipper, "shipper"), (customer, "customer"),
+            (shipper, "shipper"), (customer, "user"),
         ]:
             upsert(db, UserRole,
                 {"user_id": u.user_id, "role_id": roles[role_name].role_id},
                 current_role=True, assigned_by=admin.user_id, status="active")
 
-        # customer1 có đủ 5 quyền để test toàn bộ hệ thống
-        for rn in ("admin", "shop", "shipper", "customer", "employee"):
+        # customer1 có đủ 5 quyền để test toàn bộ hệ thống (cả 5 vai trò)
+        for rn in ("admin", "shop", "shipper", "user", "employee"):
             upsert(db, UserRole,
                 {"user_id": customer.user_id, "role_id": roles[rn].role_id},
-                current_role=(rn == "customer"), assigned_by=admin.user_id, status="active")
+                current_role=(rn == "user"), assigned_by=admin.user_id, status="active")
+        db.commit()
+
+        # ── Tài khoản test nhanh (username đơn giản) ─────────────────────────
+        # Super account: password_hash = sentinel — không thể đăng nhập qua /auth/login
+        # → Chỉ đăng nhập được qua /super/auth/login (so sánh plaintext từ env)
+        simple_accounts = [
+            ("admin", hash_password("admin"), "Admin",       "admin"),
+            ("super", "!SUPER_NO_BCRYPT!",    "Super Admin", "superadmin"),   # plaintext sentinel
+            ("shop",  hash_password("shop"),  "Shop Test",   "shop"),
+            ("user1", hash_password("user1"), "User Test",   "user"),
+        ]
+        simple_users: dict[str, User] = {}
+        for s_email, s_pw_hash, s_name, s_role in simple_accounts:
+            su, _ = upsert(db, User, {"email": s_email},
+                password_hash=s_pw_hash,
+                full_name=s_name, status="active")
+            if roles.get(s_role):
+                upsert(db, UserRole,
+                    {"user_id": su.user_id, "role_id": roles[s_role].role_id},
+                    current_role=True, assigned_by=admin.user_id, status="active")
+            simple_users[s_role] = su
+        db.commit()
+
+        # Shop record cho tài khoản test shop/shop
+        # (shop_id = user_id, bắt buộc để tạo sản phẩm qua /api/v1/products)
+        shop_test_user = simple_users.get("shop")
+        if shop_test_user:
+            upsert(db, Shop, {"shop_id": shop_test_user.user_id},
+                shop_name="Shop Test Store",
+                description="Cửa hàng test cho tài khoản shop/shop",
+                address="1 Test Street, TP.HCM",
+                phone="0900000000",
+                rating="5.0",
+                verification_status="approved",
+                verified_at=now)
         db.commit()
 
         # CATEGORIES
@@ -447,6 +532,12 @@ def seed():
         print("Core accounts:")
         for email, pw, _, _, _, role in users_data:
             print(f"  {email:<32} / {pw:<12} [{role}]")
+
+        print("\nSimple test accounts:")
+        print(f"  {'admin':<32} / {'admin':<12} [admin]     — hành động ghi vào admin_logs")
+        print(f"  {'super':<32} / {'super':<12} [superadmin]— toàn quyền, KHÔNG ghi log")
+        print(f"  {'shop':<32} / {'shop':<12} [shop]")
+        print(f"  {'user1':<32} / {'user1':<12} [customer]")
 
         print("\nShop employees (/shop/*):")
         for email, pw, name, position, perms in emp_users:

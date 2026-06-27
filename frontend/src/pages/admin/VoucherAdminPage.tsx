@@ -2,35 +2,55 @@
  * 🎫 Voucher Admin — Quản lý mã giảm giá
  * Nhóm 5: thêm, xóa, sửa, duyệt mã giảm giá
  */
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { adminService } from '../../services/adminService'
 
 const C = { navy: '#1E3A8A', blue: '#1D4ED8', sky: '#3B82F6', light: '#DBEAFE', tint: '#EFF6FF', gray: '#64748B', success: '#16A34A', warning: '#D97706', error: '#DC2626' }
 
-const EMPTY = { code: '', discount_type: 'percentage', discount_value: '', max_uses: '', valid_from: '', valid_to: '', status: 'pending' }
+const EMPTY = { code: '', discount_type: 'percentage', discount_value: '', usage_limit: '', start_date: '', end_date: '' }
+
+// Tính trạng thái voucher từ is_active + end_date
+const voucherStatus = (v: any): string => {
+  if (v.end_date && new Date(v.end_date) < new Date()) return 'expired'
+  return v.is_active ? 'active' : 'inactive'
+}
 
 const VoucherAdminPage: React.FC = () => {
-  const [vouchers, setVouchers] = useState(MOCK_VOUCHERS)
+  const [vouchers, setVouchers] = useState<any[]>([])
+  const [loading, setLoading]   = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId]     = useState<number | null>(null)
   const [form, setForm]         = useState<any>(EMPTY)
   const [search, setSearch]     = useState('')
 
+  useEffect(() => {
+    setLoading(true)
+    adminService.getAllVouchers({ limit: 100 })
+      .then((res: any) => {
+        const list = res.data?.vouchers ?? res.data
+        if (Array.isArray(list)) setVouchers(list)
+      })
+      .catch(() => setVouchers([]))
+      .finally(() => setLoading(false))
+  }, [])
+
   const filtered = vouchers.filter(v => !search || v.code.toLowerCase().includes(search.toLowerCase()))
 
   const openAdd  = () => { setForm(EMPTY); setEditId(null); setShowForm(true) }
-  const openEdit = (v: any) => { setForm({ ...v }); setEditId(v.id); setShowForm(true) }
-
-  const handleSave = () => {
-    if (editId !== null) {
-      setVouchers(vs => vs.map(v => v.id === editId ? { ...v, ...form } : v))
-    } else {
-      setVouchers(vs => [...vs, { ...form, id: Date.now(), current_uses: 0, status: 'pending' }])
-    }
-    setShowForm(false)
+  const openEdit = (v: any) => {
+    setForm({
+      code: v.code, discount_type: v.discount_type,
+      discount_value: v.discount_value, usage_limit: v.usage_limit,
+      start_date: v.start_date?.slice(0, 10) ?? '', end_date: v.end_date?.slice(0, 10) ?? '',
+    })
+    setEditId(v.voucher_id)
+    setShowForm(true)
   }
 
-  const handleDelete  = (id: number) => { if (window.confirm('Xóa mã giảm giá này?')) setVouchers(vs => vs.filter(v => v.id !== id)) }
-  const handleApprove = (id: number) => setVouchers(vs => vs.map(v => v.id === id ? { ...v, status: 'active' } : v))
+  // CRUD local-only — PATCH/PUT/DELETE admin voucher endpoints chưa có
+  const handleSave   = () => setShowForm(false)  // TODO: gọi API khi có endpoint
+  const handleDelete = (id: number) => { if (window.confirm('Xóa mã giảm giá này?')) setVouchers(vs => vs.filter(v => v.voucher_id !== id)) }
+  const handleApprove = (id: number) => setVouchers(vs => vs.map(v => v.voucher_id === id ? { ...v, is_active: true } : v))
 
   const statusColor: Record<string, string> = { active: C.success, pending: C.warning, expired: C.gray, inactive: C.error }
   const statusBg:    Record<string, string> = { active: '#DCFCE7', pending: '#FEF3C7', expired: '#F1F5F9', inactive: '#FEE2E2' }
@@ -50,10 +70,10 @@ const VoucherAdminPage: React.FC = () => {
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
         {[
-          { label: 'Tổng voucher', value: vouchers.length,                               color: C.blue,    bg: C.light },
-          { label: 'Đang hoạt động',value: vouchers.filter(v=>v.status==='active').length,color: C.success, bg:'#DCFCE7' },
-          { label: 'Chờ duyệt',   value: vouchers.filter(v=>v.status==='pending').length, color: C.warning, bg:'#FEF3C7' },
-          { label: 'Hết hạn',     value: vouchers.filter(v=>v.status==='expired').length, color: C.gray,    bg:'#F1F5F9' },
+          { label: 'Tổng voucher',  value: vouchers.length,                                              color: C.blue,    bg: C.light },
+          { label: 'Đang hoạt động',value: vouchers.filter(v=>voucherStatus(v)==='active').length,       color: C.success, bg:'#DCFCE7' },
+          { label: 'Tạm dừng',     value: vouchers.filter(v=>voucherStatus(v)==='inactive').length,      color: C.warning, bg:'#FEF3C7' },
+          { label: 'Hết hạn',      value: vouchers.filter(v=>voucherStatus(v)==='expired').length,       color: C.gray,    bg:'#F1F5F9' },
         ].map(s => (
           <div key={s.label} className="card" style={{ padding: '14px 18px', borderLeft: `3px solid ${s.color}` }}>
             <p style={{ fontSize: 11, color: C.gray, fontWeight: 600, textTransform: 'uppercase' }}>{s.label}</p>
@@ -79,36 +99,44 @@ const VoucherAdminPage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(v => (
-              <tr key={v.id} style={{ borderBottom: `1px solid ${C.tint}` }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFF')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <td style={{ padding: '12px 14px' }}>
-                  <code style={{ background: C.light, color: C.navy, padding: '3px 9px', borderRadius: 6, fontWeight: 700, fontSize: 13 }}>{v.code}</code>
-                </td>
-                <td style={{ padding: '12px 14px', fontSize: 13 }}>{v.discount_type === 'percentage' ? 'Phần trăm' : 'Cố định'}</td>
-                <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 700, color: C.navy }}>
-                  {v.discount_type === 'percentage' ? `${v.discount_value}%` : `${Number(v.discount_value).toLocaleString('vi-VN')}₫`}
-                </td>
-                <td style={{ padding: '12px 14px', fontSize: 13 }}>{v.current_uses} / {v.max_uses}</td>
-                <td style={{ padding: '12px 14px', fontSize: 12, color: C.gray }}>
-                  <div>{v.valid_from?.slice(0, 10)}</div>
-                  <div>→ {v.valid_to?.slice(0, 10)}</div>
-                </td>
-                <td style={{ padding: '12px 14px' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: statusBg[v.status] ?? '#F1F5F9', color: statusColor[v.status] ?? C.gray }}>
-                    {v.status === 'active' ? 'Hoạt động' : v.status === 'pending' ? 'Chờ duyệt' : v.status === 'expired' ? 'Hết hạn' : 'Tạm dừng'}
-                  </span>
-                </td>
-                <td style={{ padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {v.status === 'pending' && <button onClick={() => handleApprove(v.id)} style={{ padding:'5px 10px', background:'#DCFCE7', color:C.success, border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>✅ Duyệt</button>}
-                    <button onClick={() => openEdit(v)} style={{ padding:'5px 10px', background:C.light, color:C.blue, border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>✏️ Sửa</button>
-                    <button onClick={() => handleDelete(v.id)} style={{ padding:'5px 10px', background:'#FEE2E2', color:C.error, border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>🗑️</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {loading ? (
+              <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: C.gray }}>Đang tải...</td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: C.gray }}>Không có voucher nào</td></tr>
+            ) : filtered.map(v => {
+              const st = voucherStatus(v)
+              return (
+                <tr key={v.voucher_id} style={{ borderBottom: `1px solid ${C.tint}` }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFF')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  <td style={{ padding: '12px 14px' }}>
+                    <code style={{ background: C.light, color: C.navy, padding: '3px 9px', borderRadius: 6, fontWeight: 700, fontSize: 13 }}>{v.code}</code>
+                    {v.shop_id && <span style={{ fontSize:10, color:C.gray, marginLeft:6 }}>shop</span>}
+                  </td>
+                  <td style={{ padding: '12px 14px', fontSize: 13 }}>{v.discount_type === 'percentage' ? 'Phần trăm' : 'Cố định'}</td>
+                  <td style={{ padding: '12px 14px', fontSize: 14, fontWeight: 700, color: C.navy }}>
+                    {v.discount_type === 'percentage' ? `${v.discount_value}%` : `${Number(v.discount_value).toLocaleString('vi-VN')}₫`}
+                  </td>
+                  <td style={{ padding: '12px 14px', fontSize: 13 }}>{v.used_count ?? 0} / {v.usage_limit ?? '∞'}</td>
+                  <td style={{ padding: '12px 14px', fontSize: 12, color: C.gray }}>
+                    <div>{v.start_date?.slice(0, 10) ?? '—'}</div>
+                    <div>→ {v.end_date?.slice(0, 10) ?? '∞'}</div>
+                  </td>
+                  <td style={{ padding: '12px 14px' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: statusBg[st] ?? '#F1F5F9', color: statusColor[st] ?? C.gray }}>
+                      {st === 'active' ? 'Hoạt động' : st === 'expired' ? 'Hết hạn' : 'Tạm dừng'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {!v.is_active && st !== 'expired' && <button onClick={() => handleApprove(v.voucher_id)} style={{ padding:'5px 10px', background:'#DCFCE7', color:C.success, border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>✅ Kích hoạt</button>}
+                      <button onClick={() => openEdit(v)} style={{ padding:'5px 10px', background:C.light, color:C.blue, border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>✏️ Sửa</button>
+                      <button onClick={() => handleDelete(v.voucher_id)} style={{ padding:'5px 10px', background:'#FEE2E2', color:C.error, border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>🗑️</button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -126,9 +154,9 @@ const VoucherAdminPage: React.FC = () => {
               {[
                 { key:'code', label:'Mã voucher', type:'text', placeholder:'VD: SALE50' },
                 { key:'discount_value', label:'Giá trị giảm', type:'number', placeholder: '' },
-                { key:'max_uses', label:'Số lượng tối đa', type:'number', placeholder: '' },
-                { key:'valid_from', label:'Ngày bắt đầu', type:'date', placeholder: '' },
-                { key:'valid_to',   label:'Ngày kết thúc', type:'date', placeholder: '' },
+                { key:'usage_limit', label:'Số lượng tối đa', type:'number', placeholder: '' },
+                { key:'start_date', label:'Ngày bắt đầu', type:'date', placeholder: '' },
+                { key:'end_date',   label:'Ngày kết thúc', type:'date', placeholder: '' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ fontSize:12, fontWeight:600, color:C.gray, display:'block', marginBottom:4 }}>{f.label}</label>
@@ -158,12 +186,5 @@ const VoucherAdminPage: React.FC = () => {
     </div>
   )
 }
-
-const MOCK_VOUCHERS = [
-  { id:1, code:'WELCOME10', discount_type:'percentage', discount_value:10, max_uses:1000, current_uses:42, valid_from:'2025-01-01', valid_to:'2025-12-31', status:'active' },
-  { id:2, code:'SALE50K',   discount_type:'fixed',      discount_value:50000, max_uses:500, current_uses:128, valid_from:'2025-06-01', valid_to:'2025-06-30', status:'active' },
-  { id:3, code:'NEWSHOP20', discount_type:'percentage', discount_value:20, max_uses:200, current_uses:0, valid_from:'2025-07-01', valid_to:'2025-07-31', status:'pending' },
-  { id:4, code:'XMAS2024',  discount_type:'percentage', discount_value:15, max_uses:5000, current_uses:4980, valid_from:'2024-12-20', valid_to:'2024-12-31', status:'expired' },
-]
 
 export default VoucherAdminPage

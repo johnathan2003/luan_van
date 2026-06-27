@@ -21,6 +21,7 @@ const SHOP_NAV = [
   { icon: '📊', label: 'Tổng quan',    path: '/shop' },
   { icon: '🏷️', label: 'Sản phẩm',   path: '/shop/products' },
   { icon: '📦', label: 'Đơn hàng',    path: '/shop/orders' },
+  { icon: '💬', label: 'Tin nhắn',    path: '/shop/chat' },
   { icon: '👥', label: 'Nhân viên',   path: '/shop/employees' },
   { icon: '📈', label: 'Thống kê',    path: '/shop/analytics' },
   { icon: '🎫', label: 'Voucher',     path: '/shop/vouchers' },

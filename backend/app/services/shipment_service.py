@@ -55,12 +55,13 @@ def pickup_order(db: Session, shipment_id: int, shipper_id: int) -> Shipment:
     ).first()
     if not shipment:
         raise HTTPException(status_code=404, detail="Shipment not found")
-    shipment.status = "picked_up"
+    # Shipper đã tới shop lấy hàng → shipment in_transit, order = shipped
+    shipment.status = "in_transit"
     shipment.pickup_time = datetime.utcnow()
 
     order = db.query(Order).filter(Order.order_id == shipment.order_id).first()
     if order:
-        order.order_status = "shipping"
+        order.order_status = "shipped"
 
     db.commit()
     return shipment

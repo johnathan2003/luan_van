@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAppSelector, useAppDispatch } from '../store/hooks'
 import { fetchNotifications, markAsRead, markAllAsRead, addNotification } from '../store/slices/notificationSlice'
+import { checkAuth } from '../store/slices/authSlice'
 import { getSocket } from '../services/notificationService'
 import { toast } from 'react-toastify'
 import { getNotificationsFor, markLocalRead, markAllLocalReadFor, onNotificationsChanged, type NotificationRecipientType } from '../utils/notificationStore'
+
+// Notification types that grant new roles → cần refresh auth để lấy role mới
+const ROLE_GRANT_TYPES = ['shop_approved', 'shipper_approved', 'employee_assigned']
 
 export const useNotifications = () => {
   const dispatch = useAppDispatch()
@@ -33,6 +37,11 @@ export const useNotifications = () => {
         created_at: new Date().toISOString(),
       }))
       toast.info(`🔔 ${data.title}: ${data.message}`, { autoClose: 4000 })
+
+      // Nếu được cấp role mới → refresh /me để frontend có đủ roles ngay lập tức
+      if (ROLE_GRANT_TYPES.includes(data.type)) {
+        dispatch(checkAuth())
+      }
     })
     return () => { socket.off('notification') }
   }, [isAuthenticated, user, dispatch])

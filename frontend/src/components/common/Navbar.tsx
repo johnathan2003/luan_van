@@ -10,7 +10,7 @@ const ROLE_META: Record<string, { icon: string; color: string; label: string }> 
   admin:    { icon: '⚙️', color: '#1D4ED8', label: 'Admin' },
   shop:     { icon: '🏪', color: '#16A34A', label: 'Shop' },
   shipper:  { icon: '🚚', color: '#D97706', label: 'Shipper' },
-  customer: { icon: '👤', color: '#7C3AED', label: 'Khach hang' },
+  user:     { icon: '👤', color: '#7C3AED', label: 'Khach hang' },
   employee: { icon: '👷', color: '#DB2777', label: 'Nhan vien' },
 }
 
@@ -23,142 +23,129 @@ const BRAND_NAME = import.meta.env.VITE_APP_NAME   || 'BuyZo'
 
 const ANIM_CSS = '@keyframes fsd{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}} @keyframes sug{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}'
 
-// ─── Search mock data ─────────────────────────────────────────────────────────
-const SUGGEST_PRODUCTS = [
-  { id: 1, name: 'Tai nghe Sony WH-1000XM5',   image: 'https://placehold.co/44x44/1a1a2e/fff?text=Sony',    price: 4990000,  path: '/products/1'  },
-  { id: 2, name: 'iPhone 15 Pro Max 256GB',     image: 'https://placehold.co/44x44/1c1c1e/fff?text=iPhone', price: 28990000, path: '/products/10' },
-  { id: 3, name: 'Giay Nike Air Max 270 Nam',   image: 'https://placehold.co/44x44/111827/fff?text=Nike',   price: 1490000,  path: '/products/3'  },
-]
-const SUGGEST_BRANDS = [
-  { id: 1, name: 'Apple',   icon: '🍎', sub: 'Cong nghe - Dien tu',   path: '/products?brand=apple'   },
-  { id: 2, name: 'Samsung', icon: '📱', sub: 'Dien thoai - Gia dung', path: '/products?brand=samsung' },
-  { id: 3, name: 'Nike',    icon: '👟', sub: 'Thoi trang - Giay dep',  path: '/products?brand=nike'    },
-]
-const SUGGEST_SHOPS = [
-  { id: 1, name: 'TechZone Official', icon: '🖥️', rating: 4.9, products: 1240, path: '/shop/1' },
-  { id: 2, name: 'Fashion House VN',  icon: '👗', rating: 4.8, products: 873,  path: '/shop/2' },
-  { id: 3, name: 'NutriFood Store',   icon: '🥗', rating: 4.7, products: 456,  path: '/shop/3' },
-]
-
-// ─── SuggestBox ───────────────────────────────────────────────────────────────
+// ─── SuggestBox — gọi API thật ───────────────────────────────────────────────
+// ─── SuggestBox — gọi API thật ───────────────────────────────────────────────
 interface SuggestBoxProps {
   query: string
   onNavigate: (path: string) => void
 }
 
 const SuggestBox: React.FC<SuggestBoxProps> = ({ query, onNavigate }) => {
-  const q        = query.toLowerCase().trim()
-  const products = q ? SUGGEST_PRODUCTS.filter(p => p.name.toLowerCase().includes(q)) : SUGGEST_PRODUCTS
-  const brands   = q ? SUGGEST_BRANDS.filter(b => b.name.toLowerCase().includes(q))   : SUGGEST_BRANDS
-  const shops    = q ? SUGGEST_SHOPS.filter(s => s.name.toLowerCase().includes(q))    : SUGGEST_SHOPS
-  const empty    = products.length === 0 && brands.length === 0 && shops.length === 0
+  const [products, setProducts] = React.useState<any[]>([])
+  const [shops,    setShops]    = React.useState<any[]>([])
+  const [loading,  setLoading]  = React.useState(false)
+
+  React.useEffect(() => {
+    if (!query.trim()) { setProducts([]); setShops([]); return }
+    const timer = setTimeout(() => {
+      setLoading(true)
+      const q = encodeURIComponent(query.trim())
+      Promise.all([
+        fetch(`/api/v1/products?search=${q}&limit=5`).then(r => r.ok ? r.json() : { items: [] }),
+        fetch(`/api/v1/shop/search?q=${q}&limit=4`).then(r => r.ok ? r.json() : { shops: [] }),
+      ]).then(([pRes, sRes]) => {
+        setProducts(pRes.items ?? [])
+        setShops(sRes.shops ?? [])
+      }).finally(() => setLoading(false))
+    }, 300)  // debounce 300ms
+    return () => clearTimeout(timer)
+  }, [query])
 
   const row = (e: React.MouseEvent<HTMLDivElement>, enter: boolean) => {
     (e.currentTarget as HTMLDivElement).style.background = enter ? 'var(--bg-highlight,#f3f4f6)' : 'transparent'
   }
 
-  const scrollBtn = (label: string) => (
-    <button
-      onMouseDown={e => { e.preventDefault(); onNavigate('#products-section') }}
-      style={{ fontSize: 11, color: 'var(--primary,#7C3AED)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}
-    >
-      {label}
-    </button>
-  )
-
-  if (empty) return (
-    <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
-      <div style={{ fontSize: 36, marginBottom: 8 }}>🔍</div>
-      Khong tim thay ket qua cho "{query}"
+  if (loading) return (
+    <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
+      Đang tìm kiếm...
     </div>
   )
 
+  if (!query.trim()) return (
+    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
+      Nhập từ khoá để tìm sản phẩm hoặc cửa hàng
+    </div>
+  )
+
+  const empty = products.length === 0 && shops.length === 0
+
   return (
     <div>
+      {/* Sản phẩm */}
       {products.length > 0 && (
         <div>
           <div style={{ padding: '10px 16px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6 }}>San pham noi bat</span>
-            {scrollBtn('Xem tat ca')}
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6 }}>Sản phẩm</span>
+            <button onMouseDown={e => { e.preventDefault(); onNavigate(`/products?search=${encodeURIComponent(query.trim())}`) }}
+              style={{ fontSize: 11, color: 'var(--primary,#7C3AED)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
+              Xem tất cả →
+            </button>
           </div>
-          {products.map(p => (
-            <div key={p.id} onMouseDown={e => { e.preventDefault(); onNavigate(p.path) }}
+          {products.map((p: any) => (
+            <div key={p.product_id} onMouseDown={e => { e.preventDefault(); onNavigate(`/products/${p.product_id}`) }}
               onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
-              <img src={p.image} alt={p.name} style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+              {p.image_urls?.[0]
+                ? <img src={p.image_urls[0]} alt={p.product_name} style={{ width: 40, height: 40, borderRadius: 7, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+                : <div style={{ width: 40, height: 40, borderRadius: 7, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>📦</div>
+              }
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
-                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary,#7C3AED)', margin: 0 }}>{formatCurrency(p.price)}</p>
+                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.product_name}</p>
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary,#7C3AED)', margin: 0 }}>{formatCurrency(parseFloat(p.price))}</p>
               </div>
-              <span style={{ fontSize: 14, color: 'var(--text-secondary)', flexShrink: 0 }}>›</span>
             </div>
           ))}
         </div>
       )}
 
-      {products.length > 0 && (brands.length > 0 || shops.length > 0) && (
+      {/* Divider */}
+      {products.length > 0 && shops.length > 0 && (
         <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
       )}
 
-      {brands.length > 0 && (
-        <div>
-          <div style={{ padding: '10px 16px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6 }}>Nhan hang noi bat</span>
-            {scrollBtn('Xem tat ca')}
-          </div>
-          {brands.map(b => (
-            <div key={b.id} onMouseDown={e => { e.preventDefault(); onNavigate('#products-section') }}
-              onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 8, background: 'var(--bg-highlight,#f3f4f6)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
-                {b.icon}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 2px' }}>{b.name}</p>
-                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>{b.sub}</p>
-              </div>
-              <div style={{ flexShrink: 0, padding: '2px 8px', background: 'linear-gradient(135deg,#7C3AED,#4F46E5)', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#fff' }}>MALL</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {brands.length > 0 && shops.length > 0 && (
-        <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
-      )}
-
+      {/* Cửa hàng */}
       {shops.length > 0 && (
         <div>
-          <div style={{ padding: '10px 16px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6 }}>Cua hang noi bat</span>
-            {scrollBtn('Xem tat ca')}
+          <div style={{ padding: '10px 16px 6px' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6 }}>Cửa hàng</span>
           </div>
-          {shops.map(sh => (
-            <div key={sh.id} onMouseDown={e => { e.preventDefault(); onNavigate('#products-section') }}
+          {shops.map((sh: any) => (
+            <div key={sh.shop_id} onMouseDown={e => { e.preventDefault(); onNavigate(`/shops/${sh.shop_id}`) }}
               onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 8, background: 'var(--bg-highlight,#f3f4f6)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
-                {sh.icon}
-              </div>
+              {sh.avatar_url
+                ? <img src={sh.avatar_url} alt={sh.shop_name} style={{ width: 40, height: 40, borderRadius: 7, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+                : <div style={{ width: 40, height: 40, borderRadius: 7, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🏪</div>
+              }
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 2px' }}>{sh.name}</p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sh.shop_name}</p>
                 <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>
-                  <span style={{ color: '#f59e0b' }}>★</span> {sh.rating} · {sh.products.toLocaleString()} san pham
+                  <span style={{ color: '#f59e0b' }}>★</span> {sh.rating}
+                  {sh.address && <span> · {sh.address}</span>}
                 </p>
               </div>
-              <div style={{ flexShrink: 0, padding: '2px 8px', background: '#dcfce7', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#16a34a' }}>Mall</div>
+              <div style={{ flexShrink: 0, padding: '2px 8px', background: '#dcfce7', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#16a34a' }}>Shop</div>
             </div>
           ))}
         </div>
       )}
 
-      {query.trim() && (
+      {/* Không tìm thấy */}
+      {empty && (
+        <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
+          <div style={{ fontSize: 36, marginBottom: 8 }}>🔍</div>
+          Không tìm thấy kết quả cho "{query}"
+        </div>
+      )}
+
+      {/* Xem tất cả */}
+      {!empty && (
         <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-highlight,#f8f9fa)' }}>
           <button
-            onMouseDown={e => { e.preventDefault(); onNavigate('#products-section') }}
-            style={{ width: '100%', padding: '8px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary,#7C3AED)', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            onMouseDown={e => { e.preventDefault(); onNavigate(`/products?search=${encodeURIComponent(query.trim())}`) }}
+            style={{ width: '100%', padding: '7px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary,#7C3AED)', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
           >
-            🔍 Tim kiem "{query}" trong tat ca san pham
+            🔍 Tìm kiếm tất cả kết quả cho "{query}"
           </button>
         </div>
       )}
@@ -227,9 +214,10 @@ const Navbar: React.FC = () => {
 
   const PURPLE = '#6D28D9'
   const roleGradient: Record<string, string> = {
-    admin:   `linear-gradient(to right, ${PURPLE} 0%, #1D4ED8 100%)`,
-    shop:    `linear-gradient(to right, ${PURPLE} 0%, #16A34A 100%)`,
-    shipper: `linear-gradient(to right, ${PURPLE} 0%, #D97706 100%)`,
+    admin:    `linear-gradient(to right, ${PURPLE} 0%, #1D4ED8 100%)`,
+    shop:     `linear-gradient(to right, ${PURPLE} 0%, #16A34A 100%)`,
+    shipper:  `linear-gradient(to right, ${PURPLE} 0%, #D97706 100%)`,
+    employee: `linear-gradient(to right, ${PURPLE} 0%, #DB2777 100%)`,
   }
   const navBg = (isAuthenticated && currentRole && roleGradient[currentRole])
     ? roleGradient[currentRole]
@@ -238,7 +226,8 @@ const Navbar: React.FC = () => {
   const goTo = (rn: string) => {
     switchRole(rn)
     setRadialOpen(false)
-    setTimeout(() => navigate(rn === 'admin' ? '/admin' : rn === 'shop' ? '/shop' : rn === 'shipper' ? '/shipper' : '/'), 50)
+    const dest = rn === 'admin' ? '/admin' : rn === 'shop' ? '/shop' : rn === 'shipper' ? '/shipper' : rn === 'employee' ? '/employee' : '/'
+    setTimeout(() => navigate(dest), 50)
   }
 
   const bellShift = radialOpen ? roleNames.length * ROLE_STEP : 0
@@ -268,6 +257,8 @@ const Navbar: React.FC = () => {
     if (role === 'shop')    return { bg: '#DBEAFE', color: '#1D4ED8', label: '🏪 Shop' }
     if (role === 'admin')   return { bg: '#FEF3C7', color: '#D97706', label: '⚙️ Admin' }
     if (role === 'shipper') return { bg: '#FEF9C3', color: '#854D0E', label: '🚚 Shipper' }
+    if (role === 'user')     return { bg: '#EDE9FE', color: '#7C3AED', label: '👤 Khach hang' }
+    if (role === 'employee') return { bg: '#FCE7F3', color: '#DB2777', label: '👷 Nhan vien' }
     return { bg: '#F3F4F6', color: '#6B7280', label: '👤 Khach hang' }
   }
   const badge = roleBadgeStyle(currentRole)
@@ -319,7 +310,11 @@ const Navbar: React.FC = () => {
                 transition: 'border-radius 0.15s', boxSizing: 'border-box',
               }}
               onKeyDown={e => {
-                if (e.key === 'Enter' && searchQuery.trim()) { handleSearchNav('#products-section') }
+                if (e.key === 'Enter' && searchQuery.trim()) {
+                  setSearchFocus(false)
+                  navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`)
+                  setSearchQuery('')
+                }
                 if (e.key === 'Escape') setSearchFocus(false)
               }}
             />
@@ -415,54 +410,90 @@ const Navbar: React.FC = () => {
                       </span>
                     </div>
 
-                    {/* Shop role menu */}
+                    {/* ── Role-switcher nhanh (chỉ hiện khi có > 1 role) ── */}
+                    {availableRoles.length > 1 && (
+                      <div style={{ padding: '8px 12px', display: 'flex', gap: 6, flexWrap: 'wrap', borderBottom: '1px solid var(--border-subtle)' }}>
+                        {availableRoles.map(r => {
+                          const meta = ROLE_META[r.role_name] || { icon: '👤', color: '#888', label: r.role_name }
+                          const active = r.role_name === currentRole
+                          return (
+                            <button key={r.role_name} onClick={() => { goTo(r.role_name) }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20,
+                                fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none',
+                                background: active ? meta.color : 'var(--bg-highlight, #f3f4f6)',
+                                color: active ? '#fff' : 'var(--text-primary)', transition: 'all 0.15s' }}>
+                              {meta.icon} {meta.label}
+                              {active && <span style={{ fontSize: 9, opacity: 0.8 }}>✓</span>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* ── Menu theo current_role ── */}
+
+                    {/* Shop owner */}
                     {currentRole === 'shop' && (
                       <div>
                         <SectionLabel>Tai khoan</SectionLabel>
-                        <MenuItem icon="👤" label="Trang ca nhan"    path="/profile"       onClick={close} />
-
-                        <SectionLabel border>Quan ly</SectionLabel>
-                        <MenuItem icon="⚙️" label="Quan ly shop"    sub="San pham, don hang, nhan vien" path="/shop"          onClick={close} />
-                        <MenuItem icon="🏪" label="Xem trang shop"  sub="Giao dien khach hang thay"     path={`/shops/${user?.user_id}`} onClick={close} />
-                        <MenuItem icon="🎫" label="Voucher"         sub="Ma giam gia cua shop"           path="/shop/vouchers" onClick={close} />
-                        <MenuItem icon="🎁" label="Trung tam voucher" sub="San, cua hang, da thu thap"   path="/vouchers" onClick={close} />
-                        <MenuItem icon="⚠️" label="Khieu nai cua toi" sub="Don da gui khieu nai len san" path="/complaints" onClick={close} />
+                        <MenuItem icon="👤" label="Trang ca nhan"       path="/profile"               onClick={close} />
+                        <MenuItem icon="📦" label="Don hang cua toi"    sub="Lich su mua hang"         path="/orders"              onClick={close} />
+                        <MenuItem icon="💬" label="Tin nhan khach"      sub="Chat voi nguoi mua"       path="/shop/chat"           onClick={close} />
+                        <SectionLabel border>Quan ly Shop</SectionLabel>
+                        <MenuItem icon="⚙️" label="Quan ly shop"       sub="San pham, don hang, NV"   path="/shop"                onClick={close} />
+                        <MenuItem icon="🏪" label="Xem trang shop"     sub="Giao dien khach thay"     path={`/shops/${user?.user_id}`} onClick={close} />
+                        <MenuItem icon="🎫" label="Voucher shop"        sub="Ma giam gia cua shop"     path="/shop/vouchers"       onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tam voucher"                                  path="/vouchers"            onClick={close} />
+                        <MenuItem icon="⚠️" label="Khieu nai cua toi"                                 path="/complaints"          onClick={close} />
                       </div>
                     )}
 
-                    {/* Admin role menu */}
+                    {/* Admin */}
                     {currentRole === 'admin' && (
                       <div>
                         <SectionLabel>Tai khoan</SectionLabel>
-                        <MenuItem icon="👤" label="Ho so ca nhan" path="/profile" onClick={close} />
-                        <MenuItem icon="⚙️" label="Quan tri he thong" sub="Dashboard, nguoi dung, shop" path="/admin" onClick={close} />
-                        <MenuItem icon="📦" label="Don hang cua toi" path="/orders" onClick={close} />
-                        <MenuItem icon="🎁" label="Trung tam voucher" sub="San, cua hang, da thu thap" path="/vouchers" onClick={close} />
+                        <MenuItem icon="👤" label="Ho so ca nhan"       path="/profile"  onClick={close} />
+                        <MenuItem icon="📦" label="Don hang cua toi"    path="/orders"   onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tam voucher"   path="/vouchers" onClick={close} />
+                        <SectionLabel border>Quan tri</SectionLabel>
+                        <MenuItem icon="⚙️" label="Admin dashboard"    sub="Nguoi dung, shop, don hang" path="/admin" onClick={close} />
                       </div>
                     )}
 
-                    {/* Shipper role menu */}
+                    {/* Shipper */}
                     {currentRole === 'shipper' && (
                       <div>
                         <SectionLabel>Tai khoan</SectionLabel>
-                        <MenuItem icon="👤" label="Ho so ca nhan" path="/profile" onClick={close} />
-                        <MenuItem icon="🚚" label="Quan ly giao hang" sub="Don hang, lo trinh" path="/shipper" onClick={close} />
-                        <MenuItem icon="📦" label="Don hang cua toi" path="/orders" onClick={close} />
-                        <MenuItem icon="🎁" label="Trung tam voucher" sub="San, cua hang, da thu thap" path="/vouchers" onClick={close} />
+                        <MenuItem icon="👤" label="Ho so ca nhan"       path="/profile"   onClick={close} />
+                        <MenuItem icon="📦" label="Don hang cua toi"    path="/orders"    onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tam voucher"   path="/vouchers"  onClick={close} />
+                        <SectionLabel border>Giao hang</SectionLabel>
+                        <MenuItem icon="🚚" label="Quan ly giao hang"  sub="Don hang, lo trinh, thu nhap" path="/shipper" onClick={close} />
                       </div>
                     )}
 
-                    {/* Customer / default menu */}
-                    {(currentRole === 'customer' || !currentRole) && (
+                    {/* Employee */}
+                    {currentRole === 'employee' && (
                       <div>
                         <SectionLabel>Tai khoan</SectionLabel>
-                        <MenuItem icon="👤" label="Ho so ca nhan" path="/profile" onClick={close} />
-                        <MenuItem icon="📦" label="Don hang"      path="/orders"  onClick={close} />
-                        <MenuItem icon="🎁" label="Trung tam voucher" sub="San, cua hang, da thu thap" path="/vouchers" onClick={close} />
-                        <MenuItem icon="⚠️" label="Khieu nai cua toi" sub="Don da gui khieu nai len san" path="/complaints" onClick={close} />
-                        {isShop    && <MenuItem icon="🏪" label="Chuyen sang Shop"    path="/shop"    onClick={close} />}
-                        {isAdmin   && <MenuItem icon="⚙️" label="Chuyen sang Admin"   path="/admin"   onClick={close} />}
-                        {isShipper && <MenuItem icon="🚚" label="Chuyen sang Shipper" path="/shipper" onClick={close} />}
+                        <MenuItem icon="👤" label="Ho so ca nhan"           path="/profile"           onClick={close} />
+                        <SectionLabel border>Nhan vien</SectionLabel>
+                        <MenuItem icon="🏠" label="Tong quan"              sub="Dashboard cua ban"    path="/employee"          onClick={close} />
+                        <MenuItem icon="📋" label="Don hang"                                          path="/employee/orders"   onClick={close} />
+                        <MenuItem icon="📦" label="San pham"                                          path="/employee/products" onClick={close} />
+                        <MenuItem icon="💬" label="Tin nhan"                                          path="/employee/messages" onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Customer / default */}
+                    {(currentRole === 'user' || !currentRole) && (
+                      <div>
+                        <SectionLabel>Tai khoan</SectionLabel>
+                        <MenuItem icon="👤" label="Ho so ca nhan"       path="/profile"     onClick={close} />
+                        <MenuItem icon="📦" label="Don hang cua toi"    path="/orders"      onClick={close} />
+                        <MenuItem icon="💬" label="Tin nhan"            path="/chat"        onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tam voucher"   path="/vouchers"    onClick={close} />
+                        <MenuItem icon="⚠️" label="Khieu nai cua toi"  path="/complaints"  onClick={close} />
                       </div>
                     )}
 

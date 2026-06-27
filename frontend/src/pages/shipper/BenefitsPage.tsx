@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { shipmentService } from '../../services/shipmentService'
 
 const C = {
   amber: '#D97706', gold: '#F59E0B', light: '#FEF3C7', tint: '#FFFBEB',
@@ -6,45 +7,67 @@ const C = {
   success: '#16A34A', error: '#DC2626',
 }
 
-const MOCK_LEVEL = {
-  current: 'Vàng',
-  deliveries_done: 312,
-  deliveries_next: 500,
-  rating: 4.8,
-  badge: '🥇',
-}
-
 const LEVELS = [
-  { name: 'Đồng', icon: '🥉', min: 0,   max: 99,  color: '#92400E', bg: '#FEF3C7', bonus_pct: 0,  desc: 'Mức khởi đầu' },
-  { name: 'Bạc',  icon: '🥈', min: 100, max: 299, color: '#6B7280', bg: '#F9FAFB', bonus_pct: 5,  desc: 'Thưởng +5% mỗi đơn' },
-  { name: 'Vàng', icon: '🥇', min: 300, max: 499, color: '#D97706', bg: '#FEF3C7', bonus_pct: 10, desc: 'Thưởng +10% mỗi đơn' },
-  { name: 'Kim cương', icon: '💎', min: 500, max: 999, color: '#1D4ED8', bg: '#DBEAFE', bonus_pct: 15, desc: 'Thưởng +15% + ưu tiên đơn hàng' },
+  { name: 'Đồng',        icon: '🥉', min: 0,    max: 99,    color: '#92400E', bg: '#FEF3C7', bonus_pct: 0,  desc: 'Mức khởi đầu' },
+  { name: 'Bạc',         icon: '🥈', min: 100,  max: 299,   color: '#6B7280', bg: '#F9FAFB', bonus_pct: 5,  desc: 'Thưởng +5% mỗi đơn' },
+  { name: 'Vàng',        icon: '🥇', min: 300,  max: 499,   color: '#D97706', bg: '#FEF3C7', bonus_pct: 10, desc: 'Thưởng +10% mỗi đơn' },
+  { name: 'Kim cương',   icon: '💎', min: 500,  max: 999,   color: '#1D4ED8', bg: '#DBEAFE', bonus_pct: 15, desc: 'Thưởng +15% + ưu tiên đơn hàng' },
   { name: 'Huyền thoại', icon: '👑', min: 1000, max: 99999, color: '#7C3AED', bg: '#EDE9FE', bonus_pct: 20, desc: 'Thưởng +20% + bảo hiểm xe miễn phí' },
 ]
 
-const MOCK_BONUSES = [
-  { bonus_id: 1, type: 'weekly_target', title: 'Hoàn thành 60 đơn/tuần',   reward: 50000,  period: 'Tuần 23/2026', status: 'received', received_at: '2026-06-09' },
-  { bonus_id: 2, type: '5star_rating',  title: 'Duy trì 4.8★ trong tháng', reward: 100000, period: 'T5/2026',      status: 'received', received_at: '2026-06-01' },
-  { bonus_id: 3, type: 'weekend_surge', title: 'Thưởng giao dịp cuối tuần',reward: 30000,  period: 'CN 08/06',     status: 'received', received_at: '2026-06-08' },
-  { bonus_id: 4, type: 'weekly_target', title: 'Hoàn thành 60 đơn/tuần',   reward: 50000,  period: 'Tuần 24/2026', status: 'pending',  received_at: null },
-  { bonus_id: 5, type: 'milestone',     title: 'Đạt 300 đơn giao thành công', reward: 200000, period: 'Tháng 6',   status: 'received', received_at: '2026-06-05' },
-]
-
-const MOCK_WELFARE = [
-  { id: 1, icon: '🏥', title: 'Bảo hiểm tai nạn',    desc: 'Bảo hiểm tai nạn cá nhân 24/7, mức bồi thường lên đến 50 triệu đồng.', active: true },
-  { id: 2, icon: '⛽', title: 'Hỗ trợ nhiên liệu',   desc: 'Phụ cấp xăng 500.000₫/tháng cho shipper từ cấp Bạc trở lên.', active: true },
-  { id: 3, icon: '🔧', title: 'Sửa chữa xe',         desc: 'Hỗ trợ chi phí sửa chữa phương tiện tối đa 2.000.000₫/năm.', active: true },
-  { id: 4, icon: '🎓', title: 'Đào tạo kỹ năng',     desc: 'Khóa học kỹ năng giao tiếp và an toàn giao thông miễn phí hàng quý.', active: true },
+const WELFARE_LIST = [
+  { id: 1, icon: '🏥', title: 'Bảo hiểm tai nạn',     desc: 'Bảo hiểm tai nạn cá nhân 24/7, mức bồi thường lên đến 50 triệu đồng.', active: true },
+  { id: 2, icon: '⛽', title: 'Hỗ trợ nhiên liệu',    desc: 'Phụ cấp xăng 500.000₫/tháng cho shipper từ cấp Bạc trở lên.', active: true },
+  { id: 3, icon: '🔧', title: 'Sửa chữa xe',          desc: 'Hỗ trợ chi phí sửa chữa phương tiện tối đa 2.000.000₫/năm.', active: true },
+  { id: 4, icon: '🎓', title: 'Đào tạo kỹ năng',      desc: 'Khóa học kỹ năng giao tiếp và an toàn giao thông miễn phí hàng quý.', active: true },
   { id: 5, icon: '💎', title: 'Bảo hiểm xe miễn phí', desc: 'Dành riêng cho shipper Huyền thoại — bảo hiểm xe máy 1 năm miễn phí.', active: false },
 ]
+
+function getLevelFromDeliveries(total: number) {
+  return [...LEVELS].reverse().find(l => total >= l.min) ?? LEVELS[0]
+}
 
 const fmt = (n: number) => n.toLocaleString('vi-VN') + '₫'
 
 const BenefitsPage: React.FC = () => {
   const [tab, setTab] = useState<'overview'|'bonuses'|'welfare'>('overview')
-  const currentLevel = LEVELS.find(l => l.name === MOCK_LEVEL.current) ?? LEVELS[0]
+  const [ratingInfo, setRatingInfo] = useState<{ rating: number | null; total_deliveries: number } | null>(null)
+  const [bonuses, setBonuses]       = useState<any[]>([])
+  const [bonusMeta, setBonusMeta]   = useState({ received_total: 0, pending_total: 0 })
+  const [bonusLoading, setBonusLoading] = useState(false)
+  const [bonusFetched, setBonusFetched] = useState(false)
+
+  useEffect(() => {
+    shipmentService.getMyRating()
+      .then(r => {
+        const d = r.data?.data ?? r.data
+        setRatingInfo({ rating: d?.rating ?? null, total_deliveries: d?.total_deliveries ?? 0 })
+      })
+      .catch(() => setRatingInfo({ rating: null, total_deliveries: 0 }))
+  }, [])
+
+  // lazy-fetch bonuses chỉ khi user mở tab
+  useEffect(() => {
+    if (tab !== 'bonuses' || bonusFetched) return
+    setBonusLoading(true)
+    shipmentService.getMyBonuses({ limit: 50 })
+      .then(r => {
+        const d = r.data
+        const list = d?.bonuses ?? d
+        if (Array.isArray(list)) setBonuses(list)
+        setBonusMeta({ received_total: d?.received_total ?? 0, pending_total: d?.pending_total ?? 0 })
+        setBonusFetched(true)
+      })
+      .catch(() => setBonusFetched(true))
+      .finally(() => setBonusLoading(false))
+  }, [tab])
+
+  const total        = ratingInfo?.total_deliveries ?? 0
+  const currentLevel = getLevelFromDeliveries(total)
   const nextLevel    = LEVELS[LEVELS.indexOf(currentLevel) + 1]
-  const progress     = ((MOCK_LEVEL.deliveries_done - currentLevel.min) / (MOCK_LEVEL.deliveries_next - currentLevel.min)) * 100
+  const progress     = nextLevel
+    ? ((total - currentLevel.min) / (nextLevel.min - currentLevel.min)) * 100
+    : 100
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -66,7 +89,9 @@ const BenefitsPage: React.FC = () => {
           </div>
           <div style={{ textAlign: 'right' }}>
             <p style={{ fontSize: 11, opacity: 0.8, fontWeight: 600 }}>ĐÁNH GIÁ</p>
-            <p style={{ fontSize: 28, fontWeight: 800 }}>⭐ {MOCK_LEVEL.rating}</p>
+            <p style={{ fontSize: 28, fontWeight: 800 }}>
+              ⭐ {ratingInfo?.rating != null ? ratingInfo.rating : '—'}
+            </p>
           </div>
         </div>
 
@@ -74,13 +99,13 @@ const BenefitsPage: React.FC = () => {
         {nextLevel && (
           <div style={{ marginTop: 18 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.9, marginBottom: 6 }}>
-              <span>{MOCK_LEVEL.deliveries_done} đơn đã giao</span>
-              <span>Lên {nextLevel.name} {nextLevel.icon} cần {MOCK_LEVEL.deliveries_next} đơn</span>
+              <span>{total} đơn đã giao</span>
+              <span>Lên {nextLevel.name} {nextLevel.icon} cần {nextLevel.min} đơn</span>
             </div>
             <div style={{ height: 8, background: 'rgba(255,255,255,0.25)', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${Math.min(progress, 100)}%`, background: 'white', borderRadius: 4 }} />
             </div>
-            <p style={{ fontSize: 11, opacity: 0.8, marginTop: 4 }}>Còn {MOCK_LEVEL.deliveries_next - MOCK_LEVEL.deliveries_done} đơn nữa để lên cấp</p>
+            <p style={{ fontSize: 11, opacity: 0.8, marginTop: 4 }}>Còn {nextLevel.min - total} đơn nữa để lên cấp</p>
           </div>
         )}
       </div>
@@ -103,7 +128,7 @@ const BenefitsPage: React.FC = () => {
       {tab === 'overview' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {LEVELS.map((lv, idx) => {
-            const isCurrent = lv.name === MOCK_LEVEL.current
+            const isCurrent = lv.name === currentLevel.name
             const isPassed  = LEVELS.indexOf(currentLevel) > idx
             return (
               <div key={lv.name} style={{
@@ -139,25 +164,36 @@ const BenefitsPage: React.FC = () => {
       {/* ── Tab: Thưởng ── */}
       {tab === 'bonuses' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Summary cards */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
             <div style={{ background: 'var(--bg-card)', borderRadius: 12, padding: '14px 18px', borderLeft: `3px solid ${C.success}`, boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}>
               <p style={{ fontSize: 11, fontWeight: 600, color: C.gray, textTransform: 'uppercase' }}>Tổng đã nhận</p>
-              <p style={{ fontSize: 22, fontWeight: 800, color: C.success }}>{fmt(MOCK_BONUSES.filter(b=>b.status==='received').reduce((s,b)=>s+b.reward,0))}</p>
+              <p style={{ fontSize: 22, fontWeight: 800, color: C.success }}>{fmt(bonusMeta.received_total)}</p>
             </div>
             <div style={{ background: 'var(--bg-card)', borderRadius: 12, padding: '14px 18px', borderLeft: `3px solid ${C.amber}`, boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}>
               <p style={{ fontSize: 11, fontWeight: 600, color: C.gray, textTransform: 'uppercase' }}>Đang chờ</p>
-              <p style={{ fontSize: 22, fontWeight: 800, color: C.amber }}>{fmt(MOCK_BONUSES.filter(b=>b.status==='pending').reduce((s,b)=>s+b.reward,0))}</p>
+              <p style={{ fontSize: 22, fontWeight: 800, color: C.amber }}>{fmt(bonusMeta.pending_total)}</p>
             </div>
           </div>
-          {MOCK_BONUSES.map(b => (
+
+          {bonusLoading ? (
+            <div style={{ background: 'var(--bg-card)', borderRadius: 14, padding: 40, textAlign: 'center', color: C.gray }}>Đang tải...</div>
+          ) : bonuses.length === 0 ? (
+            <div style={{ background: 'var(--bg-card)', borderRadius: 14, padding: 40, textAlign: 'center', color: C.gray }}>Chưa có khoản thưởng nào</div>
+          ) : bonuses.map((b: any) => (
             <div key={b.bonus_id} style={{ background: 'var(--bg-card)', borderRadius: 14, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <p style={{ fontWeight: 700, fontSize: 14, color: C.navy, margin: 0 }}>{b.title}</p>
-                <p style={{ fontSize: 12, color: C.gray, marginTop: 3 }}>{b.period}{b.received_at ? ` · Nhận: ${b.received_at}` : ''}</p>
+                <p style={{ fontSize: 12, color: C.gray, marginTop: 3 }}>
+                  {b.period ?? ''}
+                  {b.received_at ? ` · Nhận: ${String(b.received_at).slice(0, 10)}` : ''}
+                </p>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 16 }}>
                 <p style={{ fontSize: 18, fontWeight: 800, color: C.success, margin: 0 }}>+{fmt(b.reward)}</p>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: b.status==='received'?'#DCFCE7':C.light, color: b.status==='received'?C.success:C.amber }}>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20,
+                  background: b.status === 'received' ? '#DCFCE7' : C.light,
+                  color: b.status === 'received' ? C.success : C.amber }}>
                   {b.status === 'received' ? '✓ Đã nhận' : '⏳ Chờ nhận'}
                 </span>
               </div>
@@ -169,7 +205,7 @@ const BenefitsPage: React.FC = () => {
       {/* ── Tab: Phúc lợi ── */}
       {tab === 'welfare' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {MOCK_WELFARE.map(w => (
+          {WELFARE_LIST.map(w => (
             <div key={w.id} style={{ background: 'var(--bg-card)', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', gap: 16, alignItems: 'flex-start', opacity: w.active ? 1 : 0.5 }}>
               <span style={{ fontSize: 32, flexShrink: 0 }}>{w.icon}</span>
               <div style={{ flex: 1 }}>

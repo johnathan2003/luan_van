@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useAppSelector } from '../../store/hooks'
-import { getAllDisputes, getDisputesByComplainant, getDisputesByTarget } from '../../utils/disputeStore'
+import { getDisputesByComplainant, getDisputesByTarget } from '../../utils/disputeStore'
 import type { Dispute } from '../../types/dispute'
 import { DISPUTE_STATUS_LABELS, DISPUTE_STATUS_COLORS, DISPUTE_TARGET_LABELS } from '../../types/dispute'
 import { formatDate, formatOrderId } from '../../utils/formatters'
@@ -22,22 +22,9 @@ const MyDisputesPage: React.FC = () => {
   const [tab, setTab] = useState<Tab>(isShipper ? 'received' : 'sent')
   const [selected, setSelected] = useState<Dispute | null>(null)
 
-  // Khieu nai THUC cua tai khoan dang dang nhap (khop dung user_id)
-  const sentDisputesReal = (user && !isShipper) ? getDisputesByComplainant(complainantType, user.user_id) : []
-  const receivedDisputesReal = user ? getDisputesByTarget(targetType, user.user_id) : []
-
-  // Neu tai khoan chua co khieu nai thuc nao (vi du tai khoan seed khong khop id voi du lieu demo),
-  // tam hien thi du lieu demo theo dung chieu/vai tro de xem giao dien, kem canh bao ro rang.
-  const sentDemo = isShipper ? [] : getAllDisputes().filter(d => d.complainant_type === complainantType)
-  const receivedDemo = getAllDisputes().filter(d => d.target_type === targetType)
-
-  const showDemoSent = sentDisputesReal.length === 0 && sentDemo.length > 0
-  const showDemoReceived = receivedDisputesReal.length === 0 && receivedDemo.length > 0
-
-  const sentDisputes = showDemoSent ? sentDemo : sentDisputesReal
-  const receivedDisputes = showDemoReceived ? receivedDemo : receivedDisputesReal
+  const sentDisputes = (user && !isShipper) ? getDisputesByComplainant(complainantType, user.user_id) : []
+  const receivedDisputes = user ? getDisputesByTarget(targetType, user.user_id) : []
   const disputes = tab === 'sent' ? sentDisputes : receivedDisputes
-  const showingDemo = tab === 'sent' ? showDemoSent : showDemoReceived
 
   return (
     <div>
@@ -57,12 +44,6 @@ const MyDisputesPage: React.FC = () => {
           <button onClick={() => setTab('received')} className={`btn btn-sm ${tab === 'received' ? 'btn-primary' : 'btn-outline'}`}>
             🚩 Bị khiếu nại ({receivedDisputes.length})
           </button>
-        </div>
-      )}
-
-      {showingDemo && (
-        <div style={{ background: 'var(--bg-highlight, #fff7ed)', border: '1px solid #fed7aa', borderRadius: 'var(--radius)', padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#b45309' }}>
-          ⚠️ Tài khoản của bạn chưa có khiếu nại thực — đang hiển thị <strong>dữ liệu demo</strong> để xem thử giao diện.
         </div>
       )}
 

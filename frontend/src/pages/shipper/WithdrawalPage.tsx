@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { shipmentService } from '../../services/shipmentService'
 
 const C = {
   amber: '#D97706', gold: '#F59E0B', light: '#FEF3C7', tint: '#FFFBEB',
@@ -6,23 +7,14 @@ const C = {
   success: '#16A34A', error: '#DC2626', warning: '#D97706',
 }
 
-const MOCK_BALANCE = 875000
-
-const MOCK_HISTORY = [
-  { wd_id: 1, amount: 500000,  bank: 'Vietcombank', account: '***1234', status: 'completed', requested_at: '2026-06-10', completed_at: '2026-06-10' },
-  { wd_id: 2, amount: 1200000, bank: 'Techcombank', account: '***5678', status: 'completed', requested_at: '2026-05-25', completed_at: '2026-05-25' },
-  { wd_id: 3, amount: 800000,  bank: 'MB Bank',     account: '***9012', status: 'completed', requested_at: '2026-05-10', completed_at: '2026-05-11' },
-  { wd_id: 4, amount: 300000,  bank: 'Vietcombank', account: '***1234', status: 'pending',   requested_at: '2026-06-14', completed_at: null },
-  { wd_id: 5, amount: 950000,  bank: 'BIDV',        account: '***3456', status: 'completed', requested_at: '2026-04-20', completed_at: '2026-04-21' },
-]
-
-const MOCK_BANKS = [
-  { value: 'vcb',   label: 'Vietcombank' },
-  { value: 'tcb',   label: 'Techcombank' },
-  { value: 'mbbank',label: 'MB Bank' },
-  { value: 'bidv',  label: 'BIDV' },
-  { value: 'acb',   label: 'ACB' },
-  { value: 'tpbank',label: 'TPBank' },
+// Danh sách ngân hàng — cấu hình tĩnh, không cần DB
+const BANKS_LIST = [
+  { value: 'Vietcombank', label: 'Vietcombank' },
+  { value: 'Techcombank', label: 'Techcombank' },
+  { value: 'MB Bank',     label: 'MB Bank' },
+  { value: 'BIDV',        label: 'BIDV' },
+  { value: 'ACB',         label: 'ACB' },
+  { value: 'TPBank',      label: 'TPBank' },
 ]
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -34,33 +26,59 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
 const fmt = (n: number) => n.toLocaleString('vi-VN') + '₫'
 
 const WithdrawalPage: React.FC = () => {
-  const [balance]    = useState(MOCK_BALANCE)
-  const [history, setHistory] = useState(MOCK_HISTORY)
-  const [amount, setAmount]   = useState('')
-  const [bank, setBank]       = useState('')
-  const [accNum, setAccNum]   = useState('')
-  const [accName, setAccName] = useState('')
+  const [balance, setBalance]     = useState(0)
+  const [history, setHistory]     = useState<any[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [amount, setAmount]       = useState('')
+  const [bank, setBank]           = useState('')
+  const [accNum, setAccNum]       = useState('')
+  const [accName, setAccName]     = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const [success, setSuccess]     = useState(false)
+  const [errMsg, setErrMsg]       = useState('')
 
-  const handleSubmit = () => {
+  const loadData = () => {
+    setLoading(true)
+    Promise.all([
+      shipmentService.getMyBalance(),
+      shipmentService.getMyWithdrawals({ limit: 50 }),
+    ])
+      .then(([balRes, wdRes]) => {
+        setBalance(balRes.data?.balance ?? 0)
+        const wds = wdRes.data?.withdrawals ?? wdRes.data
+        if (Array.isArray(wds)) setHistory(wds)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { loadData() }, [])
+
+  const handleSubmit = async () => {
+    setErrMsg('')
     const amt = parseInt(amount.replace(/\D/g, ''))
-    if (!amt || amt < 50000) return alert('Số tiền tối thiểu là 50.000₫')
-    if (amt > balance) return alert('Số dư không đủ')
-    if (!bank) return alert('Vui lòng chọn ngân hàng')
-    if (!accNum || !accName) return alert('Vui lòng điền thông tin tài khoản')
+    if (!amt || amt < 50000) { setErrMsg('Số tiền tối thiểu là 50.000₫'); return }
+    if (amt > balance)        { setErrMsg('Số dư không đủ'); return }
+    if (!bank)                { setErrMsg('Vui lòng chọn ngân hàng'); return }
+    if (!accNum || !accName)  { setErrMsg('Vui lòng điền thông tin tài khoản'); return }
+
     setSubmitting(true)
-    setTimeout(() => {
-      const bankLabel = MOCK_BANKS.find(b => b.value === bank)?.label ?? bank
-      setHistory(h => [{
-        wd_id: Date.now(), amount: amt, bank: bankLabel,
-        account: `***${accNum.slice(-4)}`, status: 'pending',
-        requested_at: new Date().toISOString().slice(0,10), completed_at: null,
-      }, ...h])
+    try {
+      await shipmentService.createWithdrawal({
+        amount: amt,
+        bank_name: bank,
+        account_number: accNum,
+        account_holder: accName,
+      })
       setAmount(''); setBank(''); setAccNum(''); setAccName('')
-      setSubmitting(false); setSuccess(true)
+      setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
-    }, 800)
+      loadData() // reload balance + history
+    } catch (err: any) {
+      setErrMsg(err?.response?.data?.detail ?? 'Có lỗi xảy ra, vui lòng thử lại')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -73,13 +91,20 @@ const WithdrawalPage: React.FC = () => {
       {/* Balance card */}
       <div style={{ background: `linear-gradient(135deg, ${C.amber}, ${C.gold})`, borderRadius: 16, padding: '24px 28px', color: 'white' }}>
         <p style={{ fontSize: 12, fontWeight: 600, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 1 }}>Số dư khả dụng</p>
-        <p style={{ fontSize: 38, fontWeight: 900, marginTop: 4 }}>{fmt(balance)}</p>
+        <p style={{ fontSize: 38, fontWeight: 900, marginTop: 4 }}>
+          {loading ? '...' : fmt(balance)}
+        </p>
         <p style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>Rút tối thiểu 50.000₫ · Xử lý trong 1–2 giờ</p>
       </div>
 
       {success && (
         <div style={{ background: '#DCFCE7', border: '1px solid #86EFAC', borderRadius: 12, padding: '14px 18px', color: C.success, fontWeight: 600, fontSize: 14 }}>
           ✅ Yêu cầu rút tiền đã được gửi! Hệ thống sẽ xử lý trong 1–2 giờ.
+        </div>
+      )}
+      {errMsg && (
+        <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 12, padding: '14px 18px', color: C.error, fontWeight: 600, fontSize: 14 }}>
+          ⚠️ {errMsg}
         </div>
       )}
 
@@ -99,12 +124,11 @@ const WithdrawalPage: React.FC = () => {
               />
               <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: C.gray, fontWeight: 600 }}>₫</span>
             </div>
-            {/* Quick amount buttons */}
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               {[100000, 200000, 500000, 1000000].map(v => (
                 <button key={v} onClick={() => setAmount(v.toLocaleString('vi-VN').replace(/,/g,'.'))}
                   style={{ padding: '5px 12px', background: C.tint, border: `1px solid ${C.light}`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: C.amber, cursor: 'pointer' }}>
-                  {v >= 1000000 ? '1M' : (v/1000)+'K'}
+                  {v >= 1000000 ? '1M' : (v / 1000) + 'K'}
                 </button>
               ))}
             </div>
@@ -116,7 +140,7 @@ const WithdrawalPage: React.FC = () => {
             <select value={bank} onChange={e => setBank(e.target.value)}
               style={{ width: '100%', padding: '11px 14px', border: `2px solid ${C.light}`, borderRadius: 10, fontSize: 13, outline: 'none', color: C.navy }}>
               <option value="">-- Chọn ngân hàng --</option>
-              {MOCK_BANKS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+              {BANKS_LIST.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
             </select>
           </div>
 
@@ -146,23 +170,31 @@ const WithdrawalPage: React.FC = () => {
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.tint}` }}>
           <h3 style={{ fontWeight: 700, fontSize: 15, color: C.navy, margin: 0 }}>📋 Lịch sử rút tiền</h3>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {history.map(h => {
-            const meta = STATUS_META[h.status] ?? STATUS_META.pending
-            return (
-              <div key={h.wd_id} style={{ padding: '16px 20px', borderBottom: `1px solid ${C.tint}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <p style={{ fontWeight: 700, fontSize: 16, color: C.amber, margin: 0 }}>{fmt(h.amount)}</p>
-                  <p style={{ fontSize: 12, color: C.gray, marginTop: 3 }}>
-                    {h.bank} · {h.account} · {h.requested_at}
-                  </p>
-                  {h.completed_at && <p style={{ fontSize: 11, color: C.success, marginTop: 2 }}>✓ Hoàn tất: {h.completed_at}</p>}
+        {loading ? (
+          <div style={{ padding: 32, textAlign: 'center', color: C.gray }}>Đang tải...</div>
+        ) : history.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: C.gray }}>Chưa có lịch sử rút tiền</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {history.map((h: any) => {
+              const meta = STATUS_META[h.status] ?? STATUS_META.pending
+              const date = h.created_at ? String(h.created_at).slice(0, 10) : '—'
+              const done = h.completed_at ? String(h.completed_at).slice(0, 10) : null
+              return (
+                <div key={h.wd_id} style={{ padding: '16px 20px', borderBottom: `1px solid ${C.tint}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: 16, color: C.amber, margin: 0 }}>{fmt(h.amount)}</p>
+                    <p style={{ fontSize: 12, color: C.gray, marginTop: 3 }}>
+                      {h.bank_name} · ***{String(h.account_number).slice(-4)} · {date}
+                    </p>
+                    {done && <p style={{ fontSize: 11, color: C.success, marginTop: 2 }}>✓ Hoàn tất: {done}</p>}
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: meta.bg, color: meta.color }}>{meta.label}</span>
                 </div>
-                <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: meta.bg, color: meta.color }}>{meta.label}</span>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

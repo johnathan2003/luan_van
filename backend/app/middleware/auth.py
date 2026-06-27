@@ -60,9 +60,26 @@ def require_role(*roles: str):
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Admin vận hành sàn — trong khuôn khổ hệ thống, có ghi log."""
     user_roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
     if "admin" not in user_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return current_user
+
+
+def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
+    """Superadmin can thiệp DB trực tiếp — ngoài khuôn khổ hệ thống, KHÔNG ghi log."""
+    user_roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
+    if "superadmin" not in user_roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Superadmin access required")
+    return current_user
+
+
+def require_admin_or_superadmin(current_user: User = Depends(get_current_user)) -> User:
+    """Cho phép cả admin lẫn superadmin — dùng cho các endpoint đọc/xem chung."""
+    user_roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
+    if "admin" not in user_roles and "superadmin" not in user_roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin or Superadmin access required")
     return current_user
 
 

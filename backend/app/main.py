@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.cors import CORSMiddleware as StarletteCORS
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
@@ -14,9 +15,17 @@ from app.middleware.error_handler import add_exception_handlers
 from app.middleware.logging import RequestLoggingMiddleware
 from app.routes import (
     auth, users, products, carts, orders,
-    payments, shipments, shops, admin, notifications, vouchers,
+    payments, shipments, shops, admin, notifications, vouchers, chat, employee,
 )
-from app.websocket.connection_manager import sio
+from app.websocket.connection_manager import sio, init_main_loop
+
+# Superadmin module — nằm ngoài app package, không ghi log
+# Docker: super/backend/ được mount tại /app/super/ → import as package 'super'
+try:
+    from super.router import super_router  # noqa: E402
+except ImportError:
+    super_router = None
+    logger.warning("super module không tìm thấy — /super/* endpoints bị tắt")
 
 
 def setup_logging():
@@ -49,6 +58,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_main_loop()   # capture asyncio loop sớm nhất — trước mọi request
     logger.info(f"Starting E-Commerce API [{settings.ENVIRONMENT}]...")
     # Schema được quản lý hoàn toàn bởi Alembic — KHÔNG dùng create_all()
     # vì models dùng Enum(...) trong khi migration dùng String(50),
@@ -104,9 +114,25 @@ app.include_router(shops.router,         prefix="/api/v1/shop",          tags=["
 app.include_router(admin.router,         prefix="/api/v1/admin",         tags=["Admin"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notifications"])
 app.include_router(vouchers.router,      prefix="/api/v1/vouchers",      tags=["Vouchers"])
+app.include_router(chat.router,          prefix="/api/v1/chat",           tags=["Chat"])
+app.include_router(employee.router,      prefix="/api/v1/employee",       tags=["Employee"])
+
+# Superadmin — chỉ mount nếu module tồn tại
+if super_router:
+    app.include_router(super_router)  # prefix "/super" đã khai báo trong router.py
 
 # ── Socket.io ─────────────────────────────────────────────────────────────────
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
+
+# Bọc CORS ở tầng ngoài cùng (socket_app) để đảm bảo MỌI response đều có header
+# — kể cả error từ socket.io layer, không chỉ FastAPI layer
+socket_app = StarletteCORS(
+    socket_app,
+    allow_origins=settings.ALLOWED_ORIGINS_LIST,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ── Health endpoints ──────────────────────────────────────────────────────────

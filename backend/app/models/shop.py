@@ -18,6 +18,10 @@ class Shop(Base):
     total_orders = Column(Integer, default=0)
     verification_status = Column(Enum("pending", "approved", "rejected"), default="pending", index=True)
     verified_at = Column(DateTime)
+    # Mall tier: shop được xét duyệt lên BuyZo Mall
+    is_mall          = Column(Boolean, default=False, nullable=False)
+    mall_request_status = Column(Enum("none", "pending", "approved", "rejected"), default="none")
+    mall_requested_at   = Column(DateTime)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

@@ -6,7 +6,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src'),
+      '@':     resolve(__dirname, './src'),
+      '@super': resolve(__dirname, '../super/frontend'),
     },
     // Ưu tiên .tsx trước .jsx (tránh Windows load nhầm file cũ)
     extensions: ['.tsx', '.ts', '.jsx', '.js', '.json'],
@@ -22,6 +23,7 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      // /api/super/* — superadmin API, đã được bao phủ bởi proxy /api phía trên
     },
   },
 })

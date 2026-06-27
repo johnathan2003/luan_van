@@ -6,6 +6,7 @@ class RoleName(str, Enum):
     SHOP = "shop"
     SHIPPER = "shipper"
     ADMIN = "admin"
+    SUPERADMIN = "superadmin"
     EMPLOYEE = "employee"
 
 
@@ -61,33 +62,25 @@ class ShipperStatus(str, Enum):
 
 
 class PermissionCode(str, Enum):
-    # Products
     PRODUCT_CREATE = "product:create"
     PRODUCT_READ = "product:read"
     PRODUCT_UPDATE = "product:update"
     PRODUCT_DELETE = "product:delete"
     PRODUCT_APPROVE = "product:approve"
-    # Orders
     ORDER_CREATE = "order:create"
     ORDER_READ = "order:read"
     ORDER_CONFIRM = "order:confirm"
     ORDER_CANCEL = "order:cancel"
     ORDER_UPDATE = "order:update"
-    # Shop
     SHOP_MANAGE = "shop:manage"
     SHOP_ANALYTICS = "shop:analytics"
     SHOP_EMPLOYEES = "shop:employees"
-    # Messages
     MESSAGE_READ = "message:read"
     MESSAGE_SEND = "message:send"
-    # Users
     USER_MANAGE = "user:manage"
     USER_BAN = "user:ban"
-    # Disputes
     DISPUTE_RESOLVE = "dispute:resolve"
-    # Payments
     PAYMENT_PROCESS = "payment:process"
-    # Shipments
     SHIPMENT_READ = "shipment:read"
     SHIPMENT_ASSIGN = "shipment:assign"
 
@@ -110,7 +103,7 @@ class NotificationType(str, Enum):
     DELETION_REQUEST = "deletion_request"
 
 
-DEFAULT_ROLES = ["user", "shop", "shipper", "admin", "employee"]
+DEFAULT_ROLES = ["user", "shop", "shipper", "admin", "superadmin", "employee"]
 
 DEFAULT_PERMISSIONS = [
     ("product:create", "product", "Create product"),

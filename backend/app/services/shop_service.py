@@ -29,20 +29,31 @@ def update_shop(db: Session, shop_id: int, data: ShopUpdate) -> Shop:
     return shop
 
 
-def create_employee(db: Session, shop_id: int, owner_id: int, data: EmployeeCreate) -> ShopEmployee:
+def create_employee(db: Session, shop_id: int, owner_id: int, data: EmployeeCreate) -> tuple:
+    """Trả về (ShopEmployee, plain_password | None).
+    plain_password != None chỉ khi tạo account mới hoặc shop tự đặt mật khẩu.
+    """
     # Find or create user by email
     user = db.query(User).filter(User.email == data.employee_email).first()
+    plain_password: str | None = None
     if not user:
-        # Create user with random password
-        random_pass = "".join(random.choices(string.ascii_letters + string.digits, k=12))
+        # Dùng mật khẩu shop đặt, hoặc tự sinh nếu không có
+        plain_password = data.password or "".join(
+            random.choices(string.ascii_letters + string.digits, k=12)
+        )
         user = User(
             email=data.employee_email,
-            password_hash=hash_password(random_pass),
+            password_hash=hash_password(plain_password),
             full_name=data.employee_name,
             status="active",
         )
         db.add(user)
         db.flush()
+    else:
+        # Tài khoản đã tồn tại — nếu shop muốn đặt lại pass thì cho phép
+        if data.password:
+            plain_password = data.password
+            user.password_hash = hash_password(data.password)
 
     # Check not already employee
     existing = db.query(ShopEmployee).filter(
@@ -63,7 +74,8 @@ def create_employee(db: Session, shop_id: int, owner_id: int, data: EmployeeCrea
     db.add(employee)
     db.flush()
 
-    # Assign employee role
+    # Assign employee role — current_role=True cho account mới tạo
+    is_new_account = plain_password is not None
     emp_role = db.query(Role).filter(Role.role_name == "employee").first()
     if emp_role:
         existing_role = db.query(UserRole).filter(
@@ -71,7 +83,13 @@ def create_employee(db: Session, shop_id: int, owner_id: int, data: EmployeeCrea
             UserRole.role_id == emp_role.role_id,
         ).first()
         if not existing_role:
-            db.add(UserRole(user_id=user.user_id, role_id=emp_role.role_id, assigned_by=owner_id))
+            db.add(UserRole(
+                user_id=user.user_id,
+                role_id=emp_role.role_id,
+                assigned_by=owner_id,
+                current_role=is_new_account,  # True → login sẽ vào employee dashboard
+                status="active",
+            ))
 
     # Assign permissions
     for perm_code in data.permissions:
@@ -83,7 +101,7 @@ def create_employee(db: Session, shop_id: int, owner_id: int, data: EmployeeCrea
 
     db.commit()
     db.refresh(employee)
-    return employee
+    return employee, plain_password
 
 
 def update_employee_permissions(db: Session, employee_id: int, shop_id: int, data: EmployeePermissionUpdate):

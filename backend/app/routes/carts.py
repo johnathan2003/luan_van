@@ -10,6 +10,7 @@ from app.models.product import Product
 router = APIRouter()
 
 
+@router.get("")
 @router.get("/me")
 def get_cart(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     items = db.query(Cart).filter(Cart.user_id == current_user.user_id).all()
@@ -20,10 +21,12 @@ def get_cart(current_user: User = Depends(get_current_user), db: Session = Depen
                 "cart_id": item.cart_id,
                 "product_id": item.product_id,
                 "product_name": item.product.product_name if item.product else None,
-                "product_image": item.product.image_urls[0] if item.product and item.product.image_urls else None,
-                "price": item.product.price if item.product else "0",
+                "product_image": (item.product.image_urls[0] if item.product.image_urls else None) if item.product else None,
+                "price": str(item.product.price) if item.product else "0",
                 "quantity": item.quantity,
                 "shop_id": item.product.shop_id if item.product else None,
+                "shop_name": (item.product.shop.shop_name if item.product.shop else None) if item.product else None,
+                "stock_quantity": item.product.stock_quantity if item.product else 0,
             }
             for item in items
         ],
@@ -93,6 +96,7 @@ def remove_cart_item(item_id: int, current_user: User = Depends(get_current_user
     return {"message": "Item removed from cart"}
 
 
+@router.delete("")
 @router.delete("/clear")
 def clear_cart(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     db.query(Cart).filter(Cart.user_id == current_user.user_id).delete()

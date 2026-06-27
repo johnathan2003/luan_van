@@ -13,36 +13,21 @@ const ACTION_COLOR: Record<string, string> = {
   approve_shipper: '#16A34A', approve_voucher: '#16A34A',
 }
 
-const MOCK_LOGS = [
-  { log_id:1,  admin_id:1, admin_email:'admin@example.com', action:'approve_shop',      target_type:'shop',    target_id:3,    note:'Shop BookStore360 đáp ứng yêu cầu',       created_at:'2025-06-14 09:05' },
-  { log_id:2,  admin_id:1, admin_email:'admin@example.com', action:'reject_product',    target_type:'product', target_id:8,    note:'Sản phẩm vi phạm chính sách nội dung',    created_at:'2025-06-14 08:52' },
-  { log_id:3,  admin_id:1, admin_email:'admin@example.com', action:'ban_user',          target_type:'user',    target_id:12,   note:'Vi phạm điều khoản sử dụng lần 2',         created_at:'2025-06-13 17:30' },
-  { log_id:4,  admin_id:1, admin_email:'admin@example.com', action:'approve_product',   target_type:'product', target_id:5,    note:'',                                          created_at:'2025-06-13 15:00' },
-  { log_id:5,  admin_id:1, admin_email:'admin@example.com', action:'resolve_dispute',   target_type:'dispute', target_id:2,    note:'Quyết định hoàn tiền cho khách hàng',       created_at:'2025-06-13 11:20' },
-  { log_id:6,  admin_id:1, admin_email:'admin@example.com', action:'reject_shop',       target_type:'shop',    target_id:7,    note:'Thiếu giấy tờ kinh doanh hợp lệ',          created_at:'2025-06-12 14:45' },
-  { log_id:7,  admin_id:1, admin_email:'admin@example.com', action:'send_notification', target_type:'system',  target_id:null, note:'Thông báo bảo trì hệ thống 20/06',          created_at:'2025-06-12 10:00' },
-  { log_id:8,  admin_id:1, admin_email:'admin@example.com', action:'update_config',     target_type:'shipping',target_id:2,    note:'Cập nhật phí vận chuyển Miền Tây',          created_at:'2025-06-11 16:00' },
-  { log_id:9,  admin_id:1, admin_email:'admin@example.com', action:'approve_shipper',   target_type:'shipper', target_id:3,    note:'',                                          created_at:'2025-06-11 09:30' },
-  { log_id:10, admin_id:1, admin_email:'admin@example.com', action:'delete_product',    target_type:'product', target_id:15,   note:'Sản phẩm giả mạo thương hiệu',             created_at:'2025-06-10 13:00' },
-  { log_id:11, admin_id:1, admin_email:'admin@example.com', action:'unban_user',        target_type:'user',    target_id:9,    note:'Người dùng khiếu nại thành công',           created_at:'2025-06-10 11:00' },
-  { log_id:12, admin_id:1, admin_email:'admin@example.com', action:'approve_voucher',   target_type:'voucher', target_id:3,    note:'Voucher NEWSHOP20 đã được duyệt',           created_at:'2025-06-09 08:00' },
-]
-
 const AuditLogsPage: React.FC = () => {
-  const [logs, setLogs]             = useState<any[]>(MOCK_LOGS)
-  const [loading, setLoading]       = useState(false)
+  const [logs, setLogs]             = useState<any[]>([])
+  const [loading, setLoading]       = useState(true)
   const [search, setSearch]         = useState('')
   const [actionFilter, setActionFilter] = useState('all')
 
   useEffect(() => {
     setLoading(true)
     adminService.getLogs()
-      .then(r => setLogs(r.data?.logs || r.data || MOCK_LOGS))
-      .catch(() => setLogs(MOCK_LOGS))
+      .then(r => { const d = r.data?.logs ?? r.data; if (Array.isArray(d)) setLogs(d) })
+      .catch(() => setLogs([]))
       .finally(() => setLoading(false))
   }, [])
 
-  const uniqueActions = [...new Set(MOCK_LOGS.map(l => l.action))]
+  const uniqueActions = [...new Set(logs.map((l: any) => l.action).filter(Boolean))]
   const filtered = logs.filter(l => {
     const ms = actionFilter === 'all' || l.action === actionFilter
     const mq = !search || l.action?.includes(search) || String(l.admin_id).includes(search) || l.target_type?.includes(search)

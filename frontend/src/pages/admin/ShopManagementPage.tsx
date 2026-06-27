@@ -39,7 +39,7 @@ const ShopManagementPage: React.FC = () => {
     // Dùng getShopRegistrations approved để lấy danh sách shop đã duyệt
     adminService.getShopRegistrations('approved')
       .then(r => setShops(r.data?.registrations || r.data || []))
-      .catch(() => setShops(MOCK_SHOPS))
+      .catch(() => setShops([]))
       .finally(() => setLoading(false))
   }, [])
 
@@ -155,12 +155,5 @@ const ShopManagementPage: React.FC = () => {
     </div>
   )
 }
-
-// Mock data khi API chưa có
-const MOCK_SHOPS = [
-  { shop_id: 1, shop_name: 'TechWorld Store', user_id: 2, address: '42 Nguyễn Huệ, Q1, HCM', phone: '0902222221', status: 'active' },
-  { shop_id: 2, shop_name: 'FashionVN',       user_id: 5, address: '10 Lê Lợi, Q1, HCM',    phone: '0901234567', status: 'warned' },
-  { shop_id: 3, shop_name: 'BookStore360',    user_id: 8, address: '55 Trần Hưng Đạo, Q5',  phone: '0907654321', status: 'suspended' },
-]
 
 export default ShopManagementPage

@@ -1,24 +1,14 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatters'
 import { voucherService } from '../../services/voucherService'
 import { getXu, spendXu, grantPostPurchaseGifts, type PostPurchaseGift } from '../../utils/eventsStore'
+import { orderService } from '../../services/orderService'
+import { useAppDispatch } from '../../store/hooks'
+import { clearCart } from '../../store/slices/cartSlice'
 
 // ─── Voucher auto-apply helpers ────────────────────────────────────────────────
-interface VoucherLite {
-  voucher_id: number
-  code: string
-  discount_type: string
-  discount_value: string
-  min_order_value: string | null
-  max_discount: string | null
-  max_uses: number | null
-  current_uses: number
-  status: string
-  valid_to: string | null
-  source: 'platform' | 'shop'
-  shop_name: string | null
-}
+import type { VoucherLite } from '../../types/voucher'
 
 const isVoucherEligible = (v: VoucherLite, subtotal: number) => {
   if (subtotal <= 0) return false
@@ -47,126 +37,24 @@ const pickBestVoucher = (vouchers: VoucherLite[], subtotal: number): { voucher: 
     .sort((a, b) => b.amount - a.amount)[0]
 }
 
-// ─── Mock cart items (stock > 0, da chon tu CartPage) ──────────────────────
+// ─── Cart items từ CartPage (navigate state) ─────────────────────────────────
 interface OrderItem {
   id: number; shopId: number; shopName: string; shopIcon: string
   name: string; variant: string; image: string
   price: number; originalPrice: number; quantity: number
 }
 
-const ORDER_ITEMS: OrderItem[] = [
-  {
-    id: 2, shopId: 1, shopName: 'TechWorld Store', shopIcon: '🖥️',
-    name: 'Cap sac nhanh USB-C 100W PD Anker',
-    variant: 'Do dai 1.8m / Mau trang',
-    image: 'https://placehold.co/80x80/0f3460/ffffff?text=Anker',
-    price: 389000, originalPrice: 490000, quantity: 3,
-  },
-  {
-    id: 3, shopId: 2, shopName: 'Fashion Hub', shopIcon: '👗',
-    name: 'Ao thun oversize unisex cotton 100%',
-    variant: 'Size L / Mau xam nhat',
-    image: 'https://placehold.co/80x80/533483/ffffff?text=Ao',
-    price: 189000, originalPrice: 259000, quantity: 3,
-  },
-  {
-    id: 5, shopId: 3, shopName: 'NutriFood Store', shopIcon: '🥗',
-    name: 'Hat dieu rang muoi Da Lat loai 1 (500g)',
-    variant: 'Rang muoi / Hop giay',
-    image: 'https://placehold.co/80x80/2d6a4f/ffffff?text=Dieu',
-    price: 145000, originalPrice: 175000, quantity: 2,
-  },
-  {
-    id: 6, shopId: 3, shopName: 'NutriFood Store', shopIcon: '🥗',
-    name: 'Tra xanh Oolong nguyen chat Thai Nguyen 200g',
-    variant: 'Loai thuong / Tui zip',
-    image: 'https://placehold.co/80x80/1b4332/ffffff?text=Tra',
-    price: 98000, originalPrice: 120000, quantity: 1,
-  },
-]
-
-// ─── San pham goi y mua them (lien quan toi shop/nganh hang vua mua) ──────────
-interface SuggestedProduct {
-  id: number; shopId: number
-  name: string; image: string
-  price: number; originalPrice: number
-  sold: number; rating: number
-}
-
-const SUGGESTED_PRODUCTS: SuggestedProduct[] = [
-  // ─ Cung nganh voi TechWorld Store (shopId 1) ─
-  {
-    id: 101, shopId: 1,
-    name: 'Chuot khong day Logitech M331 Silent',
-    image: 'https://placehold.co/200x200/0f3460/ffffff?text=Mouse',
-    price: 259000, originalPrice: 349000, sold: 1240, rating: 4.8,
-  },
-  {
-    id: 102, shopId: 1,
-    name: 'Ban di chuot gaming chong tham nuoc',
-    image: 'https://placehold.co/200x200/16213e/ffffff?text=Pad',
-    price: 79000, originalPrice: 129000, sold: 860, rating: 4.6,
-  },
-  // ─ Cung nganh voi Fashion Hub (shopId 2) ─
-  {
-    id: 103, shopId: 2,
-    name: 'Quan jean nam ong suong phong cach tre',
-    image: 'https://placehold.co/200x200/533483/ffffff?text=Jean',
-    price: 329000, originalPrice: 459000, sold: 540, rating: 4.7,
-  },
-  {
-    id: 104, shopId: 2,
-    name: 'Non luoi the thao unisex chong nang',
-    image: 'https://placehold.co/200x200/3b1f5c/ffffff?text=Non',
-    price: 89000, originalPrice: 139000, sold: 2100, rating: 4.9,
-  },
-  // ─ Cung nganh voi NutriFood Store (shopId 3) ─
-  {
-    id: 105, shopId: 3,
-    name: 'Mat ong rung nguyen chat U Minh (500ml)',
-    image: 'https://placehold.co/200x200/2d6a4f/ffffff?text=Honey',
-    price: 165000, originalPrice: 210000, sold: 980, rating: 4.8,
-  },
-  {
-    id: 106, shopId: 3,
-    name: 'Yen mach Uc nguyen cam (1kg)',
-    image: 'https://placehold.co/200x200/1b4332/ffffff?text=Oat',
-    price: 119000, originalPrice: 159000, sold: 1530, rating: 4.7,
-  },
-]
-
-// ─── Mock province/district/ward data ────────────────────────────────────────
-const PROVINCES = ['Thanh pho Ho Chi Minh', 'Ha Noi', 'Da Nang', 'Can Tho', 'Hai Phong', 'Bien Hoa']
-const DISTRICTS: Record<string, string[]> = {
-  'Thanh pho Ho Chi Minh': ['Quan 1', 'Quan 3', 'Quan 7', 'Binh Thanh', 'Thu Duc'],
-  'Ha Noi': ['Hoan Kiem', 'Dong Da', 'Ba Dinh', 'Cau Giay', 'Thanh Xuan'],
-  'Da Nang': ['Hai Chau', 'Thanh Khe', 'Son Tra', 'Ngu Hanh Son'],
-  'Can Tho': ['Ninh Kieu', 'Binh Thuy', 'O Mon', 'Cai Rang'],
-  'Hai Phong': ['Hong Bang', 'Le Chan', 'Ngo Quyen', 'Kien An'],
-  'Bien Hoa': ['Bien Hoa', 'Long Khanh', 'Trang Bom'],
-}
-const WARDS: Record<string, string[]> = {
-  'Quan 1': ['Phuong Ben Nghe', 'Phuong Ben Thanh', 'Phuong Co Giang', 'Phuong Nguyen Cu Trinh'],
-  'Quan 3': ['Phuong 1', 'Phuong 4', 'Phuong 9', 'Phuong Vo Thi Sau'],
-  'Quan 7': ['Phuong Tan Phong', 'Phuong Binh Thuan', 'Phuong Tan Quy', 'Phuong Tan Hung'],
-  'Binh Thanh': ['Phuong 1', 'Phuong 12', 'Phuong 25', 'Phuong 26'],
-  'Thu Duc': ['Phuong Linh Chieu', 'Phuong Linh Tay', 'Phuong Tam Binh'],
-  'Hoan Kiem': ['Phuong Hang Bac', 'Phuong Hang Dao', 'Phuong Ly Thai To'],
-  'Dong Da': ['Phuong Kham Thien', 'Phuong Nam Dong', 'Phuong Trung Tu'],
-  'Ba Dinh': ['Phuong Cong Vi', 'Phuong Lieu Giai', 'Phuong Kim Ma'],
-  'Cau Giay': ['Phuong Dich Vong', 'Phuong Nghia Do', 'Phuong Trung Hoa'],
-  'Thanh Xuan': ['Phuong Khuong Dinh', 'Phuong Nhan Chinh', 'Phuong Thanh Xuan Bac'],
-  'Hai Chau': ['Phuong Hai Chau 1', 'Phuong Hai Chau 2', 'Phuong Nam Duong'],
-  'Thanh Khe': ['Phuong Chinh Gian', 'Phuong Tam Thuan', 'Phuong Tho Quang'],
-  'Son Tra': ['Phuong An Hai Bac', 'Phuong An Hai Dong', 'Phuong Pho Bien'],
-  'Ngu Hanh Son': ['Phuong Hoa Cuong Bac', 'Phuong Hoa Hai', 'Phuong My An'],
-}
+// ─── Types cho provinces API ──────────────────────────────────────────────────
+interface ProvinceItem { code: number; name: string }
+interface DistrictItem { code: number; name: string }
+interface WardItem    { code: number; name: string }
+const GEO_API = 'https://provinces.open-api.vn/api'
 
 const PAYMENT_METHODS = [
-  { id: 'cod',      icon: '💵', label: 'Thanh toan khi nhan hang (COD)',    sub: 'Tra tien mat khi nhan duoc hang' },
-  { id: 'bank',     icon: '🏦', label: 'Chuyen khoan ngan hang',            sub: 'Chuyen khoan qua ATM / Internet Banking' },
-  { id: 'momo',     icon: '🟣', label: 'Vi MoMo',                           sub: 'Thanh toan nhanh qua vi MoMo' },
-  { id: 'zalopay',  icon: '🔵', label: 'ZaloPay',                           sub: 'Thanh toan qua ungdung ZaloPay' },
+  { id: 'cod',         icon: '💵', label: 'Thanh toan khi nhan hang (COD)', sub: 'Tra tien mat khi nhan duoc hang' },
+  { id: 'vnpay',       icon: '🏦', label: 'Thanh toan VNPay',               sub: 'Chuyen khoan qua ATM / Internet Banking / VNPay' },
+  { id: 'momo',        icon: '🟣', label: 'Vi MoMo',                        sub: 'Thanh toan nhanh qua vi MoMo' },
+  { id: 'credit_card', icon: '💳', label: 'The tin dung / Ghi no',          sub: 'Visa, Mastercard, JCB' },
 ]
 
 // ─── Form types ───────────────────────────────────────────────────────────────
@@ -233,13 +121,72 @@ const errStyle:   React.CSSProperties = { fontSize: 12, color: '#EF4444', margin
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const CheckoutPage: React.FC = () => {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const location  = useLocation()
+  const dispatch  = useAppDispatch()
+
+  // Nhận cart items từ CartPage qua navigate state
+  const cartItems = (location.state as any)?.cartItems as Array<{
+    cart_id: number; product_id: number; product_name?: string
+    product_image?: string; price: number; quantity: number
+    shop_id?: number; shop_name?: string
+  }> | undefined
+
+  // Map sang OrderItem format
+  const ORDER_ITEMS: OrderItem[] = (cartItems || []).map(i => ({
+    id: i.product_id,
+    shopId: i.shop_id ?? 0,
+    shopName: i.shop_name ?? 'Shop',
+    shopIcon: '🏪',
+    name: i.product_name ?? `San pham #${i.product_id}`,
+    variant: '',
+    image: i.product_image ?? '',
+    price: i.price,
+    originalPrice: i.price,
+    quantity: i.quantity,
+  }))
   const [step,   setStep]   = useState(0)   // 0=address 1=confirm 2=done
   const [form,   setForm]   = useState<AddressForm>(EMPTY_FORM)
   const [errors, setErrors] = useState<Partial<AddressForm>>({})
   const [payment, setPayment] = useState('cod')
+
+  // ─── Provinces API state ──────────────────────────────────────────────────
+  const [provinces,  setProvinces]  = useState<ProvinceItem[]>([])
+  const [districts,  setDistricts]  = useState<DistrictItem[]>([])
+  const [wards,      setWards]      = useState<WardItem[]>([])
+  const [provinceCode, setProvinceCode] = useState<number | null>(null)
+  const [districtCode, setDistrictCode] = useState<number | null>(null)
+  const [geoLoading, setGeoLoading] = useState(false)
+
+  useEffect(() => {
+    fetch(`${GEO_API}/p/`)
+      .then(r => r.json())
+      .then((data: ProvinceItem[]) => setProvinces(data))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (provinceCode == null) { setDistricts([]); setWards([]); return }
+    setGeoLoading(true)
+    fetch(`${GEO_API}/p/${provinceCode}?depth=2`)
+      .then(r => r.json())
+      .then((data: { districts: DistrictItem[] }) => setDistricts(data.districts || []))
+      .catch(() => setDistricts([]))
+      .finally(() => setGeoLoading(false))
+  }, [provinceCode])
+
+  useEffect(() => {
+    if (districtCode == null) { setWards([]); return }
+    setGeoLoading(true)
+    fetch(`${GEO_API}/d/${districtCode}?depth=2`)
+      .then(r => r.json())
+      .then((data: { wards: WardItem[] }) => setWards(data.wards || []))
+      .catch(() => setWards([]))
+      .finally(() => setGeoLoading(false))
+  }, [districtCode])
   const [placing, setPlacing] = useState(false)
-  const [orderId] = useState(() => 'BZ' + Date.now().toString().slice(-8))
+  const [orderId, setOrderId] = useState(() => 'BZ' + Date.now().toString().slice(-8))
+  const [orderError, setOrderError] = useState<string | null>(null)
   const [myVouchers, setMyVouchers] = useState<VoucherLite[]>([])
   // undefined = chua khoi tao (cho data), null = nguoi dung chon "khong dung voucher"
   const [platformVoucherId, setPlatformVoucherId] = useState<number | null | undefined>(undefined)
@@ -256,9 +203,6 @@ const CheckoutPage: React.FC = () => {
       .catch(() => {})
   }, [])
 
-  const districts = form.province ? (DISTRICTS[form.province] || []) : []
-  const wards     = form.district ? (WARDS[form.district]     || []) : []
-
   const set = (k: keyof AddressForm, v: string) => {
     setForm(f => {
       const next = { ...f, [k]: v }
@@ -267,6 +211,28 @@ const CheckoutPage: React.FC = () => {
       return next
     })
     setErrors(e => ({ ...e, [k]: '' }))
+  }
+
+  const handleProvinceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const opt = e.target.selectedOptions[0]
+    const code = opt ? Number(opt.dataset.code) : null
+    set('province', e.target.value)
+    setProvinceCode(code)
+    setDistrictCode(null)
+    setDistricts([])
+    setWards([])
+  }
+
+  const handleDistrictChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const opt = e.target.selectedOptions[0]
+    const code = opt ? Number(opt.dataset.code) : null
+    set('district', e.target.value)
+    setDistrictCode(code)
+    setWards([])
+  }
+
+  const handleWardChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    set('ward', e.target.value)
   }
 
   // ── Validate step 1 ──
@@ -347,20 +313,56 @@ const CheckoutPage: React.FC = () => {
     ? `${form.street}, ${form.ward}, ${form.district}, ${form.province}`
     : ''
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     setPlacing(true)
-    setTimeout(() => {
+    setOrderError(null)
+    try {
+      // Build payload theo CheckoutData
+      const shippingAddress = `${form.street}, ${form.ward}, ${form.district}, ${form.province}`
+      const selectedVoucherCode =
+        platformSelected?.code ??
+        shopBests[0]?.voucher.code ??
+        undefined
+
+      const payload = {
+        items: ORDER_ITEMS.map(i => ({ product_id: i.id, quantity: i.quantity })),
+        shipping_address: shippingAddress,
+        recipient_name:  form.name,
+        recipient_phone: form.phone,
+        payment_method:  payment as any,
+        voucher_code:    selectedVoucherCode,
+        note:            form.note || undefined,
+      }
+
+      const res = await orderService.create(payload)
+      const createdOrder = res.data?.data ?? res.data
+      const realOrderId  = createdOrder?.order_id
+        ? String(createdOrder.order_id)
+        : 'BZ' + Date.now().toString().slice(-8)
+
+      setOrderId(realOrderId)
+
+      // Trừ xu nếu dùng
       if (xuToApply > 0) {
         spendXu(xuToApply)
         setXuBalance(getXu())
       }
       setAppliedXu(xuToApply)
-      // moi shop trong don co the tang qua nho (voucher shop / voucher san / khong co gi)
+
+      // Quà tặng sự kiện
       const shopNames = [...new Set(ORDER_ITEMS.map(i => i.shopName))]
       setPostGifts(grantPostPurchaseGifts(shopNames))
-      setPlacing(false)
+
+      // Xóa giỏ hàng
+      dispatch(clearCart())
+
       setStep(2)
-    }, 1800)
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.response?.data?.message || 'Đặt hàng thất bại, vui lòng thử lại'
+      setOrderError(msg)
+    } finally {
+      setPlacing(false)
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -511,44 +513,6 @@ const CheckoutPage: React.FC = () => {
           </div>
         )}
 
-        {/* Goi y mua them — lien quan toi cac shop/nganh hang vua mua */}
-        {(() => {
-          const purchasedShopIds = [...new Set(ORDER_ITEMS.map(i => i.shopId))]
-          const suggestions = SUGGESTED_PRODUCTS.filter(p => purchasedShopIds.includes(p.shopId))
-          if (suggestions.length === 0) return null
-          return (
-            <div style={{ marginTop: 36, textAlign: 'left' }}>
-              <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary)', marginBottom: 14, textAlign: 'center' }}>
-                ✨ Co the ban cung thich
-              </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14 }}>
-                {suggestions.map(p => (
-                  <Link key={p.id} to="/products" style={{ textDecoration: 'none', color: 'inherit' }}>
-                    <div className="card" style={{ overflow: 'hidden', cursor: 'pointer', transition: 'transform 0.15s' }}
-                      onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)')}
-                      onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
-                    >
-                      <img src={p.image} alt={p.name} style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
-                      <div style={{ padding: '10px 12px' }}>
-                        <p style={{
-                          fontSize: 12.5, fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 6px',
-                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4, minHeight: 35,
-                        }}>
-                          {p.name}
-                        </p>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
-                          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--primary, #7C3AED)' }}>{formatCurrency(p.price)}</span>
-                          <span style={{ fontSize: 11, color: 'var(--text-secondary)', textDecoration: 'line-through' }}>{formatCurrency(p.originalPrice)}</span>
-                        </div>
-                        <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>⭐ {p.rating} · Da ban {p.sold}</p>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )
-        })()}
       </div>
     </div>
   )
@@ -607,30 +571,30 @@ const CheckoutPage: React.FC = () => {
 
                   {/* Tinh */}
                   <div>
-                    <label style={labelStyle}>Tinh / Thanh pho <span style={{ color: '#EF4444' }}>*</span></label>
-                    <select value={form.province} onChange={e => set('province', e.target.value)} style={{ ...inputStyle(!!errors.province), cursor: 'pointer' }}>
-                      <option value="">-- Chon tinh/thanh pho --</option>
-                      {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+                    <label style={labelStyle}>Tỉnh / Thành phố <span style={{ color: '#EF4444' }}>*</span></label>
+                    <select value={form.province} onChange={handleProvinceChange} style={{ ...inputStyle(!!errors.province), cursor: 'pointer' }}>
+                      <option value="">-- Chọn tỉnh/thành phố --</option>
+                      {provinces.map(p => <option key={p.code} value={p.name} data-code={p.code}>{p.name}</option>)}
                     </select>
                     {errors.province && <p style={errStyle}>{errors.province}</p>}
                   </div>
 
                   {/* Quan */}
                   <div>
-                    <label style={labelStyle}>Quan / Huyen <span style={{ color: '#EF4444' }}>*</span></label>
-                    <select value={form.district} onChange={e => set('district', e.target.value)} disabled={!form.province} style={{ ...inputStyle(!!errors.district), cursor: form.province ? 'pointer' : 'not-allowed', opacity: form.province ? 1 : 0.5 }}>
-                      <option value="">-- Chon quan/huyen --</option>
-                      {districts.map(d => <option key={d} value={d}>{d}</option>)}
+                    <label style={labelStyle}>Quận / Huyện <span style={{ color: '#EF4444' }}>*</span></label>
+                    <select value={form.district} onChange={handleDistrictChange} disabled={!form.province || geoLoading} style={{ ...inputStyle(!!errors.district), cursor: form.province ? 'pointer' : 'not-allowed', opacity: form.province ? 1 : 0.5 }}>
+                      <option value="">{geoLoading ? 'Đang tải...' : '-- Chọn quận/huyện --'}</option>
+                      {districts.map(d => <option key={d.code} value={d.name} data-code={d.code}>{d.name}</option>)}
                     </select>
                     {errors.district && <p style={errStyle}>{errors.district}</p>}
                   </div>
 
                   {/* Phuong */}
                   <div>
-                    <label style={labelStyle}>Phuong / Xa <span style={{ color: '#EF4444' }}>*</span></label>
-                    <select value={form.ward} onChange={e => set('ward', e.target.value)} disabled={!form.district} style={{ ...inputStyle(!!errors.ward), cursor: form.district ? 'pointer' : 'not-allowed', opacity: form.district ? 1 : 0.5 }}>
-                      <option value="">-- Chon phuong/xa --</option>
-                      {wards.map(w => <option key={w} value={w}>{w}</option>)}
+                    <label style={labelStyle}>Phường / Xã <span style={{ color: '#EF4444' }}>*</span></label>
+                    <select value={form.ward} onChange={handleWardChange} disabled={!form.district || geoLoading} style={{ ...inputStyle(!!errors.ward), cursor: form.district ? 'pointer' : 'not-allowed', opacity: form.district ? 1 : 0.5 }}>
+                      <option value="">{geoLoading ? 'Đang tải...' : '-- Chọn phường/xã --'}</option>
+                      {wards.map(w => <option key={w.code} value={w.name}>{w.name}</option>)}
                     </select>
                     {errors.ward && <p style={errStyle}>{errors.ward}</p>}
                   </div>
@@ -842,18 +806,25 @@ const CheckoutPage: React.FC = () => {
                   style={{ padding: '10px 20px', background: 'none', border: '1.5px solid var(--border-subtle)', borderRadius: 8, fontSize: 14, color: 'var(--text-secondary)', cursor: 'pointer' }}>
                   ← Quay lai
                 </button>
-                <button
-                  onClick={handlePlaceOrder}
-                  disabled={placing}
-                  style={{ padding: '12px 36px', background: placing ? '#9CA3AF' : 'var(--primary, #7C3AED)', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 15, cursor: placing ? 'not-allowed' : 'pointer', minWidth: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'opacity 0.2s' }}>
-                  {placing ? (
-                    <>
-                      <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2.5px solid rgba(255,255,255,0.35)', borderTop: '2.5px solid #fff', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-                      Dang xu ly...
-                    </>
-                  ) : '🎯 Dat hang ngay'}
-                  <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+                  {orderError && (
+                    <p style={{ color: '#EF4444', fontSize: 13, margin: 0, maxWidth: 320, textAlign: 'right' }}>
+                      ⚠️ {orderError}
+                    </p>
+                  )}
+                  <button
+                    onClick={handlePlaceOrder}
+                    disabled={placing}
+                    style={{ padding: '12px 36px', background: placing ? '#9CA3AF' : 'var(--primary, #7C3AED)', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 15, cursor: placing ? 'not-allowed' : 'pointer', minWidth: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'opacity 0.2s' }}>
+                    {placing ? (
+                      <>
+                        <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2.5px solid rgba(255,255,255,0.35)', borderTop: '2.5px solid #fff', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+                        Dang xu ly...
+                      </>
+                    ) : '🎯 Dat hang ngay'}
+                    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+                  </button>
+                </div>
               </div>
             </div>
 

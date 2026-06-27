@@ -11,18 +11,11 @@ const ROLE_META: Record<string, { label: string; color: string; bg: string }> = 
   dispute_resolver:  { label: 'Giải quyết tranh chấp',  color: '#7C3AED', bg: '#EDE9FE' },
 }
 
-const MOCK_EMPLOYEES = [
-  { employee_id:1, employee_name:'Trần Thị Admin',    employee_email:'admin2@buyzo.vn',  role_name:'product_manager',  created_at:'2025-01-10' },
-  { employee_id:2, employee_name:'Lê Văn Hỗ Trợ',    employee_email:'support@buyzo.vn', role_name:'order_handler',    created_at:'2025-02-15' },
-  { employee_id:3, employee_name:'Nguyễn Minh Trọng', employee_email:'dispute@buyzo.vn', role_name:'dispute_resolver', created_at:'2025-03-01' },
-  { employee_id:4, employee_name:'Phạm Thị Thu',      employee_email:'content@buyzo.vn', role_name:'general',          created_at:'2025-04-20' },
-]
-
 const EMPTY_FORM = { employee_email: '', employee_name: '', role_name: 'general' }
 
 const SystemEmployeePage: React.FC = () => {
-  const [employees, setEmployees] = useState<any[]>(MOCK_EMPLOYEES)
-  const [loading, setLoading]     = useState(false)
+  const [employees, setEmployees] = useState<any[]>([])
+  const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
   const [form, setForm]           = useState({ ...EMPTY_FORM })
   const [search, setSearch]       = useState('')
@@ -30,8 +23,8 @@ const SystemEmployeePage: React.FC = () => {
   useEffect(() => {
     setLoading(true)
     adminService.getSystemEmployees()
-      .then(r => setEmployees(r.data?.employees || r.data || MOCK_EMPLOYEES))
-      .catch(() => setEmployees(MOCK_EMPLOYEES))
+      .then(r => { const d = r.data?.employees ?? r.data; if (Array.isArray(d)) setEmployees(d) })
+      .catch(() => setEmployees([]))
       .finally(() => setLoading(false))
   }, [])
 

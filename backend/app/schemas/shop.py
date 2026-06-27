@@ -34,6 +34,7 @@ class EmployeeCreate(BaseModel):
     position: Optional[str] = None
     permissions: List[str] = []
     hired_date: Optional[date] = None
+    password: Optional[str] = None   # Nếu không đặt thì tự sinh ngẫu nhiên 12 ký tự
 
 
 class EmployeePermissionUpdate(BaseModel):

@@ -9,6 +9,7 @@ from app.models.payment import Payment
 from app.models.voucher import Voucher
 from app.schemas.order import OrderCreate
 from app.utils.helpers import paginate
+from app.utils.formatters import format_order_id
 
 
 def create_order(db: Session, user_id: int, data: OrderCreate) -> Order:
@@ -57,21 +58,30 @@ def create_order(db: Session, user_id: int, data: OrderCreate) -> Order:
 
     final_price = max(0.0, total_price - discount)
 
+    # COD: payment_status bắt đầu là "unpaid" (thanh toán khi nhận)
+    # Online: "unpaid" chờ gateway xác nhận
+    is_cod = data.payment_method == "cod"
+
     order = Order(
         user_id=user_id,
         shop_id=shop_id,
-        total_price=str(total_price),
-        discount=str(discount),
-        final_price=str(final_price),
+        total_price=total_price,
+        discount_amount=discount,
+        final_price=final_price,
         payment_method=data.payment_method,
+        payment_status="unpaid",
+        order_status="pending",
         shipping_address=data.shipping_address,
         recipient_name=data.recipient_name,
         recipient_phone=data.recipient_phone,
-        note=data.note,
+        notes=data.note,
         voucher_code=data.voucher_code,
     )
     db.add(order)
-    db.flush()
+    db.flush()  # → order.order_id sẵn sàng
+
+    # ── Sinh mã đơn hàng ──────────────────────────────────────────────────────
+    order.order_number = format_order_id(order.order_id)  # VD: ORD00000007
 
     for product, quantity, price in order_items_data:
         db.add(OrderItem(
@@ -85,19 +95,71 @@ def create_order(db: Session, user_id: int, data: OrderCreate) -> Order:
         product.stock_quantity -= quantity
         product.sales_count += quantity
 
-    # Create payment record
+    # ── Payment record ─────────────────────────────────────────────────────────
     db.add(Payment(
         order_id=order.order_id,
         amount=str(final_price),
         method=data.payment_method,
-        status="pending" if data.payment_method != "cod" else "pending",
+        status="pending",
     ))
 
-    # Create shipment record
+    # ── Shipment record ────────────────────────────────────────────────────────
     db.add(Shipment(order_id=order.order_id))
 
     db.commit()
     db.refresh(order)
+
+    # ── Notify nhân viên shop về đơn hàng mới ─────────────────────────────────
+    try:
+        from app.models.shop import ShopEmployee, EmployeeRolePermission
+        from app.services.notification_service import create_notification
+
+        # Chỉ notify nhân viên có quyền xử lý đơn (order:read hoặc order:confirm)
+        ORDER_PERMS = {"order:read", "order:confirm"}
+        all_employees = db.query(ShopEmployee).filter(
+            ShopEmployee.shop_id == shop_id,
+            ShopEmployee.status == "active",
+        ).all()
+        employees = [
+            emp for emp in all_employees
+            if any(p.permission_code in ORDER_PERMS for p in emp.permissions)
+        ]
+
+        # Cũng notify shop owner (shop_id == user_id của chủ shop)
+        owner_ids_notified = {emp.user_id for emp in employees}
+        notify_targets = list(employees)  # sẽ dùng user_id bên dưới
+
+        method_label = "COD (tiền mặt)" if is_cod else "Online"
+
+        # Notify chủ shop
+        create_notification(
+            db=db,
+            user_id=shop_id,           # chủ shop: shop_id == user_id
+            title="🛍️ Đơn hàng mới",
+            message=f"Đơn {order.order_number} — {int(final_price):,}₫ — {method_label}. Vui lòng xác nhận.",
+            notif_type="order",
+            related_entity_type="order",
+            related_entity_id=order.order_id,
+            action_url="/shop/orders",
+        )
+
+        # Notify nhân viên có quyền order
+        for emp in notify_targets:
+            if emp.user_id == shop_id:
+                continue  # tránh notify trùng nếu chủ shop cũng là nhân viên
+            create_notification(
+                db=db,
+                user_id=emp.user_id,
+                title="🛍️ Đơn hàng mới",
+                message=f"Đơn {order.order_number} — {int(final_price):,}₫ — {method_label}. Vui lòng xác nhận.",
+                notif_type="order",
+                related_entity_type="order",
+                related_entity_id=order.order_id,
+                action_url="/employee/orders",
+            )
+    except Exception:
+        pass  # notification fail không block tạo đơn
+
     return order
 
 

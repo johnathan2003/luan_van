@@ -10,6 +10,7 @@ const ADMIN_MENU = [
   { icon: '📊', label: 'Tổng quan', path: '/admin' },
   { icon: '👥', label: 'Người dùng', path: '/admin/users' },
   { icon: '✅', label: 'Phê duyệt', path: '/admin/approvals' },
+  { icon: '🏆', label: 'Duyệt Mall', path: '/admin/mall-requests' },
   { icon: '🗑️', label: 'Xóa sản phẩm', path: '/admin/deletion-requests' },
   { icon: '⚖️', label: 'Khiếu nại', path: '/admin/disputes' },
   { icon: '🧑‍💼', label: 'Nhân viên HT', path: '/admin/system-employees' },

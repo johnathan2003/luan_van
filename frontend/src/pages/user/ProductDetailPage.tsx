@@ -179,33 +179,56 @@ const ProductDetailPage: React.FC = () => {
 
             {/* Shop card */}
             {(product as any).shop_name && (
-              <Link to={`/shops/${product.shop_id}`} style={{ textDecoration: 'none' }}>
-                <div style={{
-                  background: 'white', border: '1.5px solid var(--gray-200)',
-                  borderRadius: 12, padding: '14px 16px',
-                  display: 'flex', alignItems: 'center', gap: 14,
-                  transition: 'box-shadow 0.15s',
-                }}
-                  onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.10)')}
-                  onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
+              <div>
+                <Link to={`/shops/${product.shop_id}`} style={{ textDecoration: 'none' }}>
                   <div style={{
-                    width: 48, height: 48, borderRadius: 12, flexShrink: 0,
-                    background: 'linear-gradient(135deg, #1E3A8A 0%, #1D4ED8 100%)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
-                  }}>🏪</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 700, fontSize: 15, color: C.navy, margin: 0 }}>
-                      {(product as any).shop_name}
-                    </p>
-                    {(product as any).shop_rating && (
-                      <p style={{ fontSize: 12, color: C.gray, marginTop: 3 }}>
-                        ⭐ {(product as any).shop_rating} · Nhấn để xem shop
+                    background: 'white', border: '1.5px solid var(--gray-200)',
+                    borderRadius: 12, padding: '14px 16px',
+                    display: 'flex', alignItems: 'center', gap: 14,
+                    transition: 'box-shadow 0.15s',
+                  }}
+                    onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.10)')}
+                    onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
+                    <div style={{
+                      width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+                      background: 'linear-gradient(135deg, #1E3A8A 0%, #1D4ED8 100%)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
+                    }}>🏪</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontWeight: 700, fontSize: 15, color: C.navy, margin: 0 }}>
+                        {(product as any).shop_name}
                       </p>
-                    )}
+                      {(product as any).shop_rating && (
+                        <p style={{ fontSize: 12, color: C.gray, marginTop: 3 }}>
+                          ⭐ {(product as any).shop_rating} · Nhấn để xem shop
+                        </p>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 20, color: C.gray }}>›</span>
                   </div>
-                  <span style={{ fontSize: 20, color: C.gray }}>›</span>
-                </div>
-              </Link>
+                </Link>
+
+                {/* Nút nhắn tin shop */}
+                <button
+                  onClick={() => {
+                    if (!isAuthenticated) { navigate('/login'); return }
+                    navigate(`/chat?shop=${product.shop_id}`)
+                  }}
+                  style={{
+                    marginTop: 10, width: '100%',
+                    padding: '10px 0', borderRadius: 10,
+                    border: `1.5px solid ${C.navy}`, background: 'white',
+                    color: C.navy, fontWeight: 600, fontSize: 14,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', gap: 8,
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = C.light }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'white' }}
+                >
+                  💬 Nhắn tin với shop
+                </button>
+              </div>
             )}
           </div>
         </div>

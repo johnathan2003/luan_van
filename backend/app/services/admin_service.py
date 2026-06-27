@@ -15,6 +15,40 @@ import random
 import string
 
 
+def _should_log(db: Session, admin_id: int) -> bool:
+    """superadmin không bị ghi vào admin_logs — trả về False để bỏ qua."""
+    has_superadmin = (
+        db.query(UserRole)
+        .join(Role)
+        .filter(
+            UserRole.user_id == admin_id,
+            UserRole.status == "active",
+            Role.role_name == "superadmin",
+        )
+        .first()
+    )
+    return has_superadmin is None  # True = cần log, False = superadmin → bỏ qua
+
+
+def _log(
+    db: Session,
+    admin_id: int,
+    action: str,
+    target_type: str = None,
+    target_id: int = None,
+    details: dict = None,
+):
+    """Ghi AdminLog — tự động bỏ qua nếu admin_id là superadmin."""
+    if _should_log(db, admin_id):
+        db.add(AdminLog(
+            admin_id=admin_id,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            details=details,
+        ))
+
+
 def get_all_users(db: Session, page: int = 1, limit: int = 20, role: str = None, user_status: str = None):
     query = db.query(User)
     if user_status:
@@ -27,7 +61,7 @@ def ban_user(db: Session, admin_id: int, user_id: int) -> User:
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.status = "banned"
-    db.add(AdminLog(admin_id=admin_id, action="user_banned", target_type="user", target_id=user_id))
+    _log(db, admin_id, "user_banned", "user", user_id)
     db.commit()
     return user
 
@@ -37,7 +71,7 @@ def unban_user(db: Session, admin_id: int, user_id: int) -> User:
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.status = "active"
-    db.add(AdminLog(admin_id=admin_id, action="user_unbanned", target_type="user", target_id=user_id))
+    _log(db, admin_id, "user_unbanned", "user", user_id)
     db.commit()
     return user
 
@@ -71,14 +105,25 @@ def approve_shop_registration(db: Session, admin_id: int, reg_id: int) -> Shop:
     )
     db.add(shop)
 
-    # Assign shop role
+    # Đảm bảo user có role "user" (customer) — fix retroactive cho account cũ chưa có role
+    user_role = db.query(Role).filter(Role.role_name == "user").first()
+    if user_role:
+        has_user_role = db.query(UserRole).filter(
+            UserRole.user_id == reg.user_id, UserRole.role_id == user_role.role_id
+        ).first()
+        if not has_user_role:
+            db.add(UserRole(user_id=reg.user_id, role_id=user_role.role_id, assigned_by=admin_id,
+                            current_role=True, status="active"))
+
+    # Thêm role "shop" — giữ nguyên role "user" (cả 2 tồn tại song song)
     shop_role = db.query(Role).filter(Role.role_name == "shop").first()
     if shop_role:
         existing = db.query(UserRole).filter(UserRole.user_id == reg.user_id, UserRole.role_id == shop_role.role_id).first()
         if not existing:
-            db.add(UserRole(user_id=reg.user_id, role_id=shop_role.role_id, assigned_by=admin_id))
+            db.add(UserRole(user_id=reg.user_id, role_id=shop_role.role_id, assigned_by=admin_id,
+                            current_role=False, status="active"))
 
-    db.add(AdminLog(admin_id=admin_id, action="shop_approved", target_type="shop_registration", target_id=reg_id))
+    _log(db, admin_id, "shop_approved", "shop_registration", reg_id)
     db.commit()
     db.refresh(shop)
 
@@ -96,7 +141,7 @@ def reject_shop_registration(db: Session, admin_id: int, reg_id: int, reason: st
     reg.reviewed_by = admin_id
     reg.reviewed_at = datetime.utcnow()
 
-    db.add(AdminLog(admin_id=admin_id, action="shop_rejected", target_type="shop_registration", target_id=reg_id))
+    _log(db, admin_id, "shop_rejected", "shop_registration", reg_id)
     db.commit()
     create_notification(db, reg.user_id, "Shop bị từ chối", f"Đăng ký shop bị từ chối: {reason}", "shop_rejected")
 
@@ -126,11 +171,22 @@ def approve_shipper_registration(db: Session, admin_id: int, reg_id: int) -> Shi
     )
     db.add(shipper)
 
+    # Đảm bảo user có role "user" trước khi thêm shipper
+    user_role = db.query(Role).filter(Role.role_name == "user").first()
+    if user_role:
+        has_user_role = db.query(UserRole).filter(
+            UserRole.user_id == reg.user_id, UserRole.role_id == user_role.role_id
+        ).first()
+        if not has_user_role:
+            db.add(UserRole(user_id=reg.user_id, role_id=user_role.role_id, assigned_by=admin_id,
+                            current_role=True, status="active"))
+
     shipper_role = db.query(Role).filter(Role.role_name == "shipper").first()
     if shipper_role:
         existing = db.query(UserRole).filter(UserRole.user_id == reg.user_id, UserRole.role_id == shipper_role.role_id).first()
         if not existing:
-            db.add(UserRole(user_id=reg.user_id, role_id=shipper_role.role_id, assigned_by=admin_id))
+            db.add(UserRole(user_id=reg.user_id, role_id=shipper_role.role_id, assigned_by=admin_id,
+                            current_role=False, status="active"))
 
     db.commit()
     db.refresh(shipper)
@@ -165,7 +221,7 @@ def resolve_dispute(db: Session, admin_id: int, dispute_id: int, decision: str, 
     dispute.resolved_by = admin_id
     dispute.resolution_details = resolution_details
     dispute.resolved_at = datetime.utcnow()
-    db.add(AdminLog(admin_id=admin_id, action="dispute_resolved", target_type="dispute", target_id=dispute_id))
+    _log(db, admin_id, "dispute_resolved", "dispute", dispute_id)
     db.commit()
 
 

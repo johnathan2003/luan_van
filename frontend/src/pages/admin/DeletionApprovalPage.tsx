@@ -4,13 +4,6 @@ import Loading from '../../components/common/Loading'
 
 const C = { navy: '#1E3A8A', blue: '#1D4ED8', light: '#DBEAFE', tint: '#EFF6FF', gray: '#64748B', success: '#16A34A', warning: '#D97706', error: '#DC2626' }
 
-const MOCK_REQUESTS = [
-  { deletion_req_id:1, product_id:15, product_name:'Sản phẩm A (giả mạo thương hiệu)', shop_id:2, reason:'Vi phạm quyền sở hữu trí tuệ, giả mạo thương hiệu Nike', status:'pending',  created_at:'2025-06-14' },
-  { deletion_req_id:2, product_id:22, product_name:'Dụng cụ nguy hiểm X',               shop_id:3, reason:'Sản phẩm bị cấm theo quy định pháp luật',               status:'pending',  created_at:'2025-06-13' },
-  { deletion_req_id:3, product_id:8,  product_name:'Thực phẩm chức năng B',              shop_id:1, reason:'Không có giấy phép lưu hành, quảng cáo sai sự thật',    status:'approved', created_at:'2025-06-10' },
-  { deletion_req_id:4, product_id:31, product_name:'Phụ kiện điện thoại C',              shop_id:4, reason:'Hàng nhái, không rõ nguồn gốc xuất xứ',                 status:'rejected', created_at:'2025-06-08' },
-]
-
 const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }> = {
   pending:  { label: 'Chờ xử lý', color: C.warning, bg: '#FEF3C7' },
   approved: { label: 'Đã xóa',    color: C.success, bg: '#DCFCE7' },
@@ -18,14 +11,14 @@ const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }>
 }
 
 const DeletionApprovalPage: React.FC = () => {
-  const [requests, setRequests] = useState<any[]>(MOCK_REQUESTS)
-  const [loading, setLoading]   = useState(false)
+  const [requests, setRequests] = useState<any[]>([])
+  const [loading, setLoading]   = useState(true)
 
   useEffect(() => {
     setLoading(true)
     adminService.getDeletionRequests()
-      .then(r => setRequests(r.data?.requests || r.data || MOCK_REQUESTS))
-      .catch(() => setRequests(MOCK_REQUESTS))
+      .then(r => { const d = r.data?.requests ?? r.data; if (Array.isArray(d)) setRequests(d) })
+      .catch(() => setRequests([]))
       .finally(() => setLoading(false))
   }, [])
 

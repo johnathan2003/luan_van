@@ -11,41 +11,27 @@ const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }>
   active:   { label: 'Đã duyệt',  color: C.success, bg: '#DCFCE7' },
 }
 
-const MOCK_SHOP_REGS = [
-  { reg_id:1, shop_name:'GadgetHub VN',  user_id:10, address:'15 Lê Văn Sỹ, Q3, HCM',       status:'pending',  created_at:'2025-06-13' },
-  { reg_id:2, shop_name:'OrganicFood',   user_id:11, address:'88 Phan Đăng Lưu, Phú Nhuận', status:'pending',  created_at:'2025-06-12' },
-  { reg_id:3, shop_name:'SportZone',     user_id:12, address:'120 Nguyễn Xí, Bình Thạnh',   status:'approved', created_at:'2025-06-10' },
-  { reg_id:4, shop_name:'KidsWorld',     user_id:13, address:'5 Đinh Tiên Hoàng, Q1',        status:'rejected', created_at:'2025-06-08' },
-]
-
-const MOCK_SHIPPER_REGS = [
-  { reg_id:5, user_id:20, vehicle_type:'Xe máy',       license_plate:'59F1-12345', status:'pending',  created_at:'2025-06-14' },
-  { reg_id:6, user_id:21, vehicle_type:'Xe đạp điện',  license_plate:'N/A',        status:'pending',  created_at:'2025-06-13' },
-  { reg_id:7, user_id:22, vehicle_type:'Ô tô',          license_plate:'51A-99999',  status:'approved', created_at:'2025-06-11' },
-]
-
-const MOCK_PENDING_PRODUCTS = [
-  { product_id:10, product_name:'Ốp lưng iPhone 15 Pro Max', shop_id:1, price:120000,  status:'pending', created_at:'2025-06-14' },
-  { product_id:11, product_name:'Dầu gội Organic Coconut',    shop_id:3, price:85000,   status:'pending', created_at:'2025-06-13' },
-  { product_id:12, product_name:'Giày thể thao Nike Air',     shop_id:2, price:1500000, status:'pending', created_at:'2025-06-12' },
-]
-
 type TabKey = 'shop' | 'shipper' | 'product'
 
 const ApprovalPage: React.FC = () => {
   const [tab, setTab]           = useState<TabKey>('shop')
-  const [shops, setShops]       = useState<any[]>(MOCK_SHOP_REGS)
-  const [shippers, setShippers] = useState<any[]>(MOCK_SHIPPER_REGS)
-  const [products, setProducts] = useState<any[]>(MOCK_PENDING_PRODUCTS)
-  const [loading, setLoading]   = useState(false)
+  const [shops, setShops]       = useState<any[]>([])
+  const [shippers, setShippers] = useState<any[]>([])
+  const [products, setProducts] = useState<any[]>([])
+  const [loading, setLoading]   = useState(true)
 
   useEffect(() => {
     setLoading(true)
-    const p =
-      tab === 'shop'    ? adminService.getShopRegistrations().then(r => setShops(r.data?.registrations || r.data || MOCK_SHOP_REGS)) :
-      tab === 'shipper' ? adminService.getShipperRegistrations().then(r => setShippers(r.data?.registrations || r.data || MOCK_SHIPPER_REGS)) :
-                          adminService.getPendingProducts().then(r => setProducts(r.data?.products || r.data || MOCK_PENDING_PRODUCTS))
-    p.catch(() => {}).finally(() => setLoading(false))
+    const setter = tab === 'shop' ? setShops : tab === 'shipper' ? setShippers : setProducts
+    const key    = tab === 'shop' ? 'registrations' : tab === 'shipper' ? 'registrations' : 'products'
+    const call   =
+      tab === 'shop'    ? adminService.getShopRegistrations() :
+      tab === 'shipper' ? adminService.getShipperRegistrations() :
+                          adminService.getPendingProducts()
+    call
+      .then(r => { const d = r.data?.[key] ?? r.data; if (Array.isArray(d)) setter(d) })
+      .catch(() => setter([]))
+      .finally(() => setLoading(false))
   }, [tab])
 
   const items = tab === 'shop' ? shops : tab === 'shipper' ? shippers : products

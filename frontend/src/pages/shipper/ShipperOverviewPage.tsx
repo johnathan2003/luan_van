@@ -11,16 +11,6 @@ const C = {
   success: '#16A34A', error: '#DC2626',
 }
 
-const MOCK_INFO = { rating: '4.8', total_deliveries: 312 }
-
-const MOCK_DELIVERIES = [
-  { shipment_id: 1, order_id: 2031, status: 'in_transit',   delivery_location: '12 Lê Lợi, Q1, HCM',         created_at: '2026-06-14T09:30:00' },
-  { shipment_id: 2, order_id: 2030, status: 'delivered',    delivery_location: '88 Nguyễn Huệ, Q1, HCM',     created_at: '2026-06-14T08:15:00' },
-  { shipment_id: 3, order_id: 2028, status: 'delivered',    delivery_location: '5 Phạm Ngũ Lão, Q1, HCM',    created_at: '2026-06-13T16:00:00' },
-  { shipment_id: 4, order_id: 2025, status: 'pending',      delivery_location: '100 Trần Hưng Đạo, Q5, HCM', created_at: '2026-06-13T10:45:00' },
-  { shipment_id: 5, order_id: 2022, status: 'delivered',    delivery_location: '32 Võ Thị Sáu, Q3, HCM',     created_at: '2026-06-12T14:20:00' },
-]
-
 const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }> = {
   pending:    { label: 'Chờ lấy',   color: C.blue,    bg: '#DBEAFE' },
   in_transit: { label: 'Đang giao', color: C.amber,   bg: C.light   },
@@ -29,8 +19,9 @@ const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }>
 }
 
 const ShipperOverviewPage: React.FC = () => {
-  const [info, setInfo]             = useState<any>(MOCK_INFO)
-  const [deliveries, setDeliveries] = useState<any[]>(MOCK_DELIVERIES)
+  const [info, setInfo]             = useState<any>(null)
+  const [deliveries, setDeliveries] = useState<any[]>([])
+  const [loading, setLoading]       = useState(true)
 
   useEffect(() => {
     Promise.all([
@@ -38,9 +29,10 @@ const ShipperOverviewPage: React.FC = () => {
       shipmentService.getMyDeliveries({ limit: 5 }),
     ]).then(([r, d]) => {
       if (r.data) setInfo(r.data)
-      const list = d.data?.deliveries || d.data
-      if (Array.isArray(list) && list.length > 0) setDeliveries(list)
-    }).catch(() => {/* keep mock */})
+      const list = d.data?.deliveries ?? d.data
+      if (Array.isArray(list)) setDeliveries(list)
+    }).catch(() => {})
+    .finally(() => setLoading(false))
   }, [])
 
   const todayDone    = deliveries.filter(d => d.status === 'delivered').length
@@ -74,8 +66,8 @@ const ShipperOverviewPage: React.FC = () => {
         {[
           { to: '/shipper/deliveries', icon: '📦', label: 'Đơn giao hàng',     desc: `${todayPending} đơn chờ giao`,  color: C.blue    },
           { to: '/shipper/earnings',   icon: '💰', label: 'Thu nhập',           desc: 'Xem chi tiết giao dịch',        color: C.amber   },
-          { to: '/shipper/withdrawal', icon: '🏦', label: 'Rút tiền',           desc: 'Số dư: 875.000₫',              color: C.success },
-          { to: '/shipper/benefits',   icon: '🎁', label: 'Phúc lợi & Thưởng', desc: 'Cấp độ: Vàng 🥇',              color: C.gold    },
+          { to: '/shipper/withdrawal', icon: '🏦', label: 'Rút tiền',           desc: 'Xem số dư & rút tiền',         color: C.success },
+          { to: '/shipper/benefits',   icon: '🎁', label: 'Phúc lợi & Thưởng', desc: 'Xem cấp bậc & phúc lợi',       color: C.gold    },
         ].map(item => (
           <Link key={item.to} to={item.to} style={{ textDecoration: 'none' }}>
             <div style={{ background: 'var(--bg-card)', borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', display: 'flex', gap: 14, alignItems: 'center' }}
@@ -100,13 +92,19 @@ const ShipperOverviewPage: React.FC = () => {
           <Link to="/shipper/deliveries" style={{ fontSize: 13, color: C.amber, fontWeight: 600, textDecoration: 'none' }}>Xem tất cả →</Link>
         </div>
         <div>
-          {deliveries.map((d: any) => {
+          {loading ? (
+            <div style={{ padding: 24, textAlign: 'center', color: C.gray, fontSize: 13 }}>Đang tải...</div>
+          ) : deliveries.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: C.gray, fontSize: 13 }}>Chưa có đơn giao nào</div>
+          ) : deliveries.map((d: any) => {
             const st = STATUS_STYLE[d.status] ?? STATUS_STYLE.pending
             return (
               <div key={d.shipment_id} style={{ padding: '14px 20px', borderBottom: `1px solid ${C.tint}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <p style={{ fontWeight: 600, fontSize: 14, color: C.navy, margin: 0 }}>Đơn #{d.order_id}</p>
-                  <p style={{ fontSize: 12, color: C.gray, marginTop: 2 }}>📍 {d.delivery_location} · {d.created_at?.slice(11, 16)}</p>
+                  <p style={{ fontSize: 12, color: C.gray, marginTop: 2 }}>
+                    {d.delivery_location ? `📍 ${d.delivery_location} · ` : ''}{d.created_at?.slice(11, 16)}
+                  </p>
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: st.bg, color: st.color }}>{st.label}</span>
               </div>

@@ -5,7 +5,6 @@ import Loading from '../../components/common/Loading'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { fetchOrders } from '../../store/slices/orderSlice'
 import { orderService } from '../../services/orderService'
-import { MOCK_ORDERS } from '../../mocks/mockOrders'
 import SuggestedDealsSection from '../../components/common/SuggestedDealsSection'
 import DisputeFormModal, { DisputeTargetOption } from '../../components/dispute/DisputeFormModal'
 import type { Order } from '../../types/order'
@@ -29,10 +28,7 @@ const OrderHistoryPage: React.FC = () => {
 
   useEffect(() => { dispatch(fetchOrders({ order_status: tab || undefined })) }, [tab, dispatch])
 
-  // Khi chua co don hang thuc (backend rong hoac chua dang nhap that), dung du lieu demo de test UI theo doi don hang
-  const showDemo = !loading && orders.length === 0
-  const demoOrders = tab ? MOCK_ORDERS.filter(o => o.order_status === tab) : MOCK_ORDERS
-  const displayOrders = showDemo ? demoOrders : orders
+  const displayOrders = orders
 
   const handleCancel = async (id: number) => {
     if (!confirm('Hủy đơn hàng này?')) return
@@ -58,18 +54,20 @@ const OrderHistoryPage: React.FC = () => {
             </button>
           ))}
         </div>
-        {showDemo && (
-          <div style={{ background: 'var(--bg-highlight, #fff7ed)', border: '1px solid #fed7aa', borderRadius: 'var(--radius)', padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#b45309' }}>
-            ⚠️ Chưa có đơn hàng thực — đang hiển thị <strong>dữ liệu demo</strong> để xem thử giao diện theo dõi hành trình đơn hàng.
-          </div>
-        )}
         {loading ? <Loading /> : displayOrders.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--gray-400)' }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>📦</div>
-            <p>Không có đơn hàng nào</p>
+            <p style={{ fontWeight: 600, marginBottom: 8 }}>
+              {tab ? 'Không có đơn hàng nào trong mục này' : 'Bạn chưa có đơn hàng nào'}
+            </p>
+            {!tab && (
+              <a href="/products" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 600, fontSize: 14 }}>
+                Mua sắm ngay →
+              </a>
+            )}
           </div>
         ) : (
-          displayOrders.map(o => <OrderCard key={o.order_id} order={o} onCancel={showDemo ? undefined : handleCancel} onConfirmReceived={showDemo ? undefined : handleConfirmReceived} onComplain={setComplainOrder} />)
+          displayOrders.map(o => <OrderCard key={o.order_id} order={o} onCancel={handleCancel} onConfirmReceived={handleConfirmReceived} onComplain={setComplainOrder} />)
         )}
 
         <SuggestedDealsSection />

@@ -22,38 +22,7 @@ const ALL_PERMISSIONS = [
 
 const PERM_GROUPS = ['Đơn hàng', 'Hỗ trợ KH', 'Sản phẩm', 'Khác']
 
-// Nhân viên mẫu khớp với seed.py
-const MOCK_EMPLOYEES = [
-  {
-    employee_id: 1,
-    employee_name: 'Nguyễn Thị Đơn Hàng',
-    employee_email: 'emp_orders@example.com',
-    position: 'Nhân viên xử lý đơn hàng',
-    status: 'active',
-    hired_date: '2026-01-10',
-    permissions: ['order:read', 'order:confirm', 'order:cancel'],
-  },
-  {
-    employee_id: 2,
-    employee_name: 'Lê Văn Phản Hồi',
-    employee_email: 'emp_feedback@example.com',
-    position: 'Nhân viên xử lý phản hồi khách',
-    status: 'active',
-    hired_date: '2026-02-15',
-    permissions: ['message:read', 'message:send', 'order:read'],
-  },
-  {
-    employee_id: 3,
-    employee_name: 'Phạm Thị Tư Vấn',
-    employee_email: 'emp_chat@example.com',
-    position: 'Nhân viên tư vấn trực tuyến',
-    status: 'active',
-    hired_date: '2026-03-01',
-    permissions: ['message:read', 'message:send'],
-  },
-]
-
-const EMPTY_FORM = { employee_email: '', employee_name: '', position: '' }
+const EMPTY_FORM = { employee_email: '', employee_name: '', position: '', password: '' }
 
 const PermBadge: React.FC<{ code: string }> = ({ code }) => {
   const p = ALL_PERMISSIONS.find(x => x.code === code)
@@ -69,46 +38,63 @@ const PermBadge: React.FC<{ code: string }> = ({ code }) => {
 }
 
 const EmployeeManagement: React.FC = () => {
-  const [employees, setEmployees] = useState<any[]>(MOCK_EMPLOYEES)
+  const [employees, setEmployees] = useState<any[]>([])
   const [loading, setLoading]     = useState(false)
   const [showAdd, setShowAdd]     = useState(false)
   const [permTarget, setPermTarget] = useState<any | null>(null)
   const [form, setForm]           = useState({ ...EMPTY_FORM })
   const [perms, setPerms]         = useState<string[]>([])
   const [search, setSearch]       = useState('')
+  const [credential, setCredential] = useState<{ email: string; password: string } | null>(null)
 
   useEffect(() => {
     setLoading(true)
     shopService.getEmployees()
       .then((res: any) => {
-        const data = res.data?.employees || res.data
-        if (Array.isArray(data) && data.length > 0) setEmployees(data)
+        const data = res.data?.employees ?? res.data
+        if (Array.isArray(data)) setEmployees(data)
       })
-      .catch(() => {/* keep mock */})
+      .catch(() => setEmployees([]))
       .finally(() => setLoading(false))
   }, [])
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.employee_email || !form.employee_name) return alert('Vui lòng điền đầy đủ thông tin')
-    const newEmp = {
-      employee_id: Date.now(),
-      employee_name: form.employee_name,
-      employee_email: form.employee_email,
-      position: form.position,
-      status: 'active',
-      hired_date: new Date().toISOString().slice(0, 10),
-      permissions: [],
+    try {
+      const res = await shopService.addEmployee({
+        employee_email: form.employee_email,
+        employee_name:  form.employee_name,
+        position:       form.position,
+        password:       form.password || undefined,
+        permissions:    [],
+      })
+      const data = res.data
+      setForm({ ...EMPTY_FORM })
+      setShowAdd(false)
+      // Refresh danh sách từ API để có đúng employee_id + data thật
+      shopService.getEmployees().then((r: any) => {
+        const list = r.data?.employees ?? r.data
+        if (Array.isArray(list)) setEmployees(list)
+      }).catch(() => {})
+      // Hiển thị credential nếu backend trả về
+      if (data.login_password) {
+        setCredential({ email: data.login_email, password: data.login_password })
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Lỗi thêm nhân viên')
     }
-    setEmployees(es => [...es, newEmp])
-    shopService.addEmployee({ ...form, permissions: [] }).catch(() => {})
-    setForm({ ...EMPTY_FORM })
-    setShowAdd(false)
   }
 
-  const handleRemove = (id: number) => {
+  const handleRemove = async (id: number) => {
     if (!confirm('Xóa nhân viên này khỏi shop?')) return
+    const prev = employees
     setEmployees(es => es.filter(e => e.employee_id !== id))
-    shopService.removeEmployee(id).catch(() => {})
+    try {
+      await shopService.removeEmployee(id)
+    } catch (err: any) {
+      setEmployees(prev)
+      alert(err.response?.data?.detail || 'Lỗi xóa nhân viên')
+    }
   }
 
   const openPerms = (emp: any) => {
@@ -207,7 +193,7 @@ const EmployeeManagement: React.FC = () => {
                   </span>
                 </div>
                 <p style={{ fontSize: 12, color: C.gray, marginBottom: 8 }}>
-                  {emp.employee_email} · {emp.position || 'Chưa có chức vụ'} · Vào: {emp.hired_date}
+                  {[emp.employee_email, emp.position || 'Chưa có chức vụ', emp.hired_date ? `Vào: ${emp.hired_date}` : ''].filter(Boolean).join(' · ')}
                 </p>
 
                 {/* Permission badges */}
@@ -251,9 +237,9 @@ const EmployeeManagement: React.FC = () => {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {[
-                { key: 'employee_name',  label: 'Họ và tên *',  type: 'text',  placeholder: 'VD: Nguyễn Văn A' },
-                { key: 'employee_email', label: 'Email *',       type: 'email', placeholder: 'VD: nhanvien@gmail.com' },
-                { key: 'position',       label: 'Chức vụ',       type: 'text',  placeholder: 'VD: Nhân viên bán hàng' },
+                { key: 'employee_name',  label: 'Họ và tên *',  type: 'text',     placeholder: 'VD: Nguyễn Văn A' },
+                { key: 'employee_email', label: 'Email đăng nhập *', type: 'email', placeholder: 'VD: nhanvien@gmail.com' },
+                { key: 'position',       label: 'Chức vụ',       type: 'text',     placeholder: 'VD: Nhân viên bán hàng' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: C.gray, display: 'block', marginBottom: 5 }}>{f.label}</label>
@@ -266,14 +252,64 @@ const EmployeeManagement: React.FC = () => {
                   />
                 </div>
               ))}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: C.gray, display: 'block', marginBottom: 5 }}>
+                  Mật khẩu <span style={{ fontWeight: 400, color: C.gray }}>(để trống → tự tạo ngẫu nhiên)</span>
+                </label>
+                <input
+                  type="text"
+                  value={form.password}
+                  placeholder="VD: NhanVien@2025"
+                  onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                  style={{ width: '100%', padding: '9px 12px', border: `1px solid ${C.light}`, borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace' }}
+                />
+              </div>
               <p style={{ fontSize: 12, color: C.gray, background: C.tint, padding: '8px 12px', borderRadius: 8, margin: 0 }}>
-                💡 Sau khi thêm, vào "Phân quyền" để cấp quyền cho nhân viên này.
+                🔑 Mật khẩu sẽ hiển thị <strong>1 lần</strong> sau khi tạo — lưu lại ngay để giao cho nhân viên.
               </p>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
               <button onClick={() => setShowAdd(false)} style={{ flex: 1, padding: 10, background: C.tint, color: C.gray, border: 'none', borderRadius: 9, fontWeight: 600, cursor: 'pointer' }}>Hủy</button>
               <button onClick={handleAdd} style={{ flex: 2, padding: 10, background: C.blue, color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, cursor: 'pointer' }}>Thêm nhân viên</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Credential Modal — hiện 1 lần sau khi tạo nhân viên */}
+      {credential && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="card" style={{ width: 420, padding: 28, border: `2px solid ${C.warning}` }}>
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>🔐</div>
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: C.navy, margin: 0 }}>Thông tin đăng nhập nhân viên</h2>
+              <p style={{ fontSize: 12, color: C.error, marginTop: 6, fontWeight: 600 }}>
+                ⚠️ Lưu lại ngay — thông tin này chỉ hiện 1 lần!
+              </p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[
+                { label: 'Email đăng nhập', value: credential.email },
+                { label: 'Mật khẩu',        value: credential.password },
+              ].map(row => (
+                <div key={row.label} style={{ background: C.tint, borderRadius: 8, padding: '10px 14px' }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: C.gray, margin: '0 0 4px' }}>{row.label}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <code style={{ flex: 1, fontSize: 15, fontWeight: 700, color: C.navy, wordBreak: 'break-all' }}>{row.value}</code>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(row.value)}
+                      style={{ padding: '4px 10px', background: C.light, color: C.blue, border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setCredential(null)}
+              style={{ width: '100%', marginTop: 18, padding: 11, background: C.blue, color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              ✅ Đã lưu, đóng lại
+            </button>
           </div>
         </div>
       )}

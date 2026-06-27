@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useNotifications } from '../../hooks/useNotifications'
 import { formatDate } from '../../utils/formatters'
 
@@ -6,6 +7,7 @@ const NotificationCenter: React.FC = () => {
   const [open, setOpen] = useState(false)
   const { notifications, unread_count, read, readAll } = useNotifications()
   const ref = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -59,21 +61,33 @@ const NotificationCenter: React.FC = () => {
             ) : notifications.map(n => (
               <div
                 key={n.notification_id}
-                onClick={() => read(n.notification_id)}
+                onClick={() => {
+                  read(n.notification_id)
+                  if (n.action_url) {
+                    setOpen(false)
+                    navigate(n.action_url)
+                  }
+                }}
                 style={{
-                  padding: '12px 16px', borderBottom: '1px solid var(--gray-100)', cursor: 'pointer',
-                  background: n.is_read ? 'white' : '#fff8f7',
+                  padding: '12px 16px', borderBottom: '1px solid var(--gray-100)',
+                  cursor: n.action_url ? 'pointer' : 'default',
+                  background: n.is_read ? 'white' : '#EFF6FF',
                   transition: 'background var(--transition)',
                 }}
+                onMouseEnter={e => { if (n.action_url) (e.currentTarget as HTMLDivElement).style.background = n.is_read ? '#F8FAFC' : '#DBEAFE' }}
+                onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = n.is_read ? 'white' : '#EFF6FF'}
               >
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                   {!n.is_read && (
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)', flexShrink: 0, marginTop: 6 }} />
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2563EB', flexShrink: 0, marginTop: 6 }} />
                   )}
                   <div style={{ flex: 1 }}>
                     <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--gray-800)', marginBottom: 2 }}>{n.title}</p>
-                    <p style={{ fontSize: 13, color: 'var(--gray-600)', lineHeight: 1.4 }}>{n.message}</p>
-                    <p style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 4 }}>{formatDate(n.created_at)}</p>
+                    <p style={{ fontSize: 12, color: 'var(--gray-600)', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{n.message}</p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                      <p style={{ fontSize: 11, color: 'var(--gray-400)' }}>{formatDate(n.created_at)}</p>
+                      {n.action_url && <span style={{ fontSize: 11, color: '#2563EB', fontWeight: 600 }}>Xem chi tiết →</span>}
+                    </div>
                   </div>
                 </div>
               </div>

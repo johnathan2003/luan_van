@@ -16,6 +16,16 @@ const ShopOverviewPage: React.FC = () => {
   const [analytics, setAnalytics] = useState<any>(null)
   const [orders, setOrders]   = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [mallMsg, setMallMsg] = useState('')
+
+  const requestMall = async () => {
+    try {
+      const r = await fetch('/api/v1/shop/me/request-mall', { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` } })
+      const d = await r.json()
+      setMallMsg(d.message ?? d.detail ?? 'Đã gửi yêu cầu')
+      if (r.ok) setShop((s: any) => ({ ...s, mall_request_status: 'pending' }))
+    } catch { setMallMsg('Lỗi kết nối') }
+  }
 
   const sentDisputes = user ? getDisputesByComplainant('shop', user.user_id) : []
   const receivedDisputes = user ? getDisputesByTarget('shop', user.user_id) : []
@@ -44,12 +54,21 @@ const ShopOverviewPage: React.FC = () => {
           <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>{shop?.shop_name}</h1>
           <p style={{ color: 'var(--gray-500)', fontSize: 14 }}>📍 {shop?.address}</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {shop?.shop_id && (
             <Link to={`/shops/${shop.shop_id}`} className="btn btn-outline">
               🏪 Xem trang shop
             </Link>
           )}
+          {/* Nút đăng ký Mall */}
+          {shop?.is_mall ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', background: 'linear-gradient(135deg, #7C3AED, #4F46E5)', color: '#fff', borderRadius: 20, fontWeight: 700, fontSize: 13 }}>🏆 BuyZo Mall</span>
+          ) : shop?.mall_request_status === 'pending' ? (
+            <span style={{ padding: '7px 14px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 20, fontSize: 13, color: 'var(--text-secondary)' }}>⏳ Đang chờ duyệt Mall</span>
+          ) : (
+            <button onClick={requestMall} style={{ padding: '7px 16px', background: 'linear-gradient(135deg, #7C3AED, #4F46E5)', color: '#fff', border: 'none', borderRadius: 20, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>🏆 Đăng ký BuyZo Mall</button>
+          )}
+          {mallMsg && <span style={{ fontSize: 13, color: 'var(--text-secondary)', alignSelf: 'center' }}>{mallMsg}</span>}
           <Link to="/shop/products" className="btn btn-primary">+ Thêm sản phẩm</Link>
         </div>
       </div>

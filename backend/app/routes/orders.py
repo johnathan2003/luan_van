@@ -82,37 +82,63 @@ def get_my_orders(
 
 @router.get("/{order_id}")
 def get_order(order_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.models.shop import Shop
     order = get_order_by_id(db, order_id)
+
+    # Shipper info
+    shipper_info = None
+    if order.shipper_id and order.shipment and order.shipment.shipper:
+        sh = order.shipment.shipper
+        shipper_info = {
+            "shipper_id":    sh.shipper_id,
+            "name":          sh.user.full_name if sh.user else f"Shipper #{sh.shipper_id}",
+            "phone":         sh.user.phone if sh.user else None,
+            "vehicle_type":  sh.vehicle_type,
+            "license_plate": sh.license_plate,
+            "rating":        str(sh.rating or "0.00"),
+        }
+
+    # Shop info (pickup location)
+    shop = db.query(Shop).filter(Shop.shop_id == order.shop_id).first()
+
     return {
-        "order_id": order.order_id,
-        "user_id": order.user_id,
-        "shop_id": order.shop_id,
-        "shipper_id": order.shipper_id,
-        "total_price": order.total_price,
-        "discount": order.discount,
-        "final_price": order.final_price,
+        "order_id":       order.order_id,
+        "order_number":   order.order_number,
+        "user_id":        order.user_id,
+        "shop_id":        order.shop_id,
+        "shop_name":      shop.shop_name if shop else None,
+        "shop_address":   shop.address if shop else None,
+        "shipper_id":     order.shipper_id,
+        "shipper_info":   shipper_info,
+        "total_price":    str(order.total_price or 0),
+        "discount":       str(order.discount_amount or 0),
+        "final_price":    str(order.final_price or 0),
         "payment_method": order.payment_method,
         "payment_status": order.payment_status,
-        "order_status": order.order_status,
-        "shipping_address": order.shipping_address,
-        "recipient_name": order.recipient_name,
-        "recipient_phone": order.recipient_phone,
-        "note": order.note,
-        "created_at": str(order.created_at),
+        "order_status":   order.order_status,
+        "shipping_address":  order.shipping_address,
+        "recipient_name":    order.recipient_name,
+        "recipient_phone":   order.recipient_phone,
+        "note":           order.notes,
+        "created_at":     str(order.created_at),
         "items": [
             {
-                "product_id": i.product_id,
-                "product_name": i.product_name,
+                "order_item_id": i.order_item_id,
+                "product_id":    i.product_id,
+                "product_name":  i.product_name,
                 "product_image": i.product_image,
-                "quantity": i.quantity,
-                "price_at_order": i.price_at_order,
+                "quantity":      i.quantity,
+                "price_at_order": str(i.price_at_order),
             }
             for i in order.items
         ],
         "shipment": {
-            "shipment_id": order.shipment.shipment_id,
-            "status": order.shipment.status,
-            "current_location": order.shipment.current_location,
+            "shipment_id":       order.shipment.shipment_id,
+            "status":            order.shipment.status,
+            "pickup_location":   order.shipment.pickup_location,
+            "delivery_location": order.shipment.delivery_location,
+            "current_location":  order.shipment.current_location,
+            "shipper_id":        order.shipment.shipper_id,
         } if order.shipment else None,
     }
 
@@ -126,14 +152,89 @@ def cancel(order_id: int, current_user: User = Depends(get_current_user), db: Se
 @router.post("/{order_id}/confirm")
 def confirm(order_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     order = confirm_order(db, order_id, current_user.user_id)
-    create_notification(db, order.user_id, "Đơn hàng được xác nhận", f"Đơn hàng #{order_id} đã được xác nhận", "order_confirmed", "order", order_id)
+    create_notification(
+        db, order.user_id,
+        title="✅ Đơn hàng đã được xác nhận",
+        message=f"Shop đã xác nhận đơn {order.order_number or f'#{order_id}'}. Chúng tôi đang chuẩn bị hàng cho bạn.",
+        notif_type="order_confirmed",
+        related_entity_type="order",
+        related_entity_id=order_id,
+        action_url=f"/orders/{order_id}",
+    )
     return {"message": "Order confirmed", "order_id": order.order_id, "status": order.order_status}
 
 
 @router.post("/{order_id}/ready-to-ship")
 def ready_to_ship(order_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from sqlalchemy import func as sqlfunc
+    from app.models.shipment import Shipment, Shipper
+    from app.models.shop import Shop
+
     order = mark_ready_to_ship(db, order_id, current_user.user_id)
-    return {"message": "Order ready to ship", "order_id": order.order_id, "status": order.order_status}
+
+    # Auto-assign shipper (giống employee endpoint)
+    shop = db.query(Shop).filter(Shop.shop_id == order.shop_id).first()
+    pickup_loc = shop.address if shop else f"Shop #{order.shop_id}"
+    shipper = (
+        db.query(Shipper)
+        .filter(Shipper.status == "available")
+        .order_by(sqlfunc.random())
+        .first()
+    )
+    shipper_assigned = False
+    if shipper:
+        shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
+        if not shipment:
+            shipment = Shipment(
+                order_id=order_id, shipper_id=shipper.shipper_id,
+                pickup_location=pickup_loc,
+                delivery_location=order.shipping_address or "",
+                status="assigned",
+            )
+            db.add(shipment)
+        else:
+            shipment.shipper_id = shipper.shipper_id
+            shipment.pickup_location = pickup_loc
+            shipment.delivery_location = order.shipping_address or ""
+            shipment.status = "assigned"
+        order.shipper_id = shipper.shipper_id
+        shipper.status = "on_delivery"
+        db.commit()
+        shipper_assigned = True
+        try:
+            items_summary = ", ".join(f"{i.product_name} x{i.quantity}" for i in order.items)
+            create_notification(
+                db, shipper.shipper_id,
+                title="📦 Đơn hàng mới cần lấy",
+                message=f"Đơn {order.order_number} · {items_summary}\n📦 Lấy tại: {pickup_loc}\n📍 Giao đến: {order.shipping_address} ({order.recipient_name} - {order.recipient_phone})",
+                notif_type="order",
+                related_entity_type="order",
+                related_entity_id=order_id,
+                action_url="/shipper/deliveries",
+            )
+        except Exception:
+            pass
+
+    # Notify customer
+    try:
+        create_notification(
+            db, order.user_id,
+            title="📦 Hàng đã được đóng gói xong",
+            message=f"Đơn {order.order_number or f'#{order_id}'} đã được đóng gói và đang chờ shipper tới lấy.",
+            notif_type="order",
+            related_entity_type="order",
+            related_entity_id=order_id,
+            action_url=f"/orders/{order_id}",
+        )
+    except Exception:
+        pass
+
+    return {
+        "message": "Order ready to ship",
+        "order_id": order.order_id,
+        "status": order.order_status,
+        "shipper_assigned": shipper_assigned,
+    }
 
 
 @router.post("/{order_id}/confirm-received")
