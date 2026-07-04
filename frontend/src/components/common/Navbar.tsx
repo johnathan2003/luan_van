@@ -410,25 +410,6 @@ const Navbar: React.FC = () => {
                       </span>
                     </div>
 
-                    {/* ── Role-switcher nhanh (chỉ hiện khi có > 1 role) ── */}
-                    {availableRoles.length > 1 && (
-                      <div style={{ padding: '8px 12px', display: 'flex', gap: 6, flexWrap: 'wrap', borderBottom: '1px solid var(--border-subtle)' }}>
-                        {availableRoles.map(r => {
-                          const meta = ROLE_META[r.role_name] || { icon: '👤', color: '#888', label: r.role_name }
-                          const active = r.role_name === currentRole
-                          return (
-                            <button key={r.role_name} onClick={() => { goTo(r.role_name) }}
-                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20,
-                                fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none',
-                                background: active ? meta.color : 'var(--bg-highlight, #f3f4f6)',
-                                color: active ? '#fff' : 'var(--text-primary)', transition: 'all 0.15s' }}>
-                              {meta.icon} {meta.label}
-                              {active && <span style={{ fontSize: 9, opacity: 0.8 }}>✓</span>}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
 
                     {/* ── Menu theo current_role ── */}
 

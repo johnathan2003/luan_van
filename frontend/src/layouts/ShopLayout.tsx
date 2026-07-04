@@ -1,30 +1,20 @@
 /**
  * ShopLayout — dùng cho tất cả trang của Shop Owner / Shop Employee
- * Gồm: Navbar + Sidebar quản lý shop + nội dung
- *
- * Dùng cho:
- *  - /shop (Dashboard)
- *  - /shop/products
- *  - /shop/orders
- *  - /shop/employees
- *  - /shop/analytics
- *  - /shop/vouchers
  */
 import React, { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import Navbar from '../components/common/Navbar'
 import { shopService } from '../services/shopService'
 
-
-
 const SHOP_NAV = [
-  { icon: '📊', label: 'Tổng quan',    path: '/shop' },
-  { icon: '🏷️', label: 'Sản phẩm',   path: '/shop/products' },
-  { icon: '📦', label: 'Đơn hàng',    path: '/shop/orders' },
-  { icon: '💬', label: 'Tin nhắn',    path: '/shop/chat' },
-  { icon: '👥', label: 'Nhân viên',   path: '/shop/employees' },
-  { icon: '📈', label: 'Thống kê',    path: '/shop/analytics' },
-  { icon: '🎫', label: 'Voucher',     path: '/shop/vouchers' },
+  { icon: '\u{1F4CA}', label: 'Tổng quan',    path: '/shop' },
+  { icon: '\u{1F3F7}️', label: 'Sản phẩm',   path: '/shop/products' },
+  { icon: '\u{1F4E6}', label: 'Đơn hàng',    path: '/shop/orders' },
+  { icon: '\u{1F4AC}', label: 'Tin nhắn',    path: '/shop/chat' },
+  { icon: '\u{1F465}', label: 'Nhân viên',   path: '/shop/employees' },
+  { icon: '\u{1F4C8}', label: 'Thống kê',    path: '/shop/analytics' },
+  { icon: '\u{1F3AB}', label: 'Voucher',     path: '/shop/vouchers' },
+  { icon: '\u{1F3C6}', label: 'Đấu giá QC',  path: '/shop/auction' },
   { icon: '⚠️', label: 'Khiếu nại',   path: '/complaints' },
 ]
 
@@ -40,22 +30,18 @@ const ShopSidebar: React.FC = () => {
   return (
     <aside style={{ width: 220, flexShrink: 0 }}>
       <div className="card" style={{ overflow: 'hidden', position: 'sticky', top: 80 }}>
-        {/* Shop header */}
         <div style={{
           background: 'linear-gradient(135deg, #14532D 0%, #16A34A 100%)',
-
           padding: '16px 20px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏪</div>
+            <div style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{'\u{1F3EA}'}</div>
             <div>
               <p style={{ color: 'white', fontWeight: 700, fontSize: 13, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shopName}</p>
               <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11 }}>Quản lý shop</p>
             </div>
           </div>
         </div>
-
-        {/* Nav */}
         <nav style={{ padding: '8px 0' }}>
           {SHOP_NAV.map(item => (
             <NavLink

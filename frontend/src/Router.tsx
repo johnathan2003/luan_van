@@ -39,6 +39,9 @@ import AnalyticsPage            from './pages/shop/AnalyticsPage'
 import VoucherManagementPage    from './pages/shop/VoucherManagementPage'
 import VoucherCenterPage        from './pages/VoucherCenterPage'
 
+import BannerAuctionPage         from './pages/shop/BannerAuctionPage'
+import AuctionManagementPage     from './pages/admin/AuctionManagementPage'
+
 // ── ⚙️ Admin pages ────────────────────────────────────────────────────────────
 import AdminOverviewPage        from './pages/admin/AdminOverviewPage'
 import UserManagementPage       from './pages/admin/UserManagementPage'
@@ -121,6 +124,7 @@ const Router: React.FC = () => (
       <Route path="/shop/employees"    element={inShop(<EmployeeManagementPage />)} />
       <Route path="/shop/analytics"    element={inShop(<AnalyticsPage />)} />
       <Route path="/shop/vouchers"     element={inShop(<VoucherManagementPage />)} />
+      <Route path="/shop/auction"      element={inShop(<BannerAuctionPage />)} />
       <Route path="/shop/chat"         element={inShop(<ShopChatPage />)} />
     </Route>
 
@@ -154,6 +158,7 @@ const Router: React.FC = () => (
       <Route path="/admin/reports"            element={inAdmin(<ReportsPage />)} />
       <Route path="/admin/feedback"           element={inAdmin(<FeedbackPage />)} />
       <Route path="/admin/logs"               element={inAdmin(<AuditLogsPage />)} />
+      <Route path="/admin/auction"            element={inAdmin(<AuctionManagementPage />)} />
     </Route>
 
     {/* ── 👷 Employee (nhân viên shop) ────────────────────────────────────── */}
