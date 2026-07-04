@@ -62,6 +62,7 @@ import ShippingConfigPage       from './pages/admin/ShippingConfigPage'
 import MallRequestsPage         from './pages/admin/MallRequestsPage'
 import ReportsPage              from './pages/admin/ReportsPage'
 import FeedbackPage             from './pages/admin/FeedbackPage'
+import ImageLibraryPage         from './pages/admin/ImageLibraryPage'
 
 // ── ⚡ Superadmin (nằm ngoài hệ thống, không ghi log) ────────────────────────
 import SuperRouter from '@super/SuperRouter'
@@ -159,6 +160,7 @@ const Router: React.FC = () => (
       <Route path="/admin/feedback"           element={inAdmin(<FeedbackPage />)} />
       <Route path="/admin/logs"               element={inAdmin(<AuditLogsPage />)} />
       <Route path="/admin/auction"            element={inAdmin(<AuctionManagementPage />)} />
+      <Route path="/admin/images"             element={inAdmin(<ImageLibraryPage />)} />
     </Route>
 
     {/* ── 👷 Employee (nhân viên shop) ────────────────────────────────────── */}

@@ -5,6 +5,7 @@ import { useTheme } from '../../hooks/useTheme'
 import { useAppSelector } from '../../store/hooks'
 import NotificationCenter from './NotificationCenter'
 import { formatCurrency } from '../../utils/formatters'
+import { getImageUrl } from '../../utils/helpers'
 
 const ROLE_META: Record<string, { icon: string; color: string; label: string }> = {
   admin:    { icon: '⚙️', color: '#1D4ED8', label: 'Admin' },
@@ -391,8 +392,10 @@ const Navbar: React.FC = () => {
                   color: 'var(--text-on-topbar)', fontWeight: 700, fontSize: 14,
                   transition: 'all 0.2s ease', position: 'relative', zIndex: 3,
                 }}>
-                  <span style={{ width: BTN - 6, height: BTN - 6, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
-                    {user?.full_name?.[0]?.toUpperCase() || '?'}
+                  <span style={{ width: BTN - 6, height: BTN - 6, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0, overflow: 'hidden' }}>
+                    {user?.avatar_url
+                      ? <img src={getImageUrl(user.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : (user?.full_name?.[0]?.toUpperCase() || '?')}
                   </span>
                   <span style={{ fontSize: 10, opacity: 0.8, display: 'inline-block', transform: radialOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease' }}>▾</span>
                 </button>

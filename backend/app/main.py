@@ -23,9 +23,10 @@ from app.websocket.connection_manager import sio, init_main_loop
 # Docker: super/backend/ được mount tại /app/super/ → import as package 'super'
 try:
     from super.router import super_router  # noqa: E402
-except ImportError:
+except Exception:  # noqa: BLE001
     super_router = None
-    logger.warning("super module không tìm thấy — /super/* endpoints bị tắt")
+    # logger chưa được khởi tạo ở đây — dùng print để tránh NameError
+    print("[WARNING] super module không tìm thấy — /api/super/* endpoints bị tắt")
 
 
 def setup_logging():

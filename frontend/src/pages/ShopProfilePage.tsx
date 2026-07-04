@@ -7,7 +7,7 @@ import { toast } from 'react-toastify'
 import API from '../services/api'
 import { trackMissionEvent } from '../utils/eventsStore'
 import { voucherService } from '../services/voucherService'
-import { isFollowingShop, toggleFollowShop } from '../utils/shopFollowStore'
+import { toggleFollowShop, isFollowingShop } from '../utils/followStore'
 import SuggestedDealsSection from '../components/common/SuggestedDealsSection'
 
 const C = {
@@ -346,7 +346,7 @@ const EditorModal: React.FC<EditorModalProps> = ({ type, onConfirm, onClose }) =
 // ─── Main page ────────────────────────────────────────────────────────────────
 const ShopProfilePage: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>()
-  const { currentRole, isAuthenticated } = useAuth()
+  const { currentRole, isAuthenticated, user } = useAuth()
   const navigate = useNavigate()
   const isShopOwner = currentRole === 'shop'
 
@@ -376,9 +376,9 @@ const ShopProfilePage: React.FC = () => {
   }, [shopId])
 
   useEffect(() => {
-    if (!shopId) return
-    setFollowing(isFollowingShop(Number(shopId)))
-  }, [shopId])
+    if (!shopId || !user?.email) return
+    setFollowing(isFollowingShop(user.email, Number(shopId)))
+  }, [shopId, user?.email])
 
   // Lay 1 voucher rieng cua shop nay (neu co) de hien thi dang ve voucher
   useEffect(() => {
@@ -393,14 +393,17 @@ const ShopProfilePage: React.FC = () => {
   }, [shop?.shop_name])
 
   const handleToggleFollow = async () => {
-    if (!shopId) return
-    const { following: nowFollowing, justFollowed } = toggleFollowShop(Number(shopId))
+    if (!shopId || !user?.email) return
+    const { following: nowFollowing, justFollowed } = toggleFollowShop(
+      user.email,
+      Number(shopId),
+      { shopName: shop?.shop_name || `Shop #${shopId}`, avatarUrl: shop?.avatar_url || '' }
+    )
     setFollowing(nowFollowing)
     setFollowerDelta(d => d + (nowFollowing ? 1 : -1))
 
     if (justFollowed) {
       toast.success(`Đã theo dõi ${shop?.shop_name || 'shop'}!`)
-      // Theo doi xong -> nguoi dung bam nut "Nhan" rieng tren ve voucher de thu thap, khong tu dong nhan
     } else {
       toast.info(`Đã bỏ theo dõi ${shop?.shop_name || 'shop'}`)
     }

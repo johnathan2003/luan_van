@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../utils/formatters'
 import { voucherService } from '../../services/voucherService'
 import { getXu, spendXu, grantPostPurchaseGifts, type PostPurchaseGift } from '../../utils/eventsStore'
@@ -119,11 +120,22 @@ const inputStyle = (err?: boolean): React.CSSProperties => ({
 const labelStyle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 5, display: 'block' }
 const errStyle:   React.CSSProperties = { fontSize: 12, color: '#EF4444', marginTop: 4 }
 
+// ─── loadExtra helper (reads profile localStorage) ───────────────────────────
+const loadExtra = (email: string) => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(`buyzo_profile_extra_${email}`) || '{}')
+    return {
+      addresses: Array.isArray(raw.addresses) ? raw.addresses as string[] : [],
+    }
+  } catch { return { addresses: [] } }
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const CheckoutPage: React.FC = () => {
   const navigate  = useNavigate()
   const location  = useLocation()
   const dispatch  = useAppDispatch()
+  const { user }  = useAuth()
 
   // Nhận cart items từ CartPage qua navigate state
   const cartItems = (location.state as any)?.cartItems as Array<{
@@ -148,6 +160,28 @@ const CheckoutPage: React.FC = () => {
   const [step,   setStep]   = useState(0)   // 0=address 1=confirm 2=done
   const [form,   setForm]   = useState<AddressForm>(EMPTY_FORM)
   const [errors, setErrors] = useState<Partial<AddressForm>>({})
+
+  // ─── Saved addresses from profile ────────────────────────────────────────────
+  const [savedAddresses,    setSavedAddresses]    = useState<string[]>([])
+  const [selectedAddrIdx,   setSelectedAddrIdx]   = useState<number | null>(null)
+  const [showAddForm,       setShowAddForm]        = useState(false)
+  const [editContact,       setEditContact]        = useState(false)
+
+  // Load saved addresses + pre-fill name/phone from user
+  useEffect(() => {
+    const extra = user?.email ? loadExtra(user.email) : { addresses: [] }
+    const addrs = extra.addresses.length > 0
+      ? extra.addresses
+      : (user?.address ? [user.address] : [])
+    setSavedAddresses(addrs)
+    if (addrs.length > 0) setSelectedAddrIdx(0)
+    else setShowAddForm(true)
+    setForm(f => ({
+      ...f,
+      name:  f.name  || user?.full_name  || '',
+      phone: f.phone || user?.phone      || '',
+    }))
+  }, [user?.email, user?.full_name, user?.phone, user?.address])
   const [payment, setPayment] = useState('cod')
 
   // ─── Provinces API state ──────────────────────────────────────────────────
@@ -240,10 +274,13 @@ const CheckoutPage: React.FC = () => {
     const e: Partial<AddressForm> = {}
     if (!form.name.trim())     e.name     = 'Vui long nhap ho va ten'
     if (!/^(0|\+84)[3-9]\d{8}$/.test(form.phone.trim())) e.phone = 'So dien thoai khong hop le'
-    if (!form.province)        e.province = 'Vui long chon tinh/thanh'
-    if (!form.district)        e.district = 'Vui long chon quan/huyen'
-    if (!form.ward)            e.ward     = 'Vui long chon phuong/xa'
-    if (!form.street.trim())   e.street   = 'Vui long nhap dia chi cu the'
+    // Nếu đã chọn địa chỉ từ hồ sơ, không cần validate province/district/ward/street
+    if (selectedAddrIdx === null) {
+      if (!form.province)      e.province = 'Vui long chon tinh/thanh'
+      if (!form.district)      e.district = 'Vui long chon quan/huyen'
+      if (!form.ward)          e.ward     = 'Vui long chon phuong/xa'
+      if (!form.street.trim()) e.street   = 'Vui long nhap dia chi cu the'
+    }
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -309,16 +346,18 @@ const CheckoutPage: React.FC = () => {
   const xuToApply    = useXu ? maxXuUsable : 0
   const grandTotal   = preXuTotal - xuToApply
 
-  const fullAddress = form.province
-    ? `${form.street}, ${form.ward}, ${form.district}, ${form.province}`
-    : ''
+  const fullAddress = selectedAddrIdx !== null && savedAddresses[selectedAddrIdx]
+    ? savedAddresses[selectedAddrIdx]
+    : form.province
+      ? `${form.street}, ${form.ward}, ${form.district}, ${form.province}`
+      : ''
 
   const handlePlaceOrder = async () => {
     setPlacing(true)
     setOrderError(null)
     try {
       // Build payload theo CheckoutData
-      const shippingAddress = `${form.street}, ${form.ward}, ${form.district}, ${form.province}`
+      const shippingAddress = fullAddress
       const selectedVoucherCode =
         platformSelected?.code ??
         shopBests[0]?.voucher.code ??
@@ -519,7 +558,7 @@ const CheckoutPage: React.FC = () => {
 
   return (
     <div className="page-wrapper" style={{ background: 'var(--bg-page)' }}>
-      <div className="container" style={{ paddingTop: 28, paddingBottom: 60, maxWidth: 960 }}>
+      <div className="container" style={{ paddingTop: 28, paddingBottom: 60, maxWidth: 1140 }}>
 
         {/* Breadcrumb */}
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -533,102 +572,225 @@ const CheckoutPage: React.FC = () => {
 
         {/* ─── STEP 0: ADDRESS FORM ─── */}
         {step === 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 20, alignItems: 'start' }}>
 
-            {/* Left: Form */}
+            {/* Left: Address selector + optional new-address form */}
             <div>
               <div className="card" style={{ padding: 28 }}>
                 <h2 style={{ fontWeight: 800, fontSize: 18, color: 'var(--text-primary)', marginBottom: 22, paddingBottom: 14, borderBottom: '1px solid var(--border-subtle)' }}>
-                  📍 Thong tin nhan hang
+                  📍 Thông tin nhận hàng
                 </h2>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 20px' }}>
-
-                  {/* Ho va ten */}
-                  <div style={{ gridColumn: '1 / 2' }}>
-                    <label style={labelStyle}>Ho va ten nguoi nhan <span style={{ color: '#EF4444' }}>*</span></label>
-                    <input
-                      value={form.name}
-                      onChange={e => set('name', e.target.value)}
-                      placeholder="VD: Nguyen Van An"
-                      style={inputStyle(!!errors.name)}
-                    />
-                    {errors.name && <p style={errStyle}>{errors.name}</p>}
+                {/* ── Thông tin liên hệ (card + edit toggle) ── */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <label style={labelStyle}>👤 Thông tin người nhận</label>
+                    <button
+                      onClick={() => setEditContact(v => !v)}
+                      style={{ background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+                    >
+                      <IEdit /> {editContact ? 'Xong' : 'Chỉnh sửa'}
+                    </button>
                   </div>
 
-                  {/* SDT */}
-                  <div style={{ gridColumn: '2 / 3' }}>
-                    <label style={labelStyle}>So dien thoai <span style={{ color: '#EF4444' }}>*</span></label>
-                    <input
-                      value={form.phone}
-                      onChange={e => set('phone', e.target.value)}
-                      placeholder="VD: 0901 234 567"
-                      maxLength={12}
-                      style={inputStyle(!!errors.phone)}
-                    />
-                    {errors.phone && <p style={errStyle}>{errors.phone}</p>}
-                  </div>
+                  {editContact ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px' }}>
+                      <div>
+                        <label style={labelStyle}>Họ và tên <span style={{ color: '#EF4444' }}>*</span></label>
+                        <input
+                          value={form.name}
+                          onChange={e => set('name', e.target.value)}
+                          placeholder="VD: Nguyễn Văn An"
+                          style={inputStyle(!!errors.name)}
+                        />
+                        {errors.name && <p style={errStyle}>{errors.name}</p>}
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Số điện thoại <span style={{ color: '#EF4444' }}>*</span></label>
+                        <input
+                          value={form.phone}
+                          onChange={e => set('phone', e.target.value)}
+                          placeholder="VD: 0901 234 567"
+                          maxLength={12}
+                          style={inputStyle(!!errors.phone)}
+                        />
+                        {errors.phone && <p style={errStyle}>{errors.phone}</p>}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '12px 16px', borderRadius: 10,
+                      border: '2px solid var(--primary, #7C3AED)',
+                      background: 'rgba(124,58,237,0.05)',
+                    }}>
+                      <div style={{
+                        width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+                        background: 'var(--primary, #7C3AED)', color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontWeight: 700, fontSize: 15,
+                      }}>
+                        {form.name?.[0]?.toUpperCase() || '?'}
+                      </div>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                          {form.name || 'Chưa có tên'}
+                        </p>
+                        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
+                          📞 {form.phone || 'Chưa có số điện thoại'}
+                        </p>
+                      </div>
+                      {(errors.name || errors.phone) && (
+                        <p style={{ ...errStyle, marginLeft: 'auto' }}>Vui lòng chỉnh sửa thông tin</p>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-                  {/* Tinh */}
-                  <div>
-                    <label style={labelStyle}>Tỉnh / Thành phố <span style={{ color: '#EF4444' }}>*</span></label>
-                    <select value={form.province} onChange={handleProvinceChange} style={{ ...inputStyle(!!errors.province), cursor: 'pointer' }}>
-                      <option value="">-- Chọn tỉnh/thành phố --</option>
-                      {provinces.map(p => <option key={p.code} value={p.name} data-code={p.code}>{p.name}</option>)}
-                    </select>
-                    {errors.province && <p style={errStyle}>{errors.province}</p>}
+                {/* ── Địa chỉ đã lưu ── */}
+                {savedAddresses.length > 0 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <label style={{ ...labelStyle, marginBottom: 12 }}>Địa chỉ giao hàng <span style={{ color: '#EF4444' }}>*</span></label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {savedAddresses.map((addr, i) => {
+                        const isSelected = selectedAddrIdx === i
+                        return (
+                          <div
+                            key={i}
+                            onClick={() => { setSelectedAddrIdx(i); setShowAddForm(false) }}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 12,
+                              padding: '12px 16px', borderRadius: 10, cursor: 'pointer',
+                              border: isSelected
+                                ? '2px solid var(--primary, #7C3AED)'
+                                : '1.5px solid var(--border-subtle)',
+                              background: isSelected
+                                ? 'rgba(124,58,237,0.05)'
+                                : 'var(--bg-surface, var(--bg-page))',
+                              transition: 'all 0.18s',
+                            }}
+                          >
+                            {/* Radio dot */}
+                            <div style={{
+                              width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                              border: isSelected ? '5px solid var(--primary, #7C3AED)' : '2px solid var(--border-subtle)',
+                              background: '#fff',
+                              transition: 'all 0.15s',
+                            }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontSize: 14, color: 'var(--text-primary)', margin: 0, fontWeight: isSelected ? 600 : 400 }}>
+                                📍 {addr}
+                              </p>
+                            </div>
+                            {isSelected && (
+                              <span style={{ fontSize: 12, color: 'var(--primary, #7C3AED)', fontWeight: 700, flexShrink: 0 }}>
+                                Đang chọn
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
+                )}
 
-                  {/* Quan */}
-                  <div>
-                    <label style={labelStyle}>Quận / Huyện <span style={{ color: '#EF4444' }}>*</span></label>
-                    <select value={form.district} onChange={handleDistrictChange} disabled={!form.province || geoLoading} style={{ ...inputStyle(!!errors.district), cursor: form.province ? 'pointer' : 'not-allowed', opacity: form.province ? 1 : 0.5 }}>
-                      <option value="">{geoLoading ? 'Đang tải...' : '-- Chọn quận/huyện --'}</option>
-                      {districts.map(d => <option key={d.code} value={d.name} data-code={d.code}>{d.name}</option>)}
-                    </select>
-                    {errors.district && <p style={errStyle}>{errors.district}</p>}
+                {/* ── Nút thêm địa chỉ mới ── */}
+                <button
+                  onClick={() => {
+                    setShowAddForm(v => !v)
+                    if (!showAddForm) setSelectedAddrIdx(null)
+                    else if (savedAddresses.length > 0) setSelectedAddrIdx(0)
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '9px 16px', borderRadius: 8, marginBottom: showAddForm ? 20 : 0,
+                    border: '1.5px dashed var(--primary, #7C3AED)',
+                    background: 'transparent', color: 'var(--primary, #7C3AED)',
+                    fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                  }}
+                >
+                  {showAddForm ? '✕ Huỷ thêm địa chỉ mới' : '➕ Thêm địa chỉ mới'}
+                </button>
+
+                {/* ── Form thêm địa chỉ mới (ẩn/hiện) ── */}
+                {showAddForm && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 20px', padding: '20px 0 0' }}>
+
+                    {/* Tinh */}
+                    <div>
+                      <label style={labelStyle}>Tỉnh / Thành phố <span style={{ color: '#EF4444' }}>*</span></label>
+                      <select value={form.province} onChange={handleProvinceChange} style={{ ...inputStyle(!!errors.province), cursor: 'pointer' }}>
+                        <option value="">-- Chọn tỉnh/thành phố --</option>
+                        {provinces.map(p => <option key={p.code} value={p.name} data-code={p.code}>{p.name}</option>)}
+                      </select>
+                      {errors.province && <p style={errStyle}>{errors.province}</p>}
+                    </div>
+
+                    {/* Quan */}
+                    <div>
+                      <label style={labelStyle}>Quận / Huyện <span style={{ color: '#EF4444' }}>*</span></label>
+                      <select value={form.district} onChange={handleDistrictChange} disabled={!form.province || geoLoading} style={{ ...inputStyle(!!errors.district), cursor: form.province ? 'pointer' : 'not-allowed', opacity: form.province ? 1 : 0.5 }}>
+                        <option value="">{geoLoading ? 'Đang tải...' : '-- Chọn quận/huyện --'}</option>
+                        {districts.map(d => <option key={d.code} value={d.name} data-code={d.code}>{d.name}</option>)}
+                      </select>
+                      {errors.district && <p style={errStyle}>{errors.district}</p>}
+                    </div>
+
+                    {/* Phuong */}
+                    <div>
+                      <label style={labelStyle}>Phường / Xã <span style={{ color: '#EF4444' }}>*</span></label>
+                      <select value={form.ward} onChange={handleWardChange} disabled={!form.district || geoLoading} style={{ ...inputStyle(!!errors.ward), cursor: form.district ? 'pointer' : 'not-allowed', opacity: form.district ? 1 : 0.5 }}>
+                        <option value="">{geoLoading ? 'Đang tải...' : '-- Chọn phường/xã --'}</option>
+                        {wards.map(w => <option key={w.code} value={w.name}>{w.name}</option>)}
+                      </select>
+                      {errors.ward && <p style={errStyle}>{errors.ward}</p>}
+                    </div>
+
+                    {/* So nha duong */}
+                    <div>
+                      <label style={labelStyle}>Số nhà, tên đường <span style={{ color: '#EF4444' }}>*</span></label>
+                      <input
+                        value={form.street}
+                        onChange={e => set('street', e.target.value)}
+                        placeholder="VD: 123 Nguyễn Trãi"
+                        style={inputStyle(!!errors.street)}
+                      />
+                      {errors.street && <p style={errStyle}>{errors.street}</p>}
+                    </div>
+
+                    {/* Ghi chu */}
+                    <div style={{ gridColumn: '1 / 3' }}>
+                      <label style={labelStyle}>Ghi chú (tuỳ chọn)</label>
+                      <textarea
+                        value={form.note}
+                        onChange={e => set('note', e.target.value)}
+                        placeholder="VD: Gọi trước khi đến, để trước cửa..."
+                        rows={3}
+                        style={{ ...inputStyle(), resize: 'vertical' }}
+                      />
+                    </div>
+
                   </div>
+                )}
 
-                  {/* Phuong */}
-                  <div>
-                    <label style={labelStyle}>Phường / Xã <span style={{ color: '#EF4444' }}>*</span></label>
-                    <select value={form.ward} onChange={handleWardChange} disabled={!form.district || geoLoading} style={{ ...inputStyle(!!errors.ward), cursor: form.district ? 'pointer' : 'not-allowed', opacity: form.district ? 1 : 0.5 }}>
-                      <option value="">{geoLoading ? 'Đang tải...' : '-- Chọn phường/xã --'}</option>
-                      {wards.map(w => <option key={w.code} value={w.name}>{w.name}</option>)}
-                    </select>
-                    {errors.ward && <p style={errStyle}>{errors.ward}</p>}
-                  </div>
-
-                  {/* So nha duong */}
-                  <div>
-                    <label style={labelStyle}>So nha, ten duong <span style={{ color: '#EF4444' }}>*</span></label>
-                    <input
-                      value={form.street}
-                      onChange={e => set('street', e.target.value)}
-                      placeholder="VD: 123 Nguyen Trai"
-                      style={inputStyle(!!errors.street)}
-                    />
-                    {errors.street && <p style={errStyle}>{errors.street}</p>}
-                  </div>
-
-                  {/* Ghi chu */}
-                  <div style={{ gridColumn: '1 / 3' }}>
-                    <label style={labelStyle}>Ghi chu (tuy chon)</label>
+                {/* Ghi chú khi dùng địa chỉ có sẵn */}
+                {!showAddForm && selectedAddrIdx !== null && (
+                  <div style={{ marginTop: 20 }}>
+                    <label style={labelStyle}>Ghi chú (tuỳ chọn)</label>
                     <textarea
                       value={form.note}
                       onChange={e => set('note', e.target.value)}
-                      placeholder="VD: Goi truoc khi den, de truoc cua..."
+                      placeholder="VD: Gọi trước khi đến, để trước cửa..."
                       rows={3}
                       style={{ ...inputStyle(), resize: 'vertical' }}
                     />
                   </div>
-
-                </div>
+                )}
 
                 {/* Navigation */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28, paddingTop: 20, borderTop: '1px solid var(--border-subtle)' }}>
                   <Link to="/cart" style={{ fontSize: 14, color: 'var(--text-secondary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    ← Quay lai gio hang
+                    ← Quay lại giỏ hàng
                   </Link>
                   <button
                     onClick={() => { if (validate()) setStep(1) }}
@@ -636,7 +798,7 @@ const CheckoutPage: React.FC = () => {
                     onMouseEnter={e => (e.currentTarget.style.opacity = '0.88')}
                     onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
                   >
-                    Tiep tuc →
+                    Tiếp tục →
                   </button>
                 </div>
               </div>
@@ -689,7 +851,7 @@ const CheckoutPage: React.FC = () => {
 
         {/* ─── STEP 1: CONFIRM + PAYMENT ─── */}
         {step === 1 && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 20, alignItems: 'start' }}>
 
             {/* Left */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

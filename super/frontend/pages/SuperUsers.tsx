@@ -42,6 +42,7 @@ const SuperUsers: React.FC = () => {
   const [users, setUsers]     = useState<UserData[]>([])
   const [total, setTotal]     = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState<string | null>(null)
   const [search, setSearch]   = useState('')
   const [status, setStatus]   = useState('all')
   const [page, setPage]       = useState(1)
@@ -57,11 +58,17 @@ const SuperUsers: React.FC = () => {
 
   const load = (s = status, q = search, p = page) => {
     setLoading(true)
+    setError(null)
     const params = new URLSearchParams({ page: String(p) })
     if (s !== 'all') params.set('status', s)
     if (q) params.set('search', q)
     superApi.get(`/users?${params}`)
       .then(r => { setUsers(r.data.users || []); setTotal(r.data.total || 0) })
+      .catch(err => {
+        const msg = err.response?.data?.detail || err.message || 'Lỗi không xác định'
+        setError(`❌ Lỗi tải users: ${msg} (status: ${err.response?.status ?? 'network'})`)
+        console.error('[SuperUsers] load error:', err.response?.data ?? err)
+      })
       .finally(() => setLoading(false))
   }
 
@@ -129,6 +136,13 @@ const SuperUsers: React.FC = () => {
           <button type="submit" style={{ padding: '7px 14px', background: S.red, color: '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Tìm</button>
         </form>
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div style={{ padding: '12px 16px', background: 'rgba(220,38,38,0.15)', border: '1px solid #7f1d1d', borderRadius: 9, color: '#fca5a5', fontSize: 13, fontFamily: 'monospace' }}>
+          {error}
+        </div>
+      )}
 
       {/* Table */}
       {loading
