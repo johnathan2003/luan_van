@@ -558,7 +558,7 @@ const CheckoutPage: React.FC = () => {
 
   return (
     <div className="page-wrapper" style={{ background: 'var(--bg-page)' }}>
-      <div className="container" style={{ paddingTop: 28, paddingBottom: 60, maxWidth: 1140 }}>
+      <div className="container" style={{ paddingTop: 28, paddingBottom: 60, maxWidth: 960 }}>
 
         {/* Breadcrumb */}
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -572,7 +572,7 @@ const CheckoutPage: React.FC = () => {
 
         {/* ─── STEP 0: ADDRESS FORM ─── */}
         {step === 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 20, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
 
             {/* Left: Address selector + optional new-address form */}
             <div>
@@ -851,7 +851,7 @@ const CheckoutPage: React.FC = () => {
 
         {/* ─── STEP 1: CONFIRM + PAYMENT ─── */}
         {step === 1 && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 20, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
 
             {/* Left */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

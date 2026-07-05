@@ -173,7 +173,7 @@ const BannerAdminPage: React.FC = () => {
           needReload = true
           // Thông báo hủy cho shop
           const name = (sub as BannerSubmission).title || (sub as FlashSubmission).productName
-          addNotificationFor('shop', 0, {
+          addNotificationFor('', 'shop', 0, {
             title: '❌ Banner bị hủy do không thanh toán',
             message: `"${name}" đã bị hủy vì shop không thanh toán phần còn lại trong thời hạn 30 phút. Tiền cọc 20% sẽ không được hoàn trả.`,
             type: 'payment_expired',
@@ -188,7 +188,7 @@ const BannerAdminPage: React.FC = () => {
           if (remainMin <= m && remainMin > m - 1 && !hasReminderSent(sub.id, m)) {
             markReminderSent(sub.id, m)
             const name = (sub as BannerSubmission).title || (sub as FlashSubmission).productName
-            addNotificationFor('shop', 0, {
+            addNotificationFor('', 'shop', 0, {
               title: `⏰ Còn ${m} phút để thanh toán!`,
               message: `Banner "${name}" sẽ bị hủy nếu chưa thanh toán phần còn lại trong ${m} phút. Vào Giao dịch của tôi để thanh toán ngay.`,
               type: 'payment_reminder',
@@ -203,7 +203,7 @@ const BannerAdminPage: React.FC = () => {
           if (!hasReminderSent(sub.id, key)) {
             markReminderSent(sub.id, key)
             const name = (sub as BannerSubmission).title || (sub as FlashSubmission).productName
-            addNotificationFor('shop', 0, {
+            addNotificationFor('', 'shop', 0, {
               title: `🚨 Khẩn cấp! Còn ${key} phút để thanh toán!`,
               message: `Chỉ còn ${key} phút — banner "${name}" sẽ bị hủy và mất cọc 20% nếu không thanh toán ngay!`,
               type: 'payment_reminder_urgent',
@@ -261,7 +261,7 @@ const BannerAdminPage: React.FC = () => {
       const posLabel = isBanner
         ? BANNER_POSITIONS.find(p => p.key === (sub as BannerSubmission).position)?.label
         : FLASH_SLOTS.find(s => s.key === (sub as FlashSubmission).slot)?.label
-      addNotificationFor('shop', 0, {
+      addNotificationFor('', 'shop', 0, {
         title: '✅ Banner của bạn đã được duyệt!',
         message: `${isBanner ? 'Banner' : 'Sản phẩm Flash Sale'} "${isBanner ? (sub as BannerSubmission).title : (sub as FlashSubmission).productName}" (${posLabel}) đã được duyệt. Vui lòng hoàn tất thanh toán để hiển thị trên trang chủ.`,
         type: 'banner_approved',
@@ -290,7 +290,7 @@ const BannerAdminPage: React.FC = () => {
       const posLabel = isBanner
         ? BANNER_POSITIONS.find(p => p.key === (sub as BannerSubmission).position)?.label
         : FLASH_SLOTS.find(s => s.key === (sub as FlashSubmission).slot)?.label
-      addNotificationFor('shop', 0, {
+      addNotificationFor('', 'shop', 0, {
         title: '❌ Banner của bạn bị từ chối',
         message: `${isBanner ? 'Banner' : 'Sản phẩm Flash Sale'} "${isBanner ? (sub as BannerSubmission).title : (sub as FlashSubmission).productName}" (${posLabel}) đã bị từ chối${reason ? ': ' + reason : ''}. Nhấn để xem chi tiết.`,
         type: 'banner_rejected',
@@ -449,7 +449,7 @@ const BannerAdminPage: React.FC = () => {
                 const name = (sub as BannerSubmission).title || (sub as FlashSubmission).productName
                 const remMs = countdowns[sub.id] ?? (new Date(sub.paymentDeadline!).getTime() - Date.now())
                 const remMin = Math.ceil(remMs / 60000)
-                addNotificationFor('shop', 0, {
+                addNotificationFor('', 'shop', 0, {
                   title: `⏰ Nhắc nhở: Còn ${remMin} phút thanh toán!`,
                   message: `Admin nhắc: Banner "${name}" cần thanh toán phần còn lại trong ${remMin} phút. Truy cập Giao dịch của tôi để thanh toán ngay.`,
                   type: 'payment_reminder',

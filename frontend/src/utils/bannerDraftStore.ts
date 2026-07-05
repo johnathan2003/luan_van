@@ -1,10 +1,14 @@
 // Lưu mẫu banner/flash sale mà shop chuẩn bị trước khi đấu giá
 // Khi thắng + đặt cọc → mẫu này tự động gửi lên Admin duyệt
+// FIX: mỗi shop (email) có vùng localStorage riêng biệt
 
 import type { BannerPositionKey } from './bannerAuctionStore'
 import type { FlashSlotKey } from './flashSaleAuctionStore'
 
-const KEY = 'buyzo_banner_draft_v1'
+let _email = ''
+/** Gọi khi shop đăng nhập để scope draft theo đúng tài khoản */
+export function setBannerDraftEmail(email: string) { _email = email }
+const storeKey = () => _email ? `buyzo_banner_draft_v1_${_email}` : 'buyzo_banner_draft_v1'
 
 export interface BannerDraft {
   position: BannerPositionKey
@@ -31,13 +35,13 @@ interface DraftStore {
 
 function read(): DraftStore {
   try {
-    const raw = localStorage.getItem(KEY)
+    const raw = localStorage.getItem(storeKey())
     const d = raw ? JSON.parse(raw) : {}
     return { banners: d.banners ?? {}, flash: d.flash ?? {} }
   } catch { return { banners: {}, flash: {} } }
 }
 function write(d: DraftStore) {
-  try { localStorage.setItem(KEY, JSON.stringify(d)) } catch {}
+  try { localStorage.setItem(storeKey(), JSON.stringify(d)) } catch {}
 }
 
 // ── Banner drafts ─────────────────────────────────────────────────────────────

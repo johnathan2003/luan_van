@@ -198,7 +198,7 @@ function rollIfExpired(data: StoreData, position: BannerPositionKey): BannerAuct
     if (winner && !hasWinNotified(ended.id)) {
       markWinNotified(ended.id)
       const posLabel = BANNER_POSITIONS.find(p => p.key === position)?.label ?? position
-      addNotificationFor('shop', 0, {
+      addNotificationFor('', 'shop', 0, {
         title: '🏆 Bạn đã thắng đấu giá!',
         message: `Shop "${winner.shopName}" thắng vị trí "${posLabel}" với ${winner.amount.toLocaleString('vi-VN')}đ. Đặt cọc trong 30 phút để giữ vị trí.`,
         type: 'auction_win',
@@ -326,7 +326,7 @@ export function payDeposit(historyId: string): boolean {
   // 🔔 Thông báo cọc thành công
   if (h.winner) {
     const posLabel = BANNER_POSITIONS.find(p => p.key === h.position)?.label ?? h.position
-    addNotificationFor('shop', 0, {
+    addNotificationFor('', 'shop', 0, {
       title: '✅ Đặt cọc thành công!',
       message: `Đã xác nhận cọc ${(h.depositAmount ?? 0).toLocaleString('vi-VN')}đ cho vị trí "${posLabel}". Banner của bạn sẽ được admin duyệt sớm.`,
       type: 'deposit_paid',

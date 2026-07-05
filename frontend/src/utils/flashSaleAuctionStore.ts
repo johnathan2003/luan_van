@@ -137,7 +137,7 @@ function rollIfExpired(data: StoreData, slot: FlashSlotKey): FlashAuctionSession
     if (winner && !hasFlashWinNotified(ended.id)) {
       markFlashWinNotified(ended.id)
       const slotLabel = FLASH_SLOTS.find(s => s.key === slot)?.label ?? slot
-      addNotificationFor('shop', 0, {
+      addNotificationFor('', 'shop', 0, {
         title: '⚡ Bạn đã thắng đấu giá Flash Sale!',
         message: `Shop "${winner.shopName}" thắng "${slotLabel}" với ${winner.amount.toLocaleString('vi-VN')}đ. Đặt cọc trong 30 phút để giữ vị trí.`,
         type: 'auction_win',
@@ -262,7 +262,7 @@ export function payDeposit(historyId: string): boolean {
   // 🔔 Thông báo cọc thành công
   if (h.winner) {
     const slotLabel = FLASH_SLOTS.find(s => s.key === h.slot)?.label ?? h.slot
-    addNotificationFor('shop', 0, {
+    addNotificationFor('', 'shop', 0, {
       title: '✅ Đặt cọc Flash Sale thành công!',
       message: `Đã xác nhận cọc ${(h.depositAmount ?? 0).toLocaleString('vi-VN')}đ cho "${slotLabel}". Sản phẩm của bạn sẽ được admin duyệt sớm.`,
       type: 'deposit_paid',
