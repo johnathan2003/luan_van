@@ -13,6 +13,7 @@
 import React, { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import Navbar from '../components/common/Navbar'
+import ChatbotWidget from '../components/common/ChatbotWidget'
 import { shopService } from '../services/shopService'
 
 
@@ -103,6 +104,7 @@ const ShopLayout: React.FC<Props> = ({ children }) => {
           {children}
         </main>
       </div>
+      <ChatbotWidget />
     </div>
   )
 }

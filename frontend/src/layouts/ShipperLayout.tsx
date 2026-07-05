@@ -12,6 +12,7 @@ import { NavLink } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import type { RootState } from '../store/store'
 import Navbar from '../components/common/Navbar'
+import ChatbotWidget from '../components/common/ChatbotWidget'
 import { shipmentService } from '../services/shipmentService'
 
 const SHIPPER_NAV = [
@@ -191,6 +192,7 @@ const ShipperLayout: React.FC<Props> = ({ children }) => {
           {children}
         </main>
       </div>
+      <ChatbotWidget />
     </div>
   )
 }

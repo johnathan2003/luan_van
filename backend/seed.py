@@ -365,59 +365,67 @@ def seed():
         db.commit()
         cats = {c.category_name: c for c in db.query(ProductCategory).all()}
 
+        def _imgs(slug: str, n: int = 3) -> list:
+            """Picsum.photos: consistent placeholder images per slug, no auth needed."""
+            base = "https://picsum.photos/seed"
+            return [f"{base}/{slug}-{i}/400/400" for i in range(1, n + 1)]
+
         # PRODUCTS — TechWorld Store (Dien tu)
         tech_products = [
-            ("Tai nghe Sony WH-1000XM5",  Decimal("8900000"), Decimal("6500000"), 25,  230, 4.9, "Chong on chu dong, pin 30h, ket noi Bluetooth 5.2. Am thanh Hi-Res."),
-            ("Cap USB-C 100W",             Decimal("150000"),  Decimal("50000"),  200,  890, 4.6, "Sac nhanh 100W, ho tro PD 3.0, dai 1.5m, boc nylon ben."),
-            ("Chuot gaming Logitech G502", Decimal("1350000"), Decimal("900000"),  40,  175, 4.8, "DPI 25600, 11 nut lap trinh, trong luong tuy chinh, RGB."),
-            ("Ban phim co Keychron K2",    Decimal("1890000"), Decimal("1200000"), 30,   88, 4.7, "Switch Gateron Brown, ket noi Bluetooth + USB-C, layout 75%."),
-            ("Man hinh LG 27inch 4K",      Decimal("9500000"), Decimal("7000000"), 12,   42, 4.8, "IPS 4K 144Hz, HDR600, USB-C 90W, thiet ke mong, vien khung nho."),
-            ("Webcam Logitech C920",       Decimal("1290000"), Decimal("850000"),  35,  120, 4.5, "Full HD 1080p 30fps, micro kep, tuong thich moi nen tang."),
-            ("Sac du phong 20000mAh",      Decimal("450000"),  Decimal("200000"), 120,  560, 4.4, "Sac nhanh 22.5W, 3 cong ra, LED bao pin, nho gon mang di."),
+            ("Tai nghe Sony WH-1000XM5",  Decimal("8900000"), Decimal("6500000"), 25,  230, 4.9, "Chong on chu dong, pin 30h, ket noi Bluetooth 5.2. Am thanh Hi-Res.",  _imgs("sony-wh1000xm5")),
+            ("Cap USB-C 100W",             Decimal("150000"),  Decimal("50000"),  200,  890, 4.6, "Sac nhanh 100W, ho tro PD 3.0, dai 1.5m, boc nylon ben.",             _imgs("usbc-cable-100w")),
+            ("Chuot gaming Logitech G502", Decimal("1350000"), Decimal("900000"),  40,  175, 4.8, "DPI 25600, 11 nut lap trinh, trong luong tuy chinh, RGB.",            _imgs("logitech-g502")),
+            ("Ban phim co Keychron K2",    Decimal("1890000"), Decimal("1200000"), 30,   88, 4.7, "Switch Gateron Brown, ket noi Bluetooth + USB-C, layout 75%.",        _imgs("keychron-k2")),
+            ("Man hinh LG 27inch 4K",      Decimal("9500000"), Decimal("7000000"), 12,   42, 4.8, "IPS 4K 144Hz, HDR600, USB-C 90W, thiet ke mong, vien khung nho.",   _imgs("lg-monitor-27-4k")),
+            ("Webcam Logitech C920",       Decimal("1290000"), Decimal("850000"),  35,  120, 4.5, "Full HD 1080p 30fps, micro kep, tuong thich moi nen tang.",           _imgs("logitech-c920")),
+            ("Sac du phong 20000mAh",      Decimal("450000"),  Decimal("200000"), 120,  560, 4.4, "Sac nhanh 22.5W, 3 cong ra, LED bao pin, nho gon mang di.",          _imgs("powerbank-20000")),
         ]
         prods = []
-        for pname, price, cost, stock, sold, rat, desc in tech_products:
+        for pname, price, cost, stock, sold, rat, desc, imgs in tech_products:
             p, _ = upsert(db, Product,
                 {"shop_id": shop.shop_id, "product_name": pname},
                 category_id=cats["Dien tu"].category_id,
                 price=price, cost=cost, stock_quantity=stock,
                 sales_count=sold, rating=str(rat), total_reviews=int(sold // 4),
-                description=desc, status="active", approved_at=now - timedelta(days=20))
+                description=desc, image_urls=imgs,
+                status="active", approved_at=now - timedelta(days=20))
             prods.append(p)
 
         # PRODUCTS — Fashion Hub (Thoi trang)
         fashion_products = [
-            ("Ao thun Oversize Unisex",    Decimal("280000"),  Decimal("110000"), 150,  780, 4.6, "Vai cotton 100%, form rong thoai mai, nhieu mau sac, size S-3XL."),
-            ("Quan jeans skinny nam",      Decimal("450000"),  Decimal("200000"),  80,  345, 4.5, "Denim cao cap, co gian 4 chieu, wash nhe, form om vua."),
-            ("Dam midi hoa tiet nu",       Decimal("380000"),  Decimal("150000"),  60,  210, 4.7, "Vai chiffon mem, in hoa 3D, dai midi, phu hop di choi di lam."),
-            ("Ao so mi lin trang nam",     Decimal("320000"),  Decimal("130000"),  90,  430, 4.4, "Lin khong nhan, slim fit, co button-down, phu hop cong so."),
-            ("Giay sneaker trang basic",   Decimal("750000"),  Decimal("380000"),  50,  198, 4.6, "De EVA chong trot, chat lieu mesh thoang khi, phong cach toi gian."),
-            ("Tui tote vai canvas",        Decimal("180000"),  Decimal("70000"),  200,  670, 4.3, "Vai canvas day, qua in sac net, quy deo vai, dung tich lon."),
+            ("Ao thun Oversize Unisex",    Decimal("280000"),  Decimal("110000"), 150,  780, 4.6, "Vai cotton 100%, form rong thoai mai, nhieu mau sac, size S-3XL.", _imgs("oversize-tshirt")),
+            ("Quan jeans skinny nam",      Decimal("450000"),  Decimal("200000"),  80,  345, 4.5, "Denim cao cap, co gian 4 chieu, wash nhe, form om vua.",          _imgs("skinny-jeans")),
+            ("Dam midi hoa tiet nu",       Decimal("380000"),  Decimal("150000"),  60,  210, 4.7, "Vai chiffon mem, in hoa 3D, dai midi, phu hop di choi di lam.",   _imgs("midi-floral-dress")),
+            ("Ao so mi lin trang nam",     Decimal("320000"),  Decimal("130000"),  90,  430, 4.4, "Lin khong nhan, slim fit, co button-down, phu hop cong so.",      _imgs("white-linen-shirt")),
+            ("Giay sneaker trang basic",   Decimal("750000"),  Decimal("380000"),  50,  198, 4.6, "De EVA chong trot, chat lieu mesh thoang khi, phong cach toi gian.", _imgs("white-sneaker")),
+            ("Tui tote vai canvas",        Decimal("180000"),  Decimal("70000"),  200,  670, 4.3, "Vai canvas day, qua in sac net, quy deo vai, dung tich lon.",     _imgs("canvas-tote-bag")),
         ]
-        for pname, price, cost, stock, sold, rat, desc in fashion_products:
+        for pname, price, cost, stock, sold, rat, desc, imgs in fashion_products:
             p, _ = upsert(db, Product,
                 {"shop_id": shop2.shop_id, "product_name": pname},
                 category_id=cats["Thoi trang"].category_id,
                 price=price, cost=cost, stock_quantity=stock,
                 sales_count=sold, rating=str(rat), total_reviews=int(sold // 4),
-                description=desc, status="active", approved_at=now - timedelta(days=15))
+                description=desc, image_urls=imgs,
+                status="active", approved_at=now - timedelta(days=15))
             prods.append(p)
 
         # PRODUCTS — Book Corner (Sach + khac)
         book_products = [
-            ("Clean Code - Robert Martin",     Decimal("320000"), Decimal("180000"),  40,  156, 4.9, "Sach lap trinh kinh dien ve viet code sach, de bao tri va mo rong."),
-            ("Atomic Habits - James Clear",    Decimal("198000"), Decimal("100000"),  80,  890, 4.8, "Phuong phap xay dung thoi quen tot, loai bo thoi quen xau hieu qua."),
-            ("Dac Nhan Tam",                   Decimal("88000"),  Decimal("40000"),  200, 1250, 4.7, "Sach ky nang giao tiep ban chay nhat moi thoi cua Dale Carnegie."),
-            ("The Psychology of Money",        Decimal("175000"), Decimal("90000"),   60,  340, 4.8, "Cach suy nghi ve tien bac va dau tu duoi goc nhin tam ly hoc."),
-            ("Sapiens: Luoc su loai nguoi",    Decimal("185000"), Decimal("95000"),   70,  520, 4.6, "Hanh trinh 70000 nam cua loai nguoi tu thoi do da den ky nguyen so."),
+            ("Clean Code - Robert Martin",     Decimal("320000"), Decimal("180000"),  40,  156, 4.9, "Sach lap trinh kinh dien ve viet code sach, de bao tri va mo rong.", _imgs("book-clean-code")),
+            ("Atomic Habits - James Clear",    Decimal("198000"), Decimal("100000"),  80,  890, 4.8, "Phuong phap xay dung thoi quen tot, loai bo thoi quen xau hieu qua.", _imgs("book-atomic-habits")),
+            ("Dac Nhan Tam",                   Decimal("88000"),  Decimal("40000"),  200, 1250, 4.7, "Sach ky nang giao tiep ban chay nhat moi thoi cua Dale Carnegie.",    _imgs("book-dac-nhan-tam")),
+            ("The Psychology of Money",        Decimal("175000"), Decimal("90000"),   60,  340, 4.8, "Cach suy nghi ve tien bac va dau tu duoi goc nhin tam ly hoc.",       _imgs("book-psych-money")),
+            ("Sapiens: Luoc su loai nguoi",    Decimal("185000"), Decimal("95000"),   70,  520, 4.6, "Hanh trinh 70000 nam cua loai nguoi tu thoi do da den ky nguyen so.", _imgs("book-sapiens")),
         ]
-        for pname, price, cost, stock, sold, rat, desc in book_products:
+        for pname, price, cost, stock, sold, rat, desc, imgs in book_products:
             p, _ = upsert(db, Product,
                 {"shop_id": shop3.shop_id, "product_name": pname},
                 category_id=cats["Sach"].category_id,
                 price=price, cost=cost, stock_quantity=stock,
                 sales_count=sold, rating=str(rat), total_reviews=int(sold // 4),
-                description=desc, status="active", approved_at=now - timedelta(days=10))
+                description=desc, image_urls=imgs,
+                status="active", approved_at=now - timedelta(days=10))
             prods.append(p)
         db.commit()
 

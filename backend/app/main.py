@@ -15,7 +15,7 @@ from app.middleware.error_handler import add_exception_handlers
 from app.middleware.logging import RequestLoggingMiddleware
 from app.routes import (
     auth, users, products, carts, orders,
-    payments, shipments, shops, admin, notifications, vouchers, chat, employee,
+    payments, shipments, shops, admin, notifications, vouchers, chat, employee, bot,
 )
 from app.websocket.connection_manager import sio, init_main_loop
 
@@ -25,7 +25,6 @@ try:
     from super.router import super_router  # noqa: E402
 except ImportError:
     super_router = None
-    logger.warning("super module không tìm thấy — /super/* endpoints bị tắt")
 
 
 def setup_logging():
@@ -116,6 +115,7 @@ app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["
 app.include_router(vouchers.router,      prefix="/api/v1/vouchers",      tags=["Vouchers"])
 app.include_router(chat.router,          prefix="/api/v1/chat",           tags=["Chat"])
 app.include_router(employee.router,      prefix="/api/v1/employee",       tags=["Employee"])
+app.include_router(bot.router,           prefix="/api/v1/bot",            tags=["Chatbot"])
 
 # Superadmin — chỉ mount nếu module tồn tại
 if super_router:

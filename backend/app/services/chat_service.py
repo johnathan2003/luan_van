@@ -127,12 +127,16 @@ def send_message(
     image_url: Optional[str] = None,
 ) -> MessageOut:
     """Lưu tin nhắn mới, cập nhật cache conversation."""
+    import datetime
+    now = datetime.datetime.utcnow()
+
     msg = Message(
         conversation_id = conversation_id,
         sender_id       = sender_id,
         sender_role     = sender_role,
         content         = content,
         image_url       = image_url,
+        created_at      = now,          # set explicit để tránh None trước commit
     )
     db.add(msg)
 
@@ -140,7 +144,7 @@ def send_message(
     conv = db.query(Conversation).filter_by(conversation_id=conversation_id).first()
     if conv:
         conv.last_message    = content[:200]
-        conv.last_message_at = msg.created_at
+        conv.last_message_at = now      # dùng biến now thay vì msg.created_at (còn None khi server_default)
         if sender_role == "user":
             conv.unread_by_shop += 1
         else:

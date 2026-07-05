@@ -35,11 +35,15 @@ const ShopChatPage: React.FC = () => {
   const [hasMore, setHasMore]             = useState(false)
   const [input, setInput]                 = useState('')
   const [sending, setSending]             = useState(false)
+  const [sendError, setSendError]         = useState<string | null>(null)
   const [loadingConvs, setLoadingConvs]   = useState(true)
   const [loadingMsgs, setLoadingMsgs]     = useState(false)
   const [search, setSearch]               = useState('')
 
-  const bottomRef  = useRef<HTMLDivElement>(null)
+  const bottomRef             = useRef<HTMLDivElement>(null)
+  const messagesWrapRef       = useRef<HTMLDivElement>(null)
+  const prevMsgLen            = useRef(0)
+  const savedScrollFromBottom = useRef<number | null>(null)
   const activeConv = conversations.find(c => c.conversation_id === activeConvId)
   const uid        = currentUser?.user_id ?? 0
 
@@ -107,6 +111,8 @@ const ShopChatPage: React.FC = () => {
   // ── Load messages ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!activeConvId) return
+    prevMsgLen.current = 0
+    savedScrollFromBottom.current = null
     setMessages([])
     setHasMore(false)
     setLoadingMsgs(true)
@@ -120,13 +126,27 @@ const ShopChatPage: React.FC = () => {
     )
   }, [activeConvId])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  useEffect(() => {
+    if (messages.length === 0) return
+    const el = messagesWrapRef.current
+    if (!el) return
+    if (prevMsgLen.current === 0) {
+      el.scrollTop = el.scrollHeight
+    } else if (savedScrollFromBottom.current !== null) {
+      el.scrollTop = el.scrollHeight - savedScrollFromBottom.current
+      savedScrollFromBottom.current = null
+    } else {
+      el.scrollTop = el.scrollHeight
+    }
+    prevMsgLen.current = messages.length
+  }, [messages])
 
   // ── Gửi tin nhắn ─────────────────────────────────────────────────────────
   const handleSend = async () => {
     if (!input.trim() || !activeConvId || sending) return
     const text = input.trim()
     setInput('')
+    setSendError(null)
     setSending(true)
     try {
       const res = await chatService.sendMessage(activeConvId, text)
@@ -140,7 +160,11 @@ const ShopChatPage: React.FC = () => {
             : c
         )
       )
-    } catch { setInput(text) } finally { setSending(false) }
+    } catch (e: any) {
+      setInput(text) // hoàn lại text để shop thử lại
+      const msg = e?.response?.data?.detail || 'Gửi tin nhắn thất bại, thử lại'
+      setSendError(msg)
+    } finally { setSending(false) }
   }
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -230,10 +254,12 @@ const ShopChatPage: React.FC = () => {
             </div>
 
             {/* Messages */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column' }}>
+            <div ref={messagesWrapRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column' }}>
               {hasMore && (
                 <button
                   onClick={() => {
+                    const el = messagesWrapRef.current
+                    if (el) savedScrollFromBottom.current = el.scrollHeight - el.scrollTop
                     const firstId = messages[0]?.message_id
                     chatService.getMessages(activeConvId!, firstId)
                       .then(r => { setMessages(prev => [...r.data.messages, ...prev]); setHasMore(r.data.has_more) })
@@ -280,22 +306,30 @@ const ShopChatPage: React.FC = () => {
             </div>
 
             {/* Input */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--gray-200)', background: 'white' }}>
-              <textarea
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKey}
-                placeholder="Trả lời khách hàng... (Enter để gửi)"
-                rows={1}
-                style={{ flex: 1, resize: 'none', border: '1px solid var(--gray-300)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', fontSize: 14, fontFamily: 'inherit', outline: 'none', maxHeight: 120, overflowY: 'auto' }}
-              />
-              <button
-                onClick={handleSend}
-                disabled={!input.trim() || sending}
-                style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--primary)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: (!input.trim() || sending) ? 0.5 : 1, transition: 'opacity var(--transition)' }}
-              >
-                {sending ? '...' : '➤'}
-              </button>
+            <div style={{ borderTop: '1px solid var(--gray-200)', background: 'white' }}>
+              {sendError && (
+                <div style={{ padding: '6px 16px', background: '#FEF2F2', fontSize: 12, color: '#DC2626', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>⚠️ {sendError}</span>
+                  <button onClick={() => setSendError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontWeight: 700 }}>✕</button>
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '12px 16px' }}>
+                <textarea
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={handleKey}
+                  placeholder="Trả lời khách hàng... (Enter để gửi)"
+                  rows={1}
+                  style={{ flex: 1, resize: 'none', border: '1px solid var(--gray-300)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', fontSize: 14, fontFamily: 'inherit', outline: 'none', maxHeight: 120, overflowY: 'auto' }}
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim() || sending}
+                  style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--primary)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: (!input.trim() || sending) ? 0.5 : 1, transition: 'opacity var(--transition)' }}
+                >
+                  {sending ? '...' : '➤'}
+                </button>
+              </div>
             </div>
           </>
         )}

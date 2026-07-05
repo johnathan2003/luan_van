@@ -16,6 +16,8 @@ class User(Base):
     address = Column(Text)
     avatar_url = Column(String(500))
     status = Column(Enum("active", "inactive", "banned"), default="active", index=True)
+    agreed_to_terms = Column(Boolean, default=False, nullable=False)   # bắt buộc đồng ý khi đăng ký
+    data_consent    = Column(Boolean, default=False, nullable=False)   # đồng ý thu thập hành vi (chatbot)
     last_login = Column(DateTime)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     UPLOAD_FOLDER: str = "uploads"
     MAX_FILE_SIZE: int = 10485760  # 10MB
 
+    # Google Gemini (Chatbot)
+    GEMINI_API_KEY: str = ""
+
+    # Cloudinary (ưu tiên cao nhất khi được cấu hình)
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
     # Redis
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379

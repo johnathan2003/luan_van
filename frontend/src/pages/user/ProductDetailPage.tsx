@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Loading from '../../components/common/Loading'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
@@ -26,6 +26,32 @@ const ProductDetailPage: React.FC = () => {
   const [qty, setQty] = useState(1)
   const [imgIdx, setImgIdx] = useState(0)
   const [addedMsg, setAddedMsg] = useState(false)
+
+  // Zoom lens
+  const imgContainerRef = useRef<HTMLDivElement>(null)
+  const [zoom, setZoom] = useState<{ show: boolean; x: number; y: number; bgX: number; bgY: number }>({
+    show: false, x: 0, y: 0, bgX: 0, bgY: 0,
+  })
+  const ZOOM_SCALE = 4    // phóng to 4x
+  const LENS_SIZE  = 200  // kích thước lens vuông (px)
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const el = imgContainerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const rawX = e.clientX - rect.left
+    const rawY = e.clientY - rect.top
+    // Clamp lens tâm trong phạm vi ảnh
+    const halfLens = LENS_SIZE / 2
+    const clampedX = Math.max(halfLens, Math.min(rect.width  - halfLens, rawX))
+    const clampedY = Math.max(halfLens, Math.min(rect.height - halfLens, rawY))
+    // Vị trí background trong lens
+    const bgX = -(clampedX * ZOOM_SCALE - halfLens)
+    const bgY = -(clampedY * ZOOM_SCALE - halfLens)
+    setZoom({ show: true, x: clampedX - halfLens, y: clampedY - halfLens, bgX, bgY })
+  }, [])
+
+  const handleMouseLeave = useCallback(() => setZoom(z => ({ ...z, show: false })), [])
 
   useEffect(() => {
     if (id) dispatch(fetchProductById(Number(id)))
@@ -84,20 +110,54 @@ const ProductDetailPage: React.FC = () => {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, alignItems: 'start' }}>
 
-          {/* Images */}
+          {/* Images + Zoom lens */}
           <div>
-            <div style={{
-              borderRadius: 16, overflow: 'hidden', marginBottom: 12,
-              aspectRatio: '1', background: 'var(--gray-100)',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.10)',
-            }}>
-              <img src={getImageUrl(images[imgIdx])} alt={product.product_name}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {/* Main image container */}
+            <div
+              ref={imgContainerRef}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+              style={{
+                borderRadius: 16, overflow: 'hidden', marginBottom: 12,
+                aspectRatio: '1', background: 'var(--gray-100)',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.10)',
+                position: 'relative', cursor: 'crosshair',
+                userSelect: 'none',
+              }}
+            >
+              <img
+                src={getImageUrl(images[imgIdx])}
+                alt={product.product_name}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                draggable={false}
+              />
+
+              {/* Zoom lens overlay */}
+              {zoom.show && (
+                <div style={{
+                  position: 'absolute',
+                  left: zoom.x,
+                  top: zoom.y,
+                  width: LENS_SIZE,
+                  height: LENS_SIZE,
+                  borderRadius: 6,
+                  border: '2px solid rgba(255,255,255,0.8)',
+                  boxShadow: '0 0 0 1px rgba(0,0,0,0.2), 0 4px 16px rgba(0,0,0,0.25)',
+                  backgroundImage: `url(${getImageUrl(images[imgIdx])})`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundSize: `${imgContainerRef.current!.offsetWidth * ZOOM_SCALE}px ${imgContainerRef.current!.offsetHeight * ZOOM_SCALE}px`,
+                  backgroundPosition: `${zoom.bgX}px ${zoom.bgY}px`,
+                  pointerEvents: 'none',
+                  zIndex: 10,
+                }} />
+              )}
             </div>
+
+            {/* Thumbnail strip */}
             {images.length > 1 && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {images.map((img, i) => (
-                  <img key={i} src={getImageUrl(img)} alt="" onClick={() => setImgIdx(i)}
+                  <img key={i} src={getImageUrl(img)} alt="" onClick={() => { setImgIdx(i); setZoom(z => ({ ...z, show: false })) }}
                     style={{
                       width: 72, height: 72, objectFit: 'cover', borderRadius: 10,
                       cursor: 'pointer',

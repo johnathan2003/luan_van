@@ -60,6 +60,18 @@ def list_categories(db: Session = Depends(get_db)):
 @router.get("/{product_id}")
 def get_product(product_id: int, db: Session = Depends(get_db)):
     product = get_product_by_id(db, product_id)
+    # Tăng view count (fire-and-forget style, không fail request nếu lỗi)
+    try:
+        from app.models.product import Product as ProductModel
+        from sqlalchemy import update as sa_update
+        db.execute(
+            sa_update(ProductModel)
+            .where(ProductModel.product_id == product_id)
+            .values(views_count=ProductModel.views_count + 1)
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
     shop = product.shop if hasattr(product, 'shop') else None
     return {
         "product_id": product.product_id,

@@ -17,9 +17,13 @@ export interface Dispute {
   complainant_type: DisputeComplainantType
   complainant_id: number
   complainant_name: string
+  /** Email người khiếu nại — để route thông báo đúng tài khoản */
+  complainant_email?: string
   target_type: DisputeTargetType
   target_id?: number
   target_name: string
+  /** Email bên bị khiếu nại — để route thông báo đúng tài khoản */
+  target_email?: string
   reason_code: string
   reason_label: string
   content: string
@@ -78,5 +82,5 @@ export const DISPUTE_STATUS_COLORS: Record<DisputeStatus, string> = {
 export const DISPUTE_TARGET_LABELS: Record<DisputeTargetType, string> = {
   shop: 'Shop',
   shipper: 'Shipper',
-  user: 'Người mua',
+  user: 'Nguoi mua',
 }

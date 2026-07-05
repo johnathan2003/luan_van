@@ -5,6 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import Navbar from '../components/common/Navbar'
+import ChatbotWidget from '../components/common/ChatbotWidget'
 
 interface NavItem {
   icon: string
@@ -172,6 +173,7 @@ const AdminLayout: React.FC<Props> = ({ children }) => {
           {children}
         </main>
       </div>
+      <ChatbotWidget />
     </div>
   )
 }

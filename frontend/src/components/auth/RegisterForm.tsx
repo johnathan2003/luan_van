@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { register } from '../../store/slices/authSlice'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 
 const DANGEROUS = /[<>?/:;"'|\\]/
@@ -62,6 +62,8 @@ const RegisterForm: React.FC = () => {
   const navigate = useNavigate()
   const { loading } = useAppSelector(s => s.auth)
   const [form, setForm] = useState({ email: '', password: '', full_name: '', confirm: '' })
+  const [agreed, setAgreed] = useState(false)
+  const [dataConsent, setDataConsent] = useState(false)
   const [error, setError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,8 +76,9 @@ const RegisterForm: React.FC = () => {
     }
     if (form.password !== form.confirm) { setError('Mật khẩu không khớp'); return }
     if (form.password.length < 3) { setError('Mật khẩu tối thiểu 3 ký tự'); return }
+    if (!agreed) { setError('Bạn cần đồng ý với điều khoản sử dụng để tiếp tục'); return }
 
-    const result = await dispatch(register({ email: form.email, password: form.password, full_name: form.full_name }))
+    const result = await dispatch(register({ email: form.email, password: form.password, full_name: form.full_name, agreed_to_terms: agreed, data_consent: dataConsent }))
     if (register.fulfilled.match(result)) {
       toast.success('Đăng ký thành công! Vui lòng đăng nhập.')
       navigate('/login')
@@ -130,6 +133,39 @@ const RegisterForm: React.FC = () => {
           autoComplete="new-password"
         />
         {error && <p className="input-error" style={{ marginTop: 4 }}>{error}</p>}
+      </div>
+
+      {/* Terms checkbox */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <input
+          id="terms-check"
+          type="checkbox"
+          checked={agreed}
+          onChange={e => setAgreed(e.target.checked)}
+          style={{ marginTop: 3, flexShrink: 0, cursor: 'pointer', accentColor: 'var(--primary)' }}
+        />
+        <label htmlFor="terms-check" style={{ fontSize: 13, color: 'var(--gray-600)', lineHeight: 1.5, cursor: 'pointer' }}>
+          Tôi đã đọc và đồng ý với{' '}
+          <Link to="/policies" target="_blank" style={{ color: 'var(--primary)', fontWeight: 600 }}>
+            Điều khoản sử dụng & Chính sách bảo mật
+          </Link>{' '}
+          của BuyZo <span style={{ color: 'var(--error)' }}>*</span>
+        </label>
+      </div>
+
+      {/* Data consent checkbox */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <input
+          id="data-consent-check"
+          type="checkbox"
+          checked={dataConsent}
+          onChange={e => setDataConsent(e.target.checked)}
+          style={{ marginTop: 3, flexShrink: 0, cursor: 'pointer', accentColor: 'var(--primary)' }}
+        />
+        <label htmlFor="data-consent-check" style={{ fontSize: 13, color: 'var(--gray-600)', lineHeight: 1.5, cursor: 'pointer' }}>
+          Tôi đồng ý để BuyZo thu thập dữ liệu hành vi mua sắm nhằm cá nhân hóa gợi ý sản phẩm.{' '}
+          <span style={{ color: 'var(--gray-400)' }}>(Tùy chọn)</span>
+        </label>
       </div>
 
       <button type="submit" className="btn btn-primary btn-lg w-full" disabled={loading} style={{ marginTop: 4 }}>

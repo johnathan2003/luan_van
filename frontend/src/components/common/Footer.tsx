@@ -78,6 +78,12 @@ const Footer: React.FC = () => {
               <p style={{ fontSize: 13, marginBottom: 7, color: 'rgba(255,255,255,0.7)' }}>☎️ 1800-1234</p>
               <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>🕐 8:00 – 22:00 mỗi ngày</p>
             </div>
+            <div>
+              <h4 style={{ color: '#fff', fontWeight: 600, marginBottom: 10, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>Pháp lý</h4>
+              <Link to="/policies" style={{ display: 'block', fontSize: 13, marginBottom: 7, color: 'rgba(255,255,255,0.7)' }}>Điều khoản sử dụng</Link>
+              <Link to="/policies" style={{ display: 'block', fontSize: 13, marginBottom: 7, color: 'rgba(255,255,255,0.7)' }}>Chính sách bảo mật</Link>
+              <Link to="/policies" style={{ display: 'block', fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Quy định người bán</Link>
+            </div>
           </div>
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: 16, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
             © {new Date().getFullYear()} BuyZo. Bảo lưu mọi quyền.

@@ -1,14 +1,12 @@
 /**
- * notificationStore — mock thông báo nội bộ lưu localStorage (giống disputeStore),
- * dùng để demo luồng "admin xử lý khiếu nại -> gửi thông báo cho các bên liên quan"
- * mà không cần backend thật.
+ * notificationStore — mock thông báo nội bộ lưu localStorage,
+ * dùng để demo luồng "admin xử lý khiếu nại → gửi thông báo cho các bên liên quan".
  *
- * LƯU Ý: thông báo được gửi theo VAI TRÒ (recipient_type) chứ KHÔNG khớp chính xác
- * theo user_id thật — vì dữ liệu khiếu nại demo dùng ID giả không trùng với ID tài
- * khoản thật trong DB (giống lý do MyDisputesPage phải fallback demo trước đó).
- * Tài khoản nào đang đăng nhập với current_role khớp recipient_type sẽ thấy thông báo
- * này, trộn chung với thông báo thật lấy từ API (xem hooks/useNotifications.ts).
- * recipient_id vẫn được lưu lại để hiển thị/tham khảo nhưng không dùng để lọc.
+ * FIX: thêm recipient_email vào mỗi thông báo.
+ * - getNotificationsFor(email, type) chỉ trả về thông báo đúng email + role.
+ * - addNotificationFor(recipientEmail, type, id, input) ghi recipient_email.
+ * - Thông báo không có email (recipient_email='') vẫn hiển thị cho tất cả role đó
+ *   (dùng cho thông báo broadcast như "bên thứ 3" trong dispute).
  */
 import type { Notification } from '../types/notification'
 
@@ -17,6 +15,8 @@ export type NotificationRecipientType = 'user' | 'shop' | 'shipper' | 'admin'
 export interface LocalNotification extends Notification {
   recipient_type: NotificationRecipientType
   recipient_id: number
+  /** Email của người nhận. Rỗng = broadcast cho tất cả role đó (backward compat). */
+  recipient_email: string
 }
 
 const STORAGE_KEY = 'buyzo_notifications_v1'
@@ -32,8 +32,8 @@ function readAll(): LocalNotification[] {
 }
 
 function writeAll(items: LocalNotification[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  // Bao cho cac component dang lang nghe (cung tab) biet co thong bao moi
+  // Giữ tối đa 200 thông báo để tránh localStorage overflow
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, 200)))
   window.dispatchEvent(new Event(EVENT_NAME))
 }
 
@@ -46,10 +46,17 @@ export function onNotificationsChanged(handler: () => void): () => void {
   }
 }
 
-export function getNotificationsFor(type: NotificationRecipientType, _id?: number): LocalNotification[] {
-  // Loc theo vai tro (broadcast) — xem giai thich o dau file vi sao khong loc theo id
+/**
+ * Lấy thông báo cho một user cụ thể (email + role).
+ * - Trả về thông báo có recipient_email === email (đúng người)
+ * - Hoặc recipient_email === '' (broadcast cho toàn bộ role)
+ */
+export function getNotificationsFor(email: string, type: NotificationRecipientType): LocalNotification[] {
   return readAll()
-    .filter(n => n.recipient_type === type)
+    .filter(n =>
+      n.recipient_type === type &&
+      (n.recipient_email === email || n.recipient_email === '')
+    )
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
 }
 
@@ -62,12 +69,25 @@ export interface AddNotificationInput {
   related_entity_id?: number
 }
 
-export function addNotificationFor(type: NotificationRecipientType, id: number, input: AddNotificationInput): LocalNotification {
+/**
+ * Ghi một thông báo cho người nhận cụ thể.
+ * @param recipientEmail - email người nhận. Truyền '' để broadcast cho toàn bộ role.
+ * @param type - vai trò người nhận
+ * @param id - user_id của người nhận (để tham khảo)
+ * @param input - nội dung thông báo
+ */
+export function addNotificationFor(
+  recipientEmail: string,
+  type: NotificationRecipientType,
+  id: number,
+  input: AddNotificationInput,
+): LocalNotification {
   const items = readAll()
   const notif: LocalNotification = {
     notification_id: Date.now() + Math.floor(Math.random() * 1000),
     recipient_type: type,
     recipient_id: id,
+    recipient_email: recipientEmail,
     is_read: false,
     created_at: new Date().toISOString(),
     ...input,
@@ -86,11 +106,15 @@ export function markLocalRead(notificationId: number) {
   }
 }
 
-export function markAllLocalReadFor(type: NotificationRecipientType, _id?: number) {
+export function markAllLocalReadFor(email: string, type: NotificationRecipientType) {
   const items = readAll()
   let changed = false
   items.forEach(n => {
-    if (n.recipient_type === type && !n.is_read) {
+    if (
+      n.recipient_type === type &&
+      (n.recipient_email === email || n.recipient_email === '') &&
+      !n.is_read
+    ) {
       n.is_read = true
       changed = true
     }

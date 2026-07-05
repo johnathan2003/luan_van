@@ -5,6 +5,7 @@
 import React from 'react'
 import Navbar from '../components/common/Navbar'
 import Footer from '../components/common/Footer'
+import ChatbotWidget from '../components/common/ChatbotWidget'
 
 interface Props {
   children: React.ReactNode
@@ -19,6 +20,7 @@ const PublicLayout: React.FC<Props> = ({ children, noFooter }) => (
       {children}
     </main>
     {!noFooter && <Footer />}
+    <ChatbotWidget />
   </div>
 )
 

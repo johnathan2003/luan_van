@@ -38,6 +38,8 @@ def register_user(db: Session, user_data: UserCreate) -> User:
         password_hash=hash_password(user_data.password),
         full_name=user_data.full_name,
         status="active",
+        agreed_to_terms=user_data.agreed_to_terms,
+        data_consent=user_data.data_consent,
     )
     db.add(user)
     db.flush()

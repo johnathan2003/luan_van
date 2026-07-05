@@ -40,7 +40,10 @@ const ChatPage: React.FC = () => {
   const [loadingConvs, setLoadingConvs]   = useState(true)
   const [loadingMsgs, setLoadingMsgs]     = useState(false)
 
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const bottomRef             = useRef<HTMLDivElement>(null)
+  const messagesWrapRef       = useRef<HTMLDivElement>(null)
+  const prevMsgLen            = useRef(0)
+  const savedScrollFromBottom = useRef<number | null>(null)
   const activeConv = conversations.find(c => c.conversation_id === activeConvId)
   const uid        = currentUser?.user_id ?? 0
 
@@ -116,6 +119,8 @@ const ChatPage: React.FC = () => {
   // ── Load tin nhắn khi chọn conversation ──────────────────────────────────
   useEffect(() => {
     if (!activeConvId) return
+    prevMsgLen.current = 0
+    savedScrollFromBottom.current = null
     setMessages([])
     setHasMore(false)
     setLoadingMsgs(true)
@@ -134,9 +139,24 @@ const ChatPage: React.FC = () => {
     )
   }, [activeConvId])
 
-  // ── Cuộn xuống cuối khi có tin mới ───────────────────────────────────────
+  // ── Cuộn xuống cuối (instant khi load lần đầu, smooth khi có tin mới) ─────
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messages.length === 0) return
+    const el = messagesWrapRef.current
+    if (!el) return
+
+    if (prevMsgLen.current === 0) {
+      // Load lần đầu: scroll ngay lập tức, không animation
+      el.scrollTop = el.scrollHeight
+    } else if (savedScrollFromBottom.current !== null) {
+      // Sau khi load tin cũ hơn: giữ nguyên vị trí scroll
+      el.scrollTop = el.scrollHeight - savedScrollFromBottom.current
+      savedScrollFromBottom.current = null
+    } else {
+      // Tin nhắn mới đến: scroll tức thời (tránh animation từ top→bottom khi scroll position reset)
+      el.scrollTop = el.scrollHeight
+    }
+    prevMsgLen.current = messages.length
   }, [messages])
 
   // ── Gửi tin nhắn ─────────────────────────────────────────────────────────
@@ -223,11 +243,13 @@ const ChatPage: React.FC = () => {
             </div>
 
             {/* Messages */}
-            <div style={styles.messagesWrap}>
+            <div ref={messagesWrapRef} style={styles.messagesWrap}>
               {hasMore && (
                 <button
                   style={styles.loadMoreBtn}
                   onClick={() => {
+                    const el = messagesWrapRef.current
+                    if (el) savedScrollFromBottom.current = el.scrollHeight - el.scrollTop
                     const firstId = messages[0]?.message_id
                     chatService.getMessages(activeConvId!, firstId)
                       .then(r => {

@@ -45,19 +45,34 @@ def _get_my_shop_id(db: Session, user_id: int) -> int:
 
 # ── Helper: lấy employee record nếu user là nhân viên chat của shop ──────────
 def _get_employee_for_shop(db: Session, user_id: int, shop_id: int):
+    """
+    Trả về ShopEmployee nếu user có quyền chat (message:read HOẶC message:send).
+    Ghi log để dễ debug khi employee gặp lỗi 403.
+    """
     emp = (
         db.query(ShopEmployee)
         .filter_by(user_id=user_id, shop_id=shop_id, status="active")
         .first()
     )
     if not emp:
+        logger.debug(
+            f"[chat_access] user={user_id} not in shop={shop_id} "
+            f"(no active ShopEmployee record)"
+        )
         return None
-    has_perm = (
-        db.query(EmployeeRolePermission)
-        .filter_by(employee_id=emp.employee_id, permission_code="message:read")
-        .first()
+
+    perms = {p.permission_code for p in emp.permissions}
+    logger.debug(f"[chat_access] user={user_id} emp={emp.employee_id} shop={shop_id} perms={perms}")
+
+    # message:read HOẶC message:send đều đủ để vừa xem vừa reply
+    if "message:read" in perms or "message:send" in perms:
+        return emp
+
+    logger.warning(
+        f"[chat_access] DENIED user={user_id} emp={emp.employee_id} "
+        f"thiếu message:read/message:send, chỉ có perms={perms}"
     )
-    return emp if has_perm else None
+    return None
 
 
 # ── Helper: kiểm tra quyền truy cập conversation ─────────────────────────────
@@ -65,10 +80,17 @@ def _assert_access(db: Session, conv_id: int, user_id: int) -> Conversation:
     conv = db.query(Conversation).filter_by(conversation_id=conv_id).first()
     if not conv:
         raise HTTPException(404, "Hội thoại không tồn tại")
-    if conv.user_id == user_id or conv.shop_id == user_id:
-        return conv
-    if _get_employee_for_shop(db, user_id, conv.shop_id):
-        return conv
+    if conv.user_id == user_id:
+        return conv  # buyer
+    if conv.shop_id == user_id:
+        return conv  # shop owner
+    emp = _get_employee_for_shop(db, user_id, conv.shop_id)
+    if emp:
+        return conv  # employee có quyền
+    logger.warning(
+        f"[chat_access] 403 conv={conv_id} user={user_id} "
+        f"buyer={conv.user_id} shop={conv.shop_id}"
+    )
     raise HTTPException(403, "Bạn không có quyền truy cập hội thoại này")
 
 
@@ -77,12 +99,8 @@ def _get_chat_employee_user_ids(db: Session, shop_id: int) -> list:
     emps = db.query(ShopEmployee).filter_by(shop_id=shop_id, status="active").all()
     result = []
     for emp in emps:
-        has_perm = (
-            db.query(EmployeeRolePermission)
-            .filter_by(employee_id=emp.employee_id, permission_code="message:read")
-            .first()
-        )
-        if has_perm:
+        perms = {p.permission_code for p in emp.permissions}
+        if "message:read" in perms or "message:send" in perms:
             result.append(emp.user_id)
     return result
 
@@ -139,13 +157,9 @@ def employee_inbox(
     if not emp_record:
         raise HTTPException(403, "Bạn không phải nhân viên của shop nào")
 
-    has_perm = (
-        db.query(EmployeeRolePermission)
-        .filter_by(employee_id=emp_record.employee_id, permission_code="message:read")
-        .first()
-    )
-    if not has_perm:
-        raise HTTPException(403, "Bạn không có quyền xem tin nhắn")
+    perms = {p.permission_code for p in emp_record.permissions}
+    if "message:read" not in perms and "message:send" not in perms:
+        raise HTTPException(403, "Bạn không có quyền xem tin nhắn (cần message:read hoặc message:send)")
 
     shop_id = emp_record.shop_id
     convs = (
@@ -241,9 +255,16 @@ async def send_message(
         },
     }
 
+    # ── Lưu các giá trị cần thiết TRƯỚC khi chat_service commit làm expire conv ──
+    # Sau db.commit() trong send_message service, SQLAlchemy expire conv.
+    # Lazy-reload có thể fail trong một số trường hợp connection pool → store trước.
+    buyer_user_id        = conv.user_id
+    shop_owner_id        = conv.shop_id
+    assigned_employee_id = conv.assigned_employee_id
+
     logger.info(
         f"[send_message] conv={conv_id} sender={current_user.user_id} "
-        f"is_buyer={is_buyer} conv.user_id={conv.user_id} conv.shop_id={conv.shop_id}"
+        f"is_buyer={is_buyer} buyer={buyer_user_id} shop={shop_owner_id}"
     )
 
     # Broadcast vào conversation room (ai đang mở conv đều nhận)
@@ -251,14 +272,15 @@ async def send_message(
     logger.info(f"[send_message] emitted new_message → room conv_{conv_id}")
 
     if is_buyer:
-        await _route_to_shop(db, conv, msg, current_user, payload)
+        await _route_to_shop(db, conv, msg, current_user, payload,
+                             shop_owner_id, assigned_employee_id)
     else:
-        # Shop/NV gửi → notify buyer
-        await send_to_user(conv.user_id, "new_message", payload)
-        logger.info(f"[send_message] emitted new_message → user_{conv.user_id}")
+        # Shop/NV gửi → notify buyer trực tiếp qua user room
+        await send_to_user(buyer_user_id, "new_message", payload)
+        logger.info(f"[send_message] emitted new_message → user_{buyer_user_id}")
         # Auto-assign nếu người gửi là nhân viên (không phải owner)
-        is_owner = (current_user.user_id == conv.shop_id)
-        if not is_owner and conv.assigned_employee_id != current_user.user_id:
+        is_owner = (current_user.user_id == shop_owner_id)
+        if not is_owner and assigned_employee_id != current_user.user_id:
             conv.assigned_employee_id = current_user.user_id
             db.commit()
 
@@ -279,19 +301,29 @@ def mark_read(
 
 
 # ── Routing notifications khi khách gửi (async) ──────────────────────────────
-async def _route_to_shop(db: Session, conv: Conversation, msg, sender_user: User, payload: dict):
+async def _route_to_shop(
+    db: Session,
+    conv: Conversation,
+    msg,
+    sender_user: User,
+    payload: dict,
+    shop_owner_id: int,         # truyền vào để tránh lazy-load sau expire
+    assigned_employee_id: int | None,
+):
     from app.services.notification_service import create_notification
 
-    if conv.assigned_employee_id:
-        # Đã có NV phụ trách — chỉ báo NV đó
-        await send_to_user(conv.assigned_employee_id, "new_chat_message", payload)
+    if assigned_employee_id:
+        # Đã có NV phụ trách — notify NV đó
+        await send_to_user(assigned_employee_id, "new_chat_message", payload)
+        # Cũng notify owner để inbox shop cập nhật (owner vẫn cần biết)
+        await send_to_user(shop_owner_id, "new_chat_message", payload)
         return
 
     # Chưa có NV — thông báo owner 1 lần duy nhất (DB notification)
     if not conv.owner_notified:
         create_notification(
             db,
-            user_id             = conv.shop_id,
+            user_id             = shop_owner_id,
             title               = "💬 Khách hàng cần hỗ trợ",
             message             = f"{sender_user.full_name or 'Khách'} vừa nhắn tin cho shop của bạn",
             notif_type          = "chat",
@@ -303,8 +335,8 @@ async def _route_to_shop(db: Session, conv: Conversation, msg, sender_user: User
         db.commit()
 
     # Socket tới tất cả nhân viên chat đang online
-    for emp_uid in _get_chat_employee_user_ids(db, conv.shop_id):
+    for emp_uid in _get_chat_employee_user_ids(db, shop_owner_id):
         await send_to_user(emp_uid, "new_chat_message", payload)
 
-    # Cũng notify owner qua socket để inbox shop cập nhật
-    await send_to_user(conv.shop_id, "new_chat_message", payload)
+    # Notify owner qua socket để inbox shop cập nhật
+    await send_to_user(shop_owner_id, "new_chat_message", payload)

@@ -43,20 +43,40 @@ const ProductManagement: React.FC = () => {
     setModalOpen(true)
   }
 
+  const MAX_IMAGES = 5
+
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    const remaining = MAX_IMAGES - form.image_urls.length
+    const toUpload = files.slice(0, remaining)
+    if (toUpload.length < files.length) toast.info(`Tối đa ${MAX_IMAGES} ảnh, đã bỏ qua ${files.length - toUpload.length} ảnh`)
     setUploading(true)
     try {
-      const res = await productService.uploadImage(file)
-      const url: string = res.data?.url || res.data
-      setForm(f => ({ ...f, image_urls: [url] }))
+      const urls = await Promise.all(toUpload.map(async f => {
+        const res = await productService.uploadImage(f)
+        return res.data?.url || res.data as string
+      }))
+      setForm(f => ({ ...f, image_urls: [...f.image_urls, ...urls] }))
     } catch {
       toast.error('Upload ảnh thất bại')
     } finally {
       setUploading(false)
       e.target.value = ''
     }
+  }
+
+  const removeImage = (idx: number) => {
+    setForm(f => ({ ...f, image_urls: f.image_urls.filter((_, i) => i !== idx) }))
+  }
+
+  const moveImage = (from: number, to: number) => {
+    setForm(f => {
+      const arr = [...f.image_urls]
+      const [item] = arr.splice(from, 1)
+      arr.splice(to, 0, item)
+      return { ...f, image_urls: arr }
+    })
   }
 
   const handleSave = async () => {
@@ -136,43 +156,66 @@ const ProductManagement: React.FC = () => {
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editProduct ? 'Sửa sản phẩm' : 'Thêm sản phẩm'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {/* Ảnh sản phẩm */}
+          {/* Ảnh sản phẩm — multi-image */}
           <div>
-            <label className="input-label">Ảnh sản phẩm</label>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              {/* Preview */}
-              <div style={{
-                width: 80, height: 80, borderRadius: 8, flexShrink: 0,
-                border: '1.5px dashed var(--border-subtle)',
-                background: 'var(--bg-page)',
-                overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {form.image_urls[0]
-                  ? <img src={getImageUrl(form.image_urls[0])} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : <span style={{ fontSize: 28, color: 'var(--gray-400)' }}>🖼️</span>
-                }
-              </div>
-              {/* Upload controls */}
-              <div style={{ flex: 1 }}>
+            <label className="input-label">
+              Ảnh sản phẩm{' '}
+              <span style={{ fontWeight: 400, color: 'var(--gray-400)', fontSize: 11 }}>
+                ({form.image_urls.length}/{MAX_IMAGES} — ảnh đầu tiên là ảnh chính)
+              </span>
+            </label>
+
+            {/* Thumbnail grid */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+              {form.image_urls.map((url, i) => (
+                <div key={i} style={{ position: 'relative', width: 76, height: 76 }}>
+                  <img src={getImageUrl(url)} alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8,
+                      border: i === 0 ? '2px solid var(--primary)' : '2px solid var(--border-subtle)' }} />
+                  {/* Ảnh chính badge */}
+                  {i === 0 && (
+                    <span style={{
+                      position: 'absolute', top: 2, left: 2, fontSize: 9, fontWeight: 700,
+                      background: 'var(--primary)', color: '#fff', padding: '1px 5px', borderRadius: 4,
+                    }}>Chính</span>
+                  )}
+                  {/* Di chuyển trái */}
+                  {i > 0 && (
+                    <button onClick={() => moveImage(i, i - 1)} title="Di chuyển lên trước" style={{
+                      position: 'absolute', bottom: 2, left: 2, width: 18, height: 18,
+                      background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 4,
+                      color: '#fff', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                    }}>‹</button>
+                  )}
+                  {/* Xóa */}
+                  <button onClick={() => removeImage(i)} title="Xóa ảnh" style={{
+                    position: 'absolute', top: 2, right: 2, width: 18, height: 18,
+                    background: 'rgba(220,38,38,0.85)', border: 'none', borderRadius: '50%',
+                    color: '#fff', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    lineHeight: 1, padding: 0,
+                  }}>×</button>
+                </div>
+              ))}
+
+              {/* Add button */}
+              {form.image_urls.length < MAX_IMAGES && (
                 <label style={{
-                  display: 'inline-block', padding: '7px 14px',
-                  background: uploading ? 'var(--gray-200)' : 'var(--primary)',
-                  color: uploading ? 'var(--gray-500)' : '#fff',
-                  borderRadius: 6, fontSize: 13, fontWeight: 600,
+                  width: 76, height: 76, borderRadius: 8,
+                  border: '2px dashed var(--border-subtle)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                   cursor: uploading ? 'not-allowed' : 'pointer',
+                  background: 'var(--bg-page)', gap: 4,
+                  opacity: uploading ? 0.5 : 1,
                 }}>
-                  {uploading ? 'Đang tải...' : '📁 Chọn ảnh'}
-                  <input type="file" accept="image/*" style={{ display: 'none' }} disabled={uploading} onChange={handleImageChange} />
+                  <span style={{ fontSize: 22, lineHeight: 1 }}>{uploading ? '⏳' : '+'}</span>
+                  <span style={{ fontSize: 10, color: 'var(--gray-400)' }}>{uploading ? 'Đang tải' : 'Thêm ảnh'}</span>
+                  <input type="file" accept="image/*" multiple style={{ display: 'none' }} disabled={uploading} onChange={handleImageChange} />
                 </label>
-                {form.image_urls[0] && (
-                  <button
-                    onClick={() => setForm(f => ({ ...f, image_urls: [] }))}
-                    style={{ marginLeft: 8, background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', fontSize: 13 }}
-                  >✕ Xóa ảnh</button>
-                )}
-                <p style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5 }}>JPG, PNG, WebP — tối đa 5MB</p>
-              </div>
+              )}
             </div>
+            <p style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: -4 }}>
+              JPG, PNG, WebP — tối đa 5MB/ảnh · Nhấn ‹ để đặt làm ảnh chính
+            </p>
           </div>
 
           {[

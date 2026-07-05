@@ -17,6 +17,8 @@ class UserCreate(BaseModel):
     email: str          # Cho phép username hoặc email, không bắt buộc định dạng @
     password: str
     full_name: str
+    agreed_to_terms: bool = False
+    data_consent: bool = False
 
     @field_validator("email")
     @classmethod

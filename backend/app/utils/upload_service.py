@@ -9,9 +9,26 @@ ALLOWED_DOC_TYPES = {"application/pdf", "image/jpeg", "image/png"}
 
 
 def _get_supabase_client():
-    """Lazy-load Supabase client — chỉ dùng khi SUPABASE_URL đã set."""
+    """Lazy-load Supabase client."""
     from supabase import create_client
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+
+
+def _cloudinary_configured() -> bool:
+    return bool(settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET)
+
+
+def _get_cloudinary():
+    """Lazy-load & configure Cloudinary."""
+    import cloudinary
+    import cloudinary.uploader
+    cloudinary.config(
+        cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+        api_key=settings.CLOUDINARY_API_KEY,
+        api_secret=settings.CLOUDINARY_API_SECRET,
+        secure=True,
+    )
+    return cloudinary.uploader
 
 
 def _validate_file(file: UploadFile) -> str:
@@ -34,14 +51,32 @@ def _validate_file(file: UploadFile) -> str:
 async def save_upload_file(file: UploadFile, subfolder: str = "products") -> str:
     """
     Upload file và trả về public URL.
-    - Production (SUPABASE_URL set): upload lên Supabase Storage
-    - Development: lưu local filesystem
+    Priority:
+      1. Cloudinary (CLOUDINARY_* keys set)
+      2. Supabase Storage (SUPABASE_URL set)
+      3. Local filesystem (development fallback)
     """
     ext = _validate_file(file)
     content = await file.read()
     filename = f"{uuid.uuid4().hex}.{ext}"
 
-    # --- Supabase Storage (production) ---
+    # --- Cloudinary (production, ưu tiên 1) ---
+    if _cloudinary_configured():
+        uploader = _get_cloudinary()
+        import io
+        result = uploader.upload(
+            io.BytesIO(content),
+            folder=f"buyzo/{subfolder}",
+            resource_type="image",
+            public_id=uuid.uuid4().hex,
+            overwrite=False,
+            transformation=[
+                {"quality": "auto", "fetch_format": "auto"},
+            ],
+        )
+        return result["secure_url"]
+
+    # --- Supabase Storage (production, ưu tiên 2) ---
     if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_KEY:
         storage_path = f"{subfolder}/{filename}"
         supabase = _get_supabase_client()
@@ -65,22 +100,37 @@ async def save_upload_file(file: UploadFile, subfolder: str = "products") -> str
 async def delete_upload_file(url: str) -> bool:
     """
     Xóa file theo URL.
+    - Cloudinary: extract public_id từ URL rồi destroy
     - Supabase Storage: xóa object trên bucket
     - Local: xóa file trên filesystem
     """
     try:
-        # Supabase URL dạng: https://xxx.supabase.co/storage/v1/object/public/uploads/subfolder/file.jpg
-        if settings.SUPABASE_URL and settings.SUPABASE_URL in url:
+        if _cloudinary_configured() and "res.cloudinary.com" in url:
+            import cloudinary
+            import cloudinary.uploader
+            _get_cloudinary()  # configure
+            # URL dạng: https://res.cloudinary.com/<cloud>/image/upload/v.../buyzo/products/<id>
+            # public_id = phần sau /upload/v.../ (không có extension)
+            parts = url.split("/upload/")
+            if len(parts) == 2:
+                # bỏ version prefix "v1234567890/"
+                path_part = parts[1]
+                if path_part.startswith("v") and "/" in path_part:
+                    path_part = path_part.split("/", 1)[1]
+                public_id = path_part.rsplit(".", 1)[0]  # bỏ extension
+                cloudinary.uploader.destroy(public_id)
+                return True
+
+        elif settings.SUPABASE_URL and settings.SUPABASE_URL in url:
             bucket = settings.SUPABASE_STORAGE_BUCKET
-            # Lấy path sau "/public/{bucket}/"
             marker = f"/public/{bucket}/"
             if marker in url:
                 storage_path = url.split(marker, 1)[1]
                 supabase = _get_supabase_client()
                 supabase.storage.from_(bucket).remove([storage_path])
                 return True
+
         else:
-            # Local
             relative_path = url.lstrip("/")
             if os.path.exists(relative_path):
                 os.remove(relative_path)

@@ -53,7 +53,7 @@ export const useNotifications = () => {
   }, [])
 
   const localNotifications = useMemo(
-    () => (user ? getNotificationsFor(recipientType) : []),
+    () => (user ? getNotificationsFor(user.email ?? '', recipientType) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user, recipientType, localVersion]
   )
@@ -78,7 +78,7 @@ export const useNotifications = () => {
 
   const readAll = () => {
     if (user) {
-      markAllLocalReadFor(recipientType)
+      markAllLocalReadFor(user.email ?? '', recipientType)
       setLocalVersion(v => v + 1)
     }
     dispatch(markAllAsRead())
@@ -86,3 +86,4 @@ export const useNotifications = () => {
 
   return { notifications: combinedNotifications, unread_count: combinedUnreadCount, loading, read, readAll }
 }
+

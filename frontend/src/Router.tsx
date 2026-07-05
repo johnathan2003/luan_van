@@ -15,6 +15,7 @@ import NotFoundPage       from './pages/NotFoundPage'
 import ProfilePage        from './pages/ProfilePage'
 import ShopRegistration   from './pages/ShopRegistration'
 import ShipperRegistration from './pages/ShipperRegistration'
+import PoliciesPage        from './pages/PoliciesPage'
 
 // ── 👤 User (người mua) pages ─────────────────────────────────────────────────
 import ProductListPage    from './pages/user/ProductListPage'
@@ -96,6 +97,7 @@ const Router: React.FC = () => (
     <Route path="/products"        element={inPublic(<ProductListPage />)} />
     <Route path="/products/:id"   element={inPublic(<ProductDetailPage />)} />
     <Route path="/shops/:shopId"  element={inPublic(<ShopProfilePage />)} />
+    <Route path="/policies"       element={inPublic(<PoliciesPage />)} />
 
     {/* ── 👤 User (đăng nhập) ─────────────────────────────────────────────── */}
     <Route element={<ProtectedRoute />}>
@@ -158,10 +160,11 @@ const Router: React.FC = () => (
 
     {/* ── 👷 Employee (nhân viên shop) ────────────────────────────────────── */}
     <Route element={<ProtectedRoute requiredRole="employee" />}>
-      <Route path="/employee"          element={<EmployeeDashboard />} />
-      <Route path="/employee/orders"   element={<EmployeeOrdersPage />} />
-      <Route path="/employee/products" element={<EmployeeProductsPage />} />
-      <Route path="/employee/messages" element={<EmployeeChatPage />} />
+      <Route path="/employee"           element={<EmployeeDashboard />} />
+      <Route path="/employee/orders"    element={<EmployeeOrdersPage />} />
+      <Route path="/employee/products"  element={<EmployeeProductsPage />} />
+      <Route path="/employee/chat"      element={<EmployeeChatPage />} />
+      <Route path="/employee/messages"  element={<EmployeeChatPage />} />
     </Route>
 
     {/* ── 🚚 Shipper ──────────────────────────────────────────────────────── */}

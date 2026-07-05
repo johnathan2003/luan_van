@@ -34,6 +34,8 @@ export interface RegisterRequest {
   email: string
   password: string
   full_name: string
+  agreed_to_terms: boolean
+  data_consent: boolean
 }
 
 export interface ShopRegistrationRequest {
