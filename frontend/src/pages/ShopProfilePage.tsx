@@ -802,7 +802,7 @@ const ShopProfilePage: React.FC = () => {
                 <p>Khong co san pham nao</p>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                 {filteredProducts.map((p: any) => (
                   <Link key={p.product_id} to={`/products/${p.product_id}`} style={{ textDecoration: 'none' }}>
                     <div style={{ background: 'white', borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.border}`, transition: 'all 0.2s', cursor: 'pointer' }}
@@ -887,7 +887,7 @@ const ShopProfilePage: React.FC = () => {
 
             <div style={{ background: 'white', borderRadius: 16, padding: 28, border: `1px solid ${C.border}` }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: C.navy, marginBottom: 20 }}>Số liệu hoạt động</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
                 {[
                   { icon: '&#128230;', label: 'Sản phẩm',  value: (shop.products?.length || 0).toLocaleString('vi-VN') },
                   { icon: '&#128176;', label: 'Đã bán',    value: (shop.total_orders || 0).toLocaleString('vi-VN') },

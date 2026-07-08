@@ -160,7 +160,7 @@ const VoucherCenterPage: React.FC = () => {
           {tab === 'mine' ? 'Bạn chưa thu thập voucher nào' : 'Hiện chưa có voucher nào'}
         </p>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
           {list.map(v => (
             <VoucherCard key={v.voucher_id} v={v} onCollect={handleCollect} collecting={collectingId === v.voucher_id} />
           ))}

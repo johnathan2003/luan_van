@@ -547,7 +547,7 @@ const BannerAdminPage: React.FC = () => {
             <span style={{ fontSize: 12, fontWeight: 700, color: C.gray, textTransform: 'uppercase', letterSpacing: 1 }}>🏆 Banner đấu giá</span>
             <div style={{ flex: 1, height: 1, background: C.border }} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
             {auctionFiltered.map(item => renderAuctionCard(item))}
           </div>
         </>

@@ -168,7 +168,7 @@ const AdminLayout: React.FC<Props> = ({ children }) => {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-page)' }}>
       <Navbar />
-      <div className="container" style={{ display: 'flex', gap: 24, paddingTop: 24, paddingBottom: 48, flex: 1, alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: 24, flex: 1, width: '100%', maxWidth: 1400, margin: '0 auto', padding: '24px 32px 48px', alignItems: 'flex-start' }}>
         <AdminSidebar />
         <main style={{ flex: 1, minWidth: 0 }}>
           {children}

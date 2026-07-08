@@ -28,6 +28,9 @@ class ProductCreate(BaseModel):
     stock_quantity: int = 0
     category_id: Optional[int] = None
     image_urls: Optional[List[str]] = []
+    video_url: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
 
     @field_validator("price")
     @classmethod
@@ -52,6 +55,9 @@ class ProductUpdate(BaseModel):
     stock_quantity: Optional[int] = None
     category_id: Optional[int] = None
     image_urls: Optional[List[str]] = None
+    video_url: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
 
 
 class ProductVariantCreate(BaseModel):
@@ -110,7 +116,7 @@ class ProductResponse(BaseModel):
     category_id: Optional[int]
     product_name: str
     description: Optional[str]
-    price: Decimal                    # Đổi từ str → Decimal (khớp Prisma)
+    price: Decimal
     cost: Optional[Decimal]
     stock_quantity: int
     image_urls: Optional[List[str]]
@@ -136,20 +142,25 @@ class ProductListResponse(BaseModel):
     pages: int
 
 
+class ApprovalAction(BaseModel):
+    action: str
+    note: Optional[str] = None
+
+
 class DeletionRequestCreate(BaseModel):
     reason: str
 
 
 class DeletionRequestResponse(BaseModel):
-    deletion_req_id: int
+    request_id: int
     product_id: int
-    reason: Optional[str]
+    shop_id: int
+    requested_by: int
+    reason: str
     status: str
-    created_at: Optional[datetime]
+    reviewed_by: Optional[int] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
-
-
-class ApprovalAction(BaseModel):
-    reason: Optional[str] = None

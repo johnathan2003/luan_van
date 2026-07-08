@@ -28,7 +28,7 @@ const ShopSidebar: React.FC = () => {
   }, [])
 
   return (
-    <aside style={{ width: 220, flexShrink: 0 }}>
+    <aside style={{ width: 200, flexShrink: 0 }}>
       <div className="card" style={{ overflow: 'hidden', position: 'sticky', top: 80 }}>
         <div style={{
           background: 'linear-gradient(135deg, #14532D 0%, #16A34A 100%)',
@@ -83,7 +83,7 @@ const ShopLayout: React.FC<Props> = ({ children }) => {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-page)' }}>
       <Navbar />
-      <div className="container" style={{ display: 'flex', gap: 24, paddingTop: 24, paddingBottom: 48, flex: 1 }}>
+      <div style={{ display: 'flex', gap: 24, flex: 1, width: '100%', maxWidth: 1400, margin: '0 auto', padding: '24px 32px 48px' }}>
         <ShopSidebar />
         <main style={{ flex: 1, minWidth: 0 }}>
           {children}

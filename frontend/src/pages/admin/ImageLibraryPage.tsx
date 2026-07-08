@@ -451,7 +451,7 @@ const ImageLibraryPage: React.FC = () => {
           ) : (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+              gridTemplateColumns: 'repeat(5, 1fr)',
               gap: 14,
             }}>
               {filtered.map(img => (

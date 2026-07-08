@@ -43,7 +43,7 @@ const SuggestedDealsSection: React.FC = () => {
   return (
     <div style={{ marginTop: 28 }}>
       <p style={{ fontWeight: 800, fontSize: 17, marginBottom: 16 }}>🛍️ Có thể bạn sẽ thích</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
         {items.map((item: any) => <DealCard key={item.product_id} item={item} />)}
       </div>
     </div>

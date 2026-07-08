@@ -174,7 +174,7 @@ const ShippingConfigPage: React.FC = () => {
 
       {/* Methods tab */}
       {activeTab === 'methods' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
           {methods.length === 0 ? (
             <div className="card" style={{ padding: 40, textAlign: 'center', color: C.gray, gridColumn: '1/-1' }}>
               Chưa có phương thức nào. Nhấn "+ Thêm mới" để bắt đầu.
