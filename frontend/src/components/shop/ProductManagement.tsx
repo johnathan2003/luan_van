@@ -9,6 +9,7 @@ import {
   bundleStore, promoStore, attributeStore, variantStore,
   BundleItem, ProductAttribute, VariantLocal, VariantAttr,
 } from '../../utils/productBundleStore'
+import { rejectionStore } from '../../utils/rejectionStore'
 import Modal from '../common/Modal'
 import Loading from '../common/Loading'
 
@@ -394,6 +395,14 @@ const ProductManagement: React.FC = () => {
               ⏳ {products.filter(p => p.status === 'pending').length} chờ duyệt
             </button>
           )}
+          {products.filter(p => p.status === 'rejected').length > 0 && (
+            <button
+              onClick={() => { setViewMode('products'); setStatusFilter('rejected') }}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+                background: '#FEF2F2', color: 'var(--error)', border: '1.5px solid var(--error)', cursor: 'pointer' }}>
+              ❌ {products.filter(p => p.status === 'rejected').length} bị từ chối
+            </button>
+          )}
         </div>
         <button onClick={openAdd} className="btn btn-primary">+ Thêm sản phẩm</button>
       </div>
@@ -419,35 +428,6 @@ const ProductManagement: React.FC = () => {
       {/* ── Tab: Sản phẩm đang bán ── */}
       {viewMode === 'products' && <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-        {/* Status filter pills */}
-        {(() => {
-          const counts = {
-            all:      products.length,
-            active:   products.filter(p => p.status === 'active').length,
-            pending:  products.filter(p => p.status === 'pending').length,
-            rejected: products.filter(p => p.status === 'rejected').length,
-          }
-          const pills: { key: typeof statusFilter; label: string; color: string; bg: string }[] = [
-            { key: 'all',      label: `Tất cả (${counts.all})`,            color: 'var(--gray-700)',  bg: 'var(--bg-page)' },
-            { key: 'active',   label: `🟢 Đang bán (${counts.active})`,     color: 'var(--success)',   bg: '#F0FDF4' },
-            { key: 'pending',  label: `⏳ Chờ duyệt (${counts.pending})`,  color: 'var(--warning)',   bg: '#FFFBEB' },
-            { key: 'rejected', label: `❌ Bị từ chối (${counts.rejected})`, color: 'var(--error)',     bg: '#FEF2F2' },
-          ]
-          return (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-              {pills.map(pill => (
-                <button key={pill.key} onClick={() => setStatusFilter(pill.key)}
-                  style={{ padding: '5px 14px', borderRadius: 20, fontSize: 13, fontWeight: statusFilter === pill.key ? 700 : 500, cursor: 'pointer', transition: 'all 0.15s',
-                    border: statusFilter === pill.key ? `1.5px solid ${pill.color}` : '1.5px solid var(--border-subtle)',
-                    background: statusFilter === pill.key ? pill.bg : 'transparent',
-                    color: statusFilter === pill.key ? pill.color : 'var(--gray-500)' }}>
-                  {pill.label}
-                </button>
-              ))}
-            </div>
-          )
-        })()}
-
         {(() => {
           const filtered = statusFilter === 'all' ? products : products.filter(p => p.status === statusFilter)
           return <>
@@ -464,6 +444,7 @@ const ProductManagement: React.FC = () => {
           const items  = bundleStore.get(p.product_id)
           const variants = variantStore.get(p.product_id)
           const pAttrs = attributeStore.get(p.product_id)
+          const rejection = rejectionStore.get(p.product_id)
           const displayPrice = variants[0]?.price || p.price
           const displayStock = variants[0]?.stock ?? p.stock_quantity
           const displayImgs  = variants[0]?.image_urls?.length ? variants[0].image_urls : (p.image_urls || [])
@@ -490,6 +471,7 @@ const ProductManagement: React.FC = () => {
                     {totalPromos > 0 && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#FEF3C7', color: '#D97706' }}>🎯 {totalPromos} deal</span>}
                     {totalAttrs > 0 && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#F5F3FF', color: '#7C3AED' }}>🏷️ {totalAttrs} thuộc tính</span>}
                     {totalBundleItems > 0 && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#F0FDF4', color: 'var(--success)' }}>🎁 {totalBundleItems} kèm</span>}
+                    {rejection && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#FEE2E2', color: 'var(--error)', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); setExpandedId(p.product_id) }}>🚩 {rejection.violations.length} vi phạm admin</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 16, marginTop: 3, flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: 16 }}>{formatCurrency(displayPrice)}</span>
@@ -498,7 +480,6 @@ const ProductManagement: React.FC = () => {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-                  <button onClick={e => { e.stopPropagation(); openEdit(p) }} className="btn btn-outline btn-sm" style={{ fontSize: 12, padding: '5px 14px' }}>✏️ Sửa</button>
                   <button onClick={e => { e.stopPropagation(); handleDelete(p.product_id) }} className="btn btn-danger btn-sm" style={{ fontSize: 12, padding: '5px 14px' }}>🗑️</button>
                   <span style={{ fontSize: 18, color: 'var(--gray-400)', transition: 'transform 0.2s', display: 'inline-block', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
                 </div>
@@ -507,6 +488,59 @@ const ProductManagement: React.FC = () => {
               {/* ── Detail panel ── */}
               {isExpanded && (
                 <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '16px 20px', background: 'var(--bg-page, #F8FAFC)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                  {/* ── Vi phạm admin ── */}
+                  {rejection && (
+                    <div style={{ background: '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: 12, padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                        <span style={{ fontSize: 18 }}>🚩</span>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: '#991B1B' }}>Sản phẩm bị từ chối — Admin ghi nhận {rejection.violations.length} vi phạm</div>
+                          <div style={{ fontSize: 11, color: '#B91C1C' }}>Kiểm tra lúc: {new Date(rejection.rejected_at).toLocaleString('vi-VN')}</div>
+                        </div>
+                      </div>
+                      {rejection.violations.map((v, vi) => (
+                        <div key={vi} style={{ padding: '10px 12px', background: 'white', borderRadius: 8, border: '1px solid #FECACA', marginBottom: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                            <span style={{ fontSize: 13, fontWeight: 800, color: '#DC2626', minWidth: 20 }}>{vi + 1}.</span>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#991B1B' }}>📌 {v.label}</div>
+                              {v.note && <div style={{ fontSize: 12, color: '#7F1D1D', marginTop: 3, fontStyle: 'italic' }}>"{v.note}"</div>}
+                            </div>
+                          </div>
+                          {/* Ảnh bị đánh dấu với vòng tròn */}
+                          {v.imageUrl && v.imgMarkers && v.imgMarkers.length > 0 && (
+                            <div style={{ marginTop: 10, position: 'relative', display: 'inline-block', borderRadius: 10, overflow: 'hidden', border: '2px solid #FECACA' }}>
+                              <img src={getImageUrl(v.imageUrl)} alt="" style={{ display: 'block', maxWidth: '100%', maxHeight: 260, objectFit: 'contain', background: '#F1F5F9' }} />
+                              {v.imgMarkers.map((m, mi) => (
+                                <div key={mi} style={{
+                                  position: 'absolute',
+                                  left: `${m.x}%`, top: `${m.y}%`,
+                                  transform: 'translate(-50%,-50%)',
+                                  width: 36, height: 36, borderRadius: '50%',
+                                  border: '3px solid #DC2626',
+                                  background: 'rgba(220,38,38,0.2)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  color: '#DC2626', fontSize: 12, fontWeight: 800,
+                                  boxShadow: '0 0 0 2px white, 0 2px 6px rgba(0,0,0,0.3)',
+                                  pointerEvents: 'none',
+                                }}>{mi + 1}</div>
+                              ))}
+                              <div style={{ position: 'absolute', bottom: 6, right: 6, background: '#DC2626', color: 'white', fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5 }}>
+                                🚩 {v.imgMarkers.length} điểm vi phạm
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {rejection.reason && (
+                        <div style={{ marginTop: 8, padding: '10px 14px', background: '#7F1D1D', borderRadius: 8 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#FCA5A5', marginBottom: 4 }}>📋 Lý do đầy đủ:</div>
+                          <pre style={{ fontSize: 11, color: 'white', whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', lineHeight: 1.6 }}>{rejection.reason}</pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Mô tả */}
                   {p.description && (
