@@ -7,6 +7,8 @@ import { getImageUrl } from '../../utils/helpers'
 import { variantStore, bundleStore, attributeStore } from '../../utils/productBundleStore'
 import { rejectionStore } from '../../utils/rejectionStore'
 import { shopFlagStore } from '../../utils/shopFlagStore'
+import { addNotificationFor } from '../../utils/notificationStore'
+import { productApprovalStore } from '../../utils/productApprovalStore'
 import Loading from '../../components/common/Loading'
 
 const C = {
@@ -15,8 +17,9 @@ const C = {
 }
 const STATUS: Record<string, { label: string; color: string; bg: string }> = {
   all:      { label: 'Tất cả',    color: C.blue,    bg: C.light },
-  pending:  { label: 'Chờ duyệt', color: C.warning, bg: '#FEF3C7' },
-  active:   { label: 'Đang bán',  color: C.success, bg: '#DCFCE7' },
+  pending:  { label: 'Chờ duyệt',  color: C.warning, bg: '#FEF3C7' },
+  approved: { label: 'Đã duyệt',   color: '#0EA5E9', bg: '#E0F2FE' },
+  active:   { label: 'Đang bán',   color: C.success, bg: '#DCFCE7' },
   hidden:   { label: 'Đã ẩn',     color: C.gray,    bg: '#F1F5F9' },
   rejected: { label: 'Từ chối',   color: C.error,   bg: '#FEE2E2' },
 }
@@ -467,8 +470,21 @@ const ProductAdminPage: React.FC = () => {
   useEffect(() => { load(tab, search) }, [tab]) // eslint-disable-line
 
   const handleApprove = async (id: number) => {
-    try { await adminService.approveProduct(id); toast.success('Đã duyệt'); setProducts(p => p.map(x => x.product_id === id ? { ...x, status: 'active' } : x)) }
-    catch (e: any) { toast.error(e.response?.data?.detail || 'Lỗi') }
+    try {
+      await adminService.approveProduct(id)
+      const prod = products.find(x => x.product_id === id)
+      setProducts(p => p.map(x => x.product_id === id ? { ...x, status: 'approved' } : x))
+      productApprovalStore.setApproved(id, prod?.product_name, prod?.shop_id)
+      toast.success('✅ Đã duyệt — shop sẽ nhận thông báo để đăng bán')
+      addNotificationFor('', 'shop', prod?.shop_id ?? 0, {
+        title: '✅ Sản phẩm được duyệt — Sẵn sàng đăng bán!',
+        message: `"${prod?.product_name ?? 'Sản phẩm'}" đã được admin duyệt. Vào mục Sản phẩm → tab Sẵn sàng bán để đăng lên sàn.`,
+        type: 'product_approved',
+        action_url: '/shop/products',
+        related_entity_type: 'product',
+        related_entity_id: id,
+      })
+    } catch (e: any) { toast.error(e.response?.data?.detail || 'Lỗi') }
   }
 
   const handleRejectSubmit = async () => {
@@ -476,6 +492,7 @@ const ProductAdminPage: React.FC = () => {
     try {
       await adminService.rejectProduct(rejectModal.id, rejectModal.reason)
       // Save violations to rejectionStore so shop can see
+      productApprovalStore.setRejected(rejectModal.id)
       rejectionStore.save({
         product_id: rejectModal.id,
         rejected_at: new Date().toISOString(),
@@ -542,7 +559,9 @@ const ProductAdminPage: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           {products.map(p => {
             const variants    = variantStore.get(p.product_id)
-            const allBundles  = bundleStore.get(p.product_id)
+            const globalBundles  = bundleStore.get(p.product_id)
+            const variantBundles = variants.flatMap((v: any) => v.bundleItems || [])
+            const allBundles     = [...globalBundles, ...variantBundles]
             const attrs       = attributeStore.get(p.product_id)
             const mainV       = variants[0]
             const imgs        = mainV?.image_urls?.length ? mainV.image_urls : (p.image_urls || [])

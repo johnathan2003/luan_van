@@ -10,6 +10,7 @@ import {
   BundleItem, ProductAttribute, VariantLocal, VariantAttr,
 } from '../../utils/productBundleStore'
 import { rejectionStore } from '../../utils/rejectionStore'
+import { productApprovalStore } from '../../utils/productApprovalStore'
 import Modal from '../common/Modal'
 import Loading from '../common/Loading'
 
@@ -35,6 +36,7 @@ const BUNDLE_TYPES: { value: BundleItem['type']; label: string }[] = [
 ]
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   active:   { label: 'Đang bán',   color: 'var(--success)' },
+  approved: { label: 'Sẵn sàng',    color: '#0EA5E9' },
   pending:  { label: 'Chờ duyệt',  color: 'var(--warning)' },
   rejected: { label: 'Bị từ chối', color: 'var(--error)'   },
   archived: { label: 'Đã xóa',     color: 'var(--gray-400)' },
@@ -83,10 +85,11 @@ const ProductManagement: React.FC = () => {
   const bundleFileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   // ── tab view mode ────────────────────────────────────────
-  const [viewMode, setViewMode]                 = useState<'products' | 'combo' | 'gifts'>('products')
+  const [viewMode, setViewMode]                 = useState<'products' | 'ready' | 'combo' | 'gifts'>('products')
   const [statusFilter, setStatusFilter]         = useState<'all' | 'active' | 'pending' | 'rejected'>('all')
   const [comboExpandedId, setComboExpandedId]   = useState<number | null>(null)
   const [giftsExpandedId, setGiftsExpandedId]   = useState<number | null>(null)
+  const [readyExpandedId, setReadyExpandedId]   = useState<number | null>(null)
   // ── simple add form ──────────────────────────────────────
   const [simpleModalOpen, setSimpleModalOpen]   = useState(false)
   const [simpleForm, setSimpleForm]             = useState({ ...EMPTY_SIMPLE })
@@ -102,16 +105,49 @@ const ProductManagement: React.FC = () => {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [hoverImg, setHoverImg]     = useState<{ url: string; x: number; y: number; name?: string; price?: number; type?: string; stock?: number } | null>(null)
 
+  // ── mock seed ────────────────────────────────────────────────
+  const seedMockData = () => {
+    if (!localStorage.getItem('_shop_mock_seeded')) {
+      // Chỉ seed rejection data cho mock products bị từ chối
+      rejectionStore.save({ product_id: 105, rejected_at: new Date(Date.now() - 86400000).toISOString(), reason: 'Hình ảnh không rõ ràng, mô tả thiếu thông số kỹ thuật', violations: [{ label: 'Ảnh sản phẩm', note: 'Ảnh bị mờ, không thể hiện rõ sản phẩm', imageUrl: 'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=400', imgMarkers: [{ x: 35, y: 45 }, { x: 70, y: 30 }] }, { label: 'Mô tả', note: 'Thiếu thông số RAM, dung lượng pin' }] })
+      rejectionStore.save({ product_id: 106, rejected_at: new Date(Date.now() - 172800000).toISOString(), reason: 'Giá không hợp lệ so với thị trường', violations: [{ label: 'Giá bán', note: 'Giá cao hơn 300% so với giá tham chiếu thị trường' }] })
+      localStorage.setItem('_shop_mock_seeded', '1')
+    }
+  }
+
   // ── load ──────────────────────────────────────────────────────
+  const MOCK_PRODUCTS = [
+    { product_id: 101, product_name: 'iPhone 15 Pro Max 256GB', shop_id: 1, price: '29000000', stock_quantity: 35, sales_count: 128, status: 'active',   image_urls: ['https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=300'], description: 'iPhone 15 Pro Max chip A17 Pro, camera 48MP, titanium frame' },
+    { product_id: 102, product_name: 'Samsung Galaxy S24 Ultra', shop_id: 1, price: '26000000', stock_quantity: 22, sales_count: 87,  status: 'active',   image_urls: ['https://images.unsplash.com/photo-1706807594948-d7c5d0d22efb?w=300'], description: 'Galaxy S24 Ultra bút S Pen, camera 200MP, AI Galaxy' },
+    { product_id: 103, product_name: 'AirPods Pro (2nd Gen)',    shop_id: 1, price: '6500000',  stock_quantity: 60, sales_count: 214, status: 'active',   image_urls: ['https://images.unsplash.com/photo-1606841837239-c5a1a4a07af7?w=300'], description: 'AirPods Pro 2 chống ồn ANC, chip H2, USB-C' },
+    { product_id: 104, product_name: 'MacBook Air M3 13"',       shop_id: 1, price: '32000000', stock_quantity: 12, sales_count: 0,   status: 'approved', image_urls: ['https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=300'], description: 'MacBook Air chip M3, 8GB RAM, 256GB SSD, màn 13.6"' },
+    { product_id: 107, product_name: 'iPad Air M2 11"',           shop_id: 1, price: '18500000', stock_quantity: 20, sales_count: 0,   status: 'approved', image_urls: ['https://images.unsplash.com/photo-1585771724684-38269d6639fd?w=300'], description: 'iPad Air M2 chip M2, màn 11" Liquid Retina, USB-C' },
+    { product_id: 108, product_name: 'Beats Studio Pro',          shop_id: 1, price: '8900000',  stock_quantity: 15, sales_count: 0,   status: 'pending',  image_urls: ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300'], description: 'Beats Studio Pro Over-Ear, ANC, USB-C, 40h pin' },
+    { product_id: 105, product_name: 'iPad Pro 12.9" M2',         shop_id: 1, price: '24000000', stock_quantity: 8,  sales_count: 0,   status: 'rejected', image_urls: ['https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=300'], description: 'iPad Pro 12.9 chip M2, màn Liquid Retina XDR' },
+    { product_id: 106, product_name: 'Apple Watch Series 9',      shop_id: 1, price: '10500000', stock_quantity: 18, sales_count: 0,   status: 'rejected', image_urls: ['https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=300'], description: 'Apple Watch S9 chip S9, màn Always-On Retina' },
+  ]
+
   const load = async () => {
     setLoading(true)
+    seedMockData()
     try {
       const [pr, cr] = await Promise.all([shopService.getProducts(), productService.getCategories()])
-      setProducts(pr.data.products)
+      const apiProducts = pr.data.products || []
+      const base = apiProducts.length > 0 ? apiProducts : MOCK_PRODUCTS
+      // Áp dụng override status từ admin (approved/rejected)
+      setProducts(productApprovalStore.applyToProducts(base))
       setCategories(cr.data.categories || [])
+    } catch {
+      setProducts(productApprovalStore.applyToProducts(MOCK_PRODUCTS))
     } finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    // Lắng nghe khi admin duyệt/từ chối → reload ngay
+    const handler = () => load()
+    window.addEventListener('buyzo-product-status-changed', handler)
+    return () => window.removeEventListener('buyzo-product-status-changed', handler)
+  }, [])
 
   // ── open modal ───────────────────────────────────────────────
   const openAdd = () => {
@@ -373,6 +409,7 @@ const ProductManagement: React.FC = () => {
   if (loading) return <Loading />
 
   // ── render ───────────────────────────────────────────────────
+  const approvedCount = products.filter(p => p.status === 'approved').length
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -395,6 +432,15 @@ const ProductManagement: React.FC = () => {
               ⏳ {products.filter(p => p.status === 'pending').length} chờ duyệt
             </button>
           )}
+          {approvedCount > 0 && (
+            <button
+              onClick={() => setViewMode('ready')}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+                background: '#E0F2FE', color: '#0EA5E9', border: '1.5px solid #0EA5E9', cursor: 'pointer',
+                boxShadow: '0 0 0 3px #BAE6FD' }}>
+              ✅ {approvedCount} sẵn sàng bán
+            </button>
+          )}
           {products.filter(p => p.status === 'rejected').length > 0 && (
             <button
               onClick={() => { setViewMode('products'); setStatusFilter('rejected') }}
@@ -411,13 +457,14 @@ const ProductManagement: React.FC = () => {
       <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '2px solid var(--border-subtle)' }}>
         {([
           { key: 'products', icon: '🛍️', label: 'Sản phẩm đang bán' },
+          { key: 'ready',    icon: '✅', label: approvedCount > 0 ? `Sẵn sàng bán (${approvedCount})` : 'Sẵn sàng bán' },
           { key: 'combo',    icon: '🔀', label: 'Danh sách combo' },
           { key: 'gifts',    icon: '🎁', label: 'Sản phẩm tặng kèm' },
         ] as const).map(tab => (
           <button key={tab.key} onClick={() => setViewMode(tab.key)}
             style={{ padding: '10px 20px', fontWeight: viewMode === tab.key ? 700 : 500, fontSize: 14,
               borderBottom: viewMode === tab.key ? '2.5px solid var(--primary)' : '2.5px solid transparent',
-              color: viewMode === tab.key ? 'var(--primary)' : 'var(--gray-500)',
+              color: viewMode === tab.key ? (tab.key === 'ready' ? '#0EA5E9' : 'var(--primary)') : (tab.key === 'ready' && approvedCount ? '#0EA5E9' : 'var(--gray-500)'),
               background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
               transition: 'color 0.15s', marginBottom: -2 }}>
             {tab.icon} {tab.label}
@@ -673,6 +720,158 @@ const ProductManagement: React.FC = () => {
           </>
         })()}
       </div>}
+
+      {/* ── Tab: Sản phẩm sẵn sàng bán ── */}
+      {viewMode === 'ready' && (
+        <div>
+          <div style={{ background: 'linear-gradient(135deg, #E0F2FE, #BAE6FD)', borderRadius: 12, padding: '14px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, border: '1px solid #7DD3FC' }}>
+            <span style={{ fontSize: 28 }}>{'✅'}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#0369A1' }}>Sản phẩm đã được admin duyệt</div>
+              <div style={{ fontSize: 12, color: '#0284C7', marginTop: 2 }}>Bấm <strong>Đăng bán ngay</strong> để khách hàng có thể thấy sản phẩm của bạn trên sàn Buyzo.</div>
+            </div>
+          </div>
+          {approvedCount === 0 ? (
+            <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--gray-400)' }}>
+              <div style={{ fontSize: 40, marginBottom: 8 }}>{'📭'}</div>
+              <div style={{ fontSize: 14 }}>Chưa có sản phẩm nào được duyệt sẵn sàng</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>Khi admin duyệt sản phẩm của bạn, chúng sẽ xuất hiện tại đây.</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {products.filter(p => p.status === 'approved').map(p => {
+                const pvariants  = variantStore.get(p.product_id)
+                const pbundles   = [...bundleStore.get(p.product_id), ...pvariants.flatMap((v: any) => v.bundleItems || [])]
+                const pacc       = pbundles.filter((b: any) => b.type === 'accessory')
+                const pgifts     = pbundles.filter((b: any) => b.type === 'gift')
+                const imgs       = pvariants[0]?.image_urls?.length ? pvariants[0].image_urls : (p.image_urls || [])
+                const price      = pvariants[0]?.price || p.price
+                const isExpanded = readyExpandedId === p.product_id
+                return (
+                  <div key={p.product_id} className="card" style={{ overflow: 'hidden', border: '2px solid #7DD3FC', borderRadius: 12, transition: 'box-shadow 0.15s' }}>
+                    {/* ── Compact row ── */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer' }}
+                      onClick={() => setReadyExpandedId(isExpanded ? null : p.product_id)}>
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        {imgs[0]
+                          ? <img src={getImageUrl(imgs[0])} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 10, display: 'block' }} />
+                          : <div style={{ width: 64, height: 64, background: '#F0F9FF', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>{'🛍️'}</div>
+                        }
+                        <div style={{ position: 'absolute', top: -6, right: -6,
+                          width: 22, height: 22, borderRadius: '50%',
+                          background: '#0EA5E9', border: '2px solid white',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 12, fontWeight: 800, color: 'white' }}>{'✓'}</div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.product_name}</div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#0EA5E9' }}>{formatCurrency(price)}</div>
+                        <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 2 }}>
+                          Tồn: {p.stock_quantity}
+                          {pacc.length > 0 && <span style={{ marginLeft: 8 }}>📦 {pacc.length} phụ kiện</span>}
+                          {pgifts.length > 0 && <span style={{ marginLeft: 8 }}>🎁 {pgifts.length} tặng kèm</span>}
+                          {pvariants[0]?.promos?.length > 0 && <span style={{ marginLeft: 8 }}>🎯 {pvariants[0].promos.length} deal</span>}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            productApprovalStore.setActive(p.product_id)
+                            setProducts(prev => prev.map(x => x.product_id === p.product_id ? { ...x, status: 'active' } : x))
+                            toast.success(`Sản phẩm "${p.product_name}" đã được đăng bán!`)
+                          }}
+                          style={{ padding: '8px 18px', background: 'linear-gradient(135deg, #0EA5E9, #0284C7)', color: 'white',
+                            border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                            boxShadow: '0 2px 6px rgba(14,165,233,0.4)', whiteSpace: 'nowrap' }}
+                        >
+                          🚀 Đăng bán
+                        </button>
+                        <span style={{ fontSize: 18, color: 'var(--gray-400)', userSelect: 'none' }}>{isExpanded ? '▲' : '▼'}</span>
+                      </div>
+                    </div>
+
+                    {/* ── Expanded detail ── */}
+                    {isExpanded && (
+                      <div style={{ borderTop: '1px solid #BAE6FD', background: '#F0F9FF', padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {/* Thumbnails */}
+                        {imgs.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: 8 }}>🖼️ Hình ảnh sản phẩm</div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {imgs.map((url: string, i: number) => (
+                                <img key={i} src={getImageUrl(url)} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: '2px solid #7DD3FC' }} />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* Description */}
+                        {p.description && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: 6 }}>📝 Mô tả</div>
+                            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, background: 'white', borderRadius: 8, padding: '10px 12px', border: '1px solid #BAE6FD' }}>{p.description}</div>
+                          </div>
+                        )}
+                        {/* Variants */}
+                        {pvariants.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: 8 }}>🔀 Phiên bản</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {pvariants.map((v: any) => (
+                                <div key={v.id} style={{ background: 'white', borderRadius: 8, padding: '8px 12px', border: '1px solid #BAE6FD', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                  {v.image_urls?.[0] && <img src={getImageUrl(v.image_urls[0])} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6 }} />}
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 600, fontSize: 13 }}>{v.name}</div>
+                                    <div style={{ fontSize: 12, color: '#0EA5E9', fontWeight: 700 }}>{formatCurrency(v.price)} · Tồn: {v.stock}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* Accessories */}
+                        {pacc.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: 8 }}>📦 Phụ kiện đi kèm</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+                              {pacc.map((b: any, bi: number) => (
+                                <div key={bi} style={{ background: 'white', borderRadius: 8, border: '1px solid #BAE6FD', overflow: 'hidden' }}>
+                                  {b.image_urls?.[0] && <img src={getImageUrl(b.image_urls[0])} alt="" style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />}
+                                  <div style={{ padding: '6px 8px' }}>
+                                    <div style={{ fontWeight: 600, fontSize: 12 }}>{b.name}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 700 }}>{formatCurrency(b.price)}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* Gifts */}
+                        {pgifts.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: 8 }}>🎁 Hàng tặng kèm</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+                              {pgifts.map((b: any, bi: number) => (
+                                <div key={bi} style={{ background: '#FFF7ED', borderRadius: 8, border: '1px solid #FED7AA', overflow: 'hidden' }}>
+                                  {b.image_urls?.[0] && <img src={getImageUrl(b.image_urls[0])} alt="" style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />}
+                                  <div style={{ padding: '6px 8px' }}>
+                                    <div style={{ fontWeight: 600, fontSize: 12 }}>{b.name}</div>
+                                    <div style={{ fontSize: 12, color: '#D97706', fontWeight: 700 }}>{b.price > 0 ? formatCurrency(b.price) : '🎁 Miễn phí'}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Tab: Danh sách combo ── */}
       {viewMode === 'combo' && (
