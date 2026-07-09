@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../utils/formatters'
 import { voucherService } from '../../services/voucherService'
 import { getXu, spendXu, grantPostPurchaseGifts, type PostPurchaseGift } from '../../utils/eventsStore'
+import { variantStore, bundleStore } from '../../utils/productBundleStore'
 import { orderService } from '../../services/orderService'
 import { useAppDispatch } from '../../store/hooks'
 import { clearCart } from '../../store/slices/cartSlice'
@@ -441,18 +442,18 @@ const CheckoutPage: React.FC = () => {
           </div>
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Tieu tong</span>
+              <span style={{ color: 'var(--text-secondary)' }}>Tiểu tổng</span>
               <span style={{ color: 'var(--text-primary)' }}>{formatCurrency(subtotal)}</span>
             </div>
             {voucherDiscount > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Voucher ap dung</span>
+                <span style={{ color: 'var(--text-secondary)' }}>Voucher áp dụng</span>
                 <span style={{ color: '#16A34A', fontWeight: 600 }}>-{formatCurrency(voucherDiscount)}</span>
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
               <span style={{ color: 'var(--text-secondary)' }}>Phi giao hang</span>
-              <span style={{ color: shipping === 0 ? '#16A34A' : 'var(--text-primary)', fontWeight: 500 }}>{shipping === 0 ? 'Mien phi' : formatCurrency(shipping)}</span>
+              <span style={{ color: shipping === 0 ? '#16A34A' : 'var(--text-primary)', fontWeight: 500 }}>{shipping === 0 ? 'Miễn phí' : formatCurrency(shipping)}</span>
             </div>
             {appliedXu > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
@@ -461,7 +462,7 @@ const CheckoutPage: React.FC = () => {
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 800, marginTop: 4 }}>
-              <span style={{ color: 'var(--text-primary)' }}>Tong cong</span>
+              <span style={{ color: 'var(--text-primary)' }}>Tổng cộng</span>
               <span style={{ color: 'var(--primary, #7C3AED)' }}>{formatCurrency(grandTotal)}</span>
             </div>
           </div>
@@ -807,41 +808,71 @@ const CheckoutPage: React.FC = () => {
             {/* Right: mini order summary */}
             <div className="card" style={{ padding: 20, position: 'sticky', top: 80 }}>
               <h3 style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginBottom: 14, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10 }}>
-                Don hang ({ORDER_ITEMS.length} san pham)
+                Đơn hàng ({ORDER_ITEMS.length} sản phẩm)
               </h3>
-              {ORDER_ITEMS.map(item => (
-                <div key={item.id} style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                  <img src={item.image} alt={item.name} style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
-                    <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 3 }}>x{item.quantity}</p>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary, #7C3AED)', margin: 0 }}>{formatCurrency(item.price * item.quantity)}</p>
+              {ORDER_ITEMS.map(item => {
+                const pvariants = variantStore.get(item.id)
+                const allBundles = [
+                  ...bundleStore.get(item.id),
+                  ...pvariants.flatMap((v: any) => v.bundleItems || [])
+                ]
+                const gifts = allBundles.filter((b: any) => b.type === 'gift')
+                return (
+                  <div key={item.id} style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <img src={item.image} alt={item.name} style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
+                        <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 3 }}>x{item.quantity}</p>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary, #7C3AED)', margin: 0 }}>{formatCurrency(item.price * item.quantity)}</p>
+                      </div>
+                    </div>
+                    {gifts.length > 0 && (
+                      <div style={{ marginTop: 8, background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8, padding: '8px 10px' }}>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: '#D97706', letterSpacing: '0.05em', marginBottom: 6 }}>🎁 HÀNG TẶNG KÈM PHIÊN BẢN NÀY</div>
+                        {gifts.map((g: any, gi: number) => (
+                          <div key={gi} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: gi < gifts.length - 1 ? 6 : 0 }}>
+                            {g.image_urls?.[0]
+                              ? <img src={g.image_urls[0]} alt={g.name} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid #FED7AA' }} />
+                              : <div style={{ width: 36, height: 36, borderRadius: 6, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🎁</div>
+                            }
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: '#92400E', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</div>
+                              <div style={{ fontSize: 11, color: '#D97706', fontWeight: 700 }}>
+                                {g.price > 0 ? formatCurrency(g.price) : '🎁 Tặng miễn phí'}
+                                {g.stock_quantity > 0 && <span style={{ color: '#92400E', fontWeight: 400, marginLeft: 6 }}>SL: {g.stock_quantity}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12, marginTop: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Tieu tong</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>Tiểu tổng</span>
                   <span>{formatCurrency(subtotal)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Phi van chuyen</span>
-                  <span style={{ color: shipping === 0 ? '#16A34A' : 'var(--text-primary)', fontWeight: 500 }}>{shipping === 0 ? 'Mien phi' : formatCurrency(shipping)}</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>Phí vận chuyển</span>
+                  <span style={{ color: shipping === 0 ? '#16A34A' : 'var(--text-primary)', fontWeight: 500 }}>{shipping === 0 ? 'Miễn phí' : formatCurrency(shipping)}</span>
                 </div>
                 {saved > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>Tiet kiem</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>Tiết kiệm</span>
                     <span style={{ color: '#16A34A', fontWeight: 600 }}>-{formatCurrency(saved)}</span>
                   </div>
                 )}
                 {voucherDiscount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>Voucher ap dung</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>Voucher áp dụng</span>
                     <span style={{ color: '#16A34A', fontWeight: 600 }}>-{formatCurrency(voucherDiscount)}</span>
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, marginTop: 10, color: 'var(--text-primary)' }}>
-                  <span>Tong cong</span>
+                  <span>Tổng cộng</span>
                   <span style={{ color: 'var(--primary, #7C3AED)' }}>{formatCurrency(grandTotal)}</span>
                 </div>
               </div>
@@ -888,26 +919,52 @@ const CheckoutPage: React.FC = () => {
                       <span style={{ fontSize: 18 }}>{shop.shopIcon}</span>
                       <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{shop.shopName}</span>
                     </div>
-                    {shopItems.map((item, idx) => (
-                      <div key={item.id} style={{
-                        display: 'flex', gap: 14, padding: '14px 20px',
-                        borderBottom: idx < shopItems.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                        alignItems: 'center',
-                      }}>
-                        <img src={item.image} alt={item.name} style={{ width: 64, height: 64, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontWeight: 500, fontSize: 14, color: 'var(--text-primary)', marginBottom: 3 }}>{item.name}</p>
-                          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Phan loai: {item.variant}</p>
-                          <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>So luong: {item.quantity}</p>
-                        </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <p style={{ fontWeight: 700, fontSize: 15, color: 'var(--primary, #7C3AED)', margin: '0 0 3px' }}>{formatCurrency(item.price * item.quantity)}</p>
-                          {item.originalPrice > item.price && (
-                            <p style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'line-through', margin: 0 }}>{formatCurrency(item.originalPrice * item.quantity)}</p>
+                    {shopItems.map((item, idx) => {
+                      const pvariants2 = variantStore.get(item.id)
+                      const allBundles2 = [
+                        ...bundleStore.get(item.id),
+                        ...pvariants2.flatMap((v: any) => v.bundleItems || [])
+                      ]
+                      const gifts2 = allBundles2.filter((b: any) => b.type === 'gift')
+                      return (
+                        <div key={item.id} style={{ borderBottom: idx < shopItems.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
+                          <div style={{ display: 'flex', gap: 14, padding: '14px 20px', alignItems: 'center' }}>
+                            <img src={item.image} alt={item.name} style={{ width: 64, height: 64, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontWeight: 500, fontSize: 14, color: 'var(--text-primary)', marginBottom: 3 }}>{item.name}</p>
+                              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Phân loại: {item.variant || '—'}</p>
+                              <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>Số lượng: {item.quantity}</p>
+                            </div>
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <p style={{ fontWeight: 700, fontSize: 15, color: 'var(--primary, #7C3AED)', margin: '0 0 3px' }}>{formatCurrency(item.price * item.quantity)}</p>
+                              {item.originalPrice > item.price && (
+                                <p style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'line-through', margin: 0 }}>{formatCurrency(item.originalPrice * item.quantity)}</p>
+                              )}
+                            </div>
+                          </div>
+                          {gifts2.length > 0 && (
+                            <div style={{ margin: '0 20px 12px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8, padding: '8px 12px' }}>
+                              <div style={{ fontSize: 10, fontWeight: 800, color: '#D97706', letterSpacing: '0.05em', marginBottom: 6 }}>🎁 HÀNG TẶNG KÈM PHIÊN BẢN NÀY</div>
+                              {gifts2.map((g: any, gi: number) => (
+                                <div key={gi} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: gi < gifts2.length - 1 ? 6 : 0 }}>
+                                  {g.image_urls?.[0]
+                                    ? <img src={g.image_urls[0]} alt={g.name} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid #FED7AA' }} />
+                                    : <div style={{ width: 36, height: 36, borderRadius: 6, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🎁</div>
+                                  }
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: '#92400E' }}>{g.name}</div>
+                                    <div style={{ fontSize: 11, color: '#D97706', fontWeight: 700 }}>
+                                      {g.price > 0 ? formatCurrency(g.price) : 'Tặng miễn phí'}
+                                      {g.stock_quantity > 0 && <span style={{ color: '#92400E', fontWeight: 400, marginLeft: 6 }}>SL: {g.stock_quantity}</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                     <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-highlight, #f8f9fa)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, color: 'var(--text-secondary)', gap: 12, flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ flexShrink: 0 }}>🏪 Voucher shop:</span>
@@ -993,16 +1050,42 @@ const CheckoutPage: React.FC = () => {
             {/* Right: summary */}
             <div className="card" style={{ padding: 20, position: 'sticky', top: 80 }}>
               <h3 style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginBottom: 14, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10 }}>
-                Tom tat thanh toan
+                Tóm tắt thanh toán
               </h3>
+              {/* Quà tặng kèm (step 1 right panel) */}
+              {(() => {
+                const allGifts = ORDER_ITEMS.flatMap(item => {
+                  const pv = variantStore.get(item.id)
+                  const bundles = [...bundleStore.get(item.id), ...pv.flatMap((v: any) => v.bundleItems || [])]
+                  return bundles.filter((b: any) => b.type === 'gift').map((g: any) => ({ ...g, productName: item.name }))
+                })
+                if (allGifts.length === 0) return null
+                return (
+                  <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: '#D97706', letterSpacing: '0.05em', marginBottom: 8 }}>🎁 HÀNG TẶNG KÈM ({allGifts.length})</div>
+                    {allGifts.map((g: any, gi: number) => (
+                      <div key={gi} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: gi < allGifts.length - 1 ? 6 : 0 }}>
+                        {g.image_urls?.[0]
+                          ? <img src={g.image_urls[0]} alt={g.name} style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid #FED7AA' }} />
+                          : <div style={{ width: 34, height: 34, borderRadius: 6, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🎁</div>
+                        }
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#92400E', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</div>
+                          <div style={{ fontSize: 11, color: '#D97706' }}>{g.price > 0 ? formatCurrency(g.price) : 'Tặng miễn phí'}{g.stock_quantity > 0 && <span style={{ color: '#92400E', marginLeft: 5 }}>SL: {g.stock_quantity}</span>}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 9, fontSize: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>San pham ({ORDER_ITEMS.length})</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>Sản phẩm ({ORDER_ITEMS.length})</span>
                   <span>{formatCurrency(subtotal)}</span>
                 </div>
                 {saved > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>Da tiet kiem</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>Đã tiết kiệm</span>
                     <span style={{ color: '#16A34A', fontWeight: 600 }}>-{formatCurrency(saved)}</span>
                   </div>
                 )}
@@ -1036,7 +1119,7 @@ const CheckoutPage: React.FC = () => {
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Phi giao hang</span>
-                  <span style={{ color: shipping === 0 ? '#16A34A' : 'var(--text-primary)', fontWeight: 500 }}>{shipping === 0 ? 'Mien phi' : formatCurrency(shipping)}</span>
+                  <span style={{ color: shipping === 0 ? '#16A34A' : 'var(--text-primary)', fontWeight: 500 }}>{shipping === 0 ? 'Miễn phí' : formatCurrency(shipping)}</span>
                 </div>
 
                 {/* Dung xu BuyZo de tru tien — nut on/off, 1 xu = 1 dong */}

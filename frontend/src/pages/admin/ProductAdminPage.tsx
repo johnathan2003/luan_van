@@ -88,6 +88,7 @@ const ProductDetailModal: React.FC<{
   const [imgScale, setImgScale]         = useState(1)
   const [imgOrigin, setImgOrigin]       = useState({ x: 50, y: 50 })
   const [zoomAccImg, setZoomAccImg]     = useState<string | null>(null)
+  const [zoomMainImg, setZoomMainImg]   = useState<string | null>(null)
 
   const placeMarker = useCallback((imgUrl: string, e: React.MouseEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -104,8 +105,8 @@ const ProductDetailModal: React.FC<{
   }, [annotations])
 
   const handleImgClick = useCallback((e: React.MouseEvent) => {
-    if (!annotateMode) return
-    placeMarker(activeImg, e)
+    if (annotateMode) { placeMarker(activeImg, e); return }
+    if (activeImg) setZoomMainImg(activeImg)
   }, [annotateMode, activeImg, placeMarker])
 
   const handleImgWheel = useCallback((e: React.WheelEvent) => {
@@ -157,7 +158,8 @@ const ProductDetailModal: React.FC<{
 
   return (
     <>
-      {zoomAccImg && <ZoomLightbox url={zoomAccImg} onClose={() => setZoomAccImg(null)} />}
+      {zoomAccImg  && <ZoomLightbox url={zoomAccImg}  onClose={() => setZoomAccImg(null)}  />}
+      {zoomMainImg && <ZoomLightbox url={zoomMainImg} onClose={() => setZoomMainImg(null)} />}
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
         onClick={onClose}>
         <div style={{ background: 'var(--bg-card)', borderRadius: 18, width: '100%', maxWidth: 1020, maxHeight: '93vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 72px rgba(0,0,0,0.4)' }}
@@ -170,11 +172,13 @@ const ProductDetailModal: React.FC<{
               <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: st.bg, color: st.color }}>{st.label}</span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
+              {p.status === 'pending' && (
               <button onClick={() => { setAnnotateMode(m => !m); setAnnotations([]); setActiveAnn(null) }} style={{
                 padding: '7px 15px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
                 background: annotateMode ? C.error : '#FEF3C7', color: annotateMode ? 'white' : C.warning,
                 boxShadow: annotateMode ? `0 0 0 2px ${C.error}` : 'none',
               }}>{annotateMode ? '✏️ Đang đánh dấu — Tắt' : '🚩 Đánh dấu vi phạm'}</button>
+              )}
               <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.gray }}>✕</button>
             </div>
           </div>
@@ -186,7 +190,7 @@ const ProductDetailModal: React.FC<{
           )}
           {!annotateMode && (
             <div style={{ background: '#EFF6FF', borderBottom: '1px solid #BFDBFE', padding: '6px 22px', fontSize: 11, color: C.blue, flexShrink: 0 }}>
-              🔍 Lăn chuột trên ảnh để zoom (tối đa 5×) · Double-click để reset về 1×
+              🔍 Click vào ảnh sản phẩm để phóng to và zoom
             </div>
           )}
 
@@ -199,7 +203,7 @@ const ProductDetailModal: React.FC<{
                 {/* Main image */}
                 <div onClick={handleImgClick} onWheel={handleImgWheel}
                   style={{ width: 380, height: 340, borderRadius: 14, overflow: 'hidden', background: '#F1F5F9', position: 'relative',
-                    cursor: annotateMode ? 'crosshair' : imgScale > 1 ? 'zoom-out' : 'zoom-in', ...sStyle('img_' + activeImg) }}
+                    cursor: annotateMode ? 'crosshair' : 'zoom-in', ...sStyle('img_' + activeImg) }}
                   onDoubleClick={() => { setImgScale(1); setImgOrigin({ x: 50, y: 50 }) }}>
                   {activeImg
                     ? <img src={getImageUrl(activeImg)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', display: 'block',
@@ -217,7 +221,7 @@ const ProductDetailModal: React.FC<{
                   ))}
                   {!annotateMode && activeImg && (
                     <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 7, pointerEvents: 'none' }}>
-                      🔍 Lăn chuột để zoom · 2× click để reset
+                      🔍 Click để phóng to
                     </div>
                   )}
                   {annotateMode && (
@@ -261,10 +265,6 @@ const ProductDetailModal: React.FC<{
                 )}
 
                 {p.video_url && <video src={p.video_url} controls style={{ width: '100%', borderRadius: 10 }} />}
-                <button onClick={() => { onClose(); openImgModal(p) }}
-                  style={{ padding: '8px', background: C.tint, color: C.blue, border: `1px solid ${C.light}`, borderRadius: 8, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
-                  📷 Sửa ảnh sản phẩm
-                </button>
               </div>
 
               {/* RIGHT — info */}
@@ -582,7 +582,7 @@ const ProductAdminPage: React.FC = () => {
                     : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44, color: '#CBD5E1' }}>🛍️</div>}
                   <span style={{ position: 'absolute', top: 8, right: 8, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.color }}>{st.label}</span>
                   <button onClick={e => { e.stopPropagation(); openImgModal(p) }} style={{ position: 'absolute', bottom: 6, right: 6, padding: '4px 8px', borderRadius: 6, border: 'none', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>📷 Sửa ảnh</button>
-                  {rejection && <div style={{ position: 'absolute', bottom: 6, left: 6, background: C.error, color: 'white', fontSize: 10, fontWeight: 700, padding: '3px 7px', borderRadius: 5 }}>🚩 {rejection.violations.length} vi phạm</div>}
+                  {rejection && p.status === 'rejected' && <div style={{ position: 'absolute', bottom: 6, left: 6, background: C.error, color: 'white', fontSize: 10, fontWeight: 700, padding: '3px 7px', borderRadius: 5 }}>🚩 {rejection.violations.length} vi phạm</div>}
                 </div>
                 <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 7, flex: 1 }}>
                   <div>

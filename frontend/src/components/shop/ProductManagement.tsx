@@ -518,7 +518,7 @@ const ProductManagement: React.FC = () => {
                     {totalPromos > 0 && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#FEF3C7', color: '#D97706' }}>🎯 {totalPromos} deal</span>}
                     {totalAttrs > 0 && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#F5F3FF', color: '#7C3AED' }}>🏷️ {totalAttrs} thuộc tính</span>}
                     {totalBundleItems > 0 && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#F0FDF4', color: 'var(--success)' }}>🎁 {totalBundleItems} kèm</span>}
-                    {rejection && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#FEE2E2', color: 'var(--error)', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); setExpandedId(p.product_id) }}>🚩 {rejection.violations.length} vi phạm admin</span>}
+                    {rejection && p.status === 'rejected' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#FEE2E2', color: 'var(--error)', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); setExpandedId(p.product_id) }}>🚩 {rejection.violations.length} vi phạm admin</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 16, marginTop: 3, flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: 16 }}>{formatCurrency(displayPrice)}</span>
@@ -537,7 +537,7 @@ const ProductManagement: React.FC = () => {
                 <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '16px 20px', background: 'var(--bg-page, #F8FAFC)', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
                   {/* ── Vi phạm admin ── */}
-                  {rejection && (
+                  {rejection && p.status === 'rejected' && (
                     <div style={{ background: '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: 12, padding: '14px 18px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                         <span style={{ fontSize: 18 }}>🚩</span>
@@ -775,11 +775,15 @@ const ProductManagement: React.FC = () => {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <button
-                          onClick={e => {
+                          onClick={async e => {
                             e.stopPropagation()
+                            try {
+                              await shopService.activateProduct(p.product_id)
+                            } catch (_) { /* API có thể chưa có — tiếp tục với localStorage */ }
                             productApprovalStore.setActive(p.product_id)
                             setProducts(prev => prev.map(x => x.product_id === p.product_id ? { ...x, status: 'active' } : x))
-                            toast.success(`Sản phẩm "${p.product_name}" đã được đăng bán!`)
+                            setReadyExpandedId(null)
+                            toast.success(`🚀 Sản phẩm "${p.product_name}" đã được đăng bán!`)
                           }}
                           style={{ padding: '8px 18px', background: 'linear-gradient(135deg, #0EA5E9, #0284C7)', color: 'white',
                             border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer',

@@ -131,8 +131,19 @@ def approve_product(db: Session, product_id: int, reviewer_id: int) -> Product:
     product = db.query(Product).filter(Product.product_id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    product.status = "active"
+    product.status = "approved"
     product.approved_at = datetime.utcnow()
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+def activate_product(db: Session, product_id: int) -> Product:
+    """Shop bấm Đăng bán — chuyển approved → active."""
+    product = db.query(Product).filter(Product.product_id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    product.status = "active"
     db.commit()
     db.refresh(product)
     return product

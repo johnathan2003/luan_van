@@ -15,4 +15,6 @@ export const shopService = {
   // Vouchers
   getVouchers: () => API.get('/api/v1/shop/vouchers'),
   createVoucher: (data: any) => API.post('/api/v1/shop/vouchers', data),
+  // Product lifecycle
+  activateProduct: (productId: number) => API.post(`/api/v1/products/${productId}/activate`),
 }

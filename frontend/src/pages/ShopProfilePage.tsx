@@ -459,6 +459,7 @@ const ShopProfilePage: React.FC = () => {
   )
 
   const filteredProducts = (shop.products || []).filter((p: any) =>
+    (!p.status || p.status === 'active') &&
     p.product_name.toLowerCase().includes(search.toLowerCase()) &&
     (activeCategory === 'all' || p.category_name === activeCategory)
   )
