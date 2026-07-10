@@ -207,9 +207,9 @@ const MallAdBanner: React.FC = () => {
         </div>
       </div>
 
-      {/* Phai 3 phan - hinh co dinh */}
+      {/* Phải 3 phần - hình cố định */}
       <div style={{ position: 'relative', flex: 3, height: '100%', overflow: 'hidden', borderRadius: 14, background: '#0f0f0f' }}>
-        <img src={MALL_AD_FIXED} alt="Quang cao co dinh" className="banner-img"
+        <img src={MALL_AD_FIXED} alt="Quảng cáo cố định" className="banner-img"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       </div>
     </div>
@@ -451,11 +451,11 @@ const Home: React.FC = () => {
                 <span style={{ fontSize: 14 }}>🌟</span>
                 <span style={{ color: '#d97706', fontWeight: 700, fontSize: 12 }}>NOI BAT</span>
               </div>
-              <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>San pham noi bat</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Sản phẩm noi bat</h2>
             </div>
             {total > 0 && (
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>
-                Tim thay <strong style={{ color: 'var(--text-primary)' }}>{total}</strong> san pham
+                Tim thay <strong style={{ color: 'var(--text-primary)' }}>{total}</strong> sản phẩm
               </p>
             )}
           </div>
@@ -514,10 +514,10 @@ const Home: React.FC = () => {
         <div className="container">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24, textAlign: 'center' }}>
             {[
-              { icon: '🚚', title: 'Giao hang nhanh',    desc: 'Van chuyen toan quoc, giao trong 2-5 ngay' },
-              { icon: '🔒', title: 'Thanh toan an toan', desc: 'MoMo, VNPay, Chuyen khoan, COD' },
-              { icon: '🔄', title: 'Doi tra de dang',    desc: '7 ngay doi tra neu san pham loi' },
-              { icon: '🎧', title: 'Ho tro 24/7',        desc: 'CSKH san sang ho tro ban moi luc' },
+              { icon: '🚚', title: 'Giao hàng nhanh',    desc: 'Vận chuyển toàn quốc, giao trong 2-5 ngày' },
+              { icon: '🔒', title: 'Thanh toán an toàn', desc: 'MoMo, VNPay, Chuyển khoản, COD' },
+              { icon: '🔄', title: 'Đổi trả dễ dàng',    desc: '7 ngày đổi trả nếu sản phẩm lỗi' },
+              { icon: '🎧', title: 'Hỗ trợ 24/7',        desc: 'CSKH sẵn sàng hỗ trợ bạn mọi lúc' },
             ].map(f => (
               <div key={f.title} style={{ padding: '24px 16px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-highlight, var(--gray-50))', border: '1px solid var(--border-subtle)', transition: 'transform 0.2s, box-shadow 0.2s' }}
                 onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-md)' }}

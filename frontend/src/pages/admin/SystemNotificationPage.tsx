@@ -169,7 +169,7 @@ const SystemNotificationPage: React.FC = () => {
 }
 
 const MOCK_NOTIS = [
-  { id:1, title:'Bảo trì hệ thống', content:'Hệ thống sẽ bảo trì từ 2:00 - 4:00 sáng ngày 20/06/2025. Vui lòng không thực hiện giao dịch trong thời gian này.', type:'warning', audience:'all',      send_at:'',                 created_at:'2025-06-14 08:00', sent: false },
+  { id:1, title:'Bảo trì hệ thống', content:'Hệ thống sẽ bảo trì từ 2:00 - 4:00 sáng ngày 20/06/2025. Vui lòng không thực hiện giao dịch trong thời gián này.', type:'warning', audience:'all',      send_at:'',                 created_at:'2025-06-14 08:00', sent: false },
   { id:2, title:'Chính sách phí mới', content:'Từ ngày 01/07/2025, phí hoa hồng nền tảng sẽ được điều chỉnh. Xem chi tiết tại trang chính sách.', type:'info', audience:'shop',    send_at:'2025-06-20 09:00', created_at:'2025-06-13 15:00', sent: false },
   { id:3, title:'Khuyến mãi hè 2025', content:'BuyZO tặng voucher 50K cho tất cả khách hàng nhân dịp hè. Áp dụng đến 30/06/2025.', type:'promo',   audience:'customer', send_at:'',                 created_at:'2025-06-10 10:00', sent: true  },
 ]

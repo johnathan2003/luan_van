@@ -57,7 +57,7 @@ const REJECT_PRESETS = [
   'Nội dung và hình ảnh tình dục',
   'Thù ghét và quấy rối',
   'Bạo lực hoặc lạm dụng',
-  'An toàn của trẻ em',
+  'Ẩn toàn của trẻ em',
   'Thông tin sai lệch hoặc nội dung do AI tạo',
   'Tự tử và tự làm hại bản thân',
   'Nội dung định hướng thương hiệu không được tiết lộ',

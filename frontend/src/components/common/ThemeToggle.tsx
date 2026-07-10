@@ -14,7 +14,7 @@ const timeAgo = (iso?: string) => {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
   if (diff < 60)    return 'vua xong'
   if (diff < 3600)  return `${Math.floor(diff / 60)} phut`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} gio`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} giờ`
   return `${Math.floor(diff / 86400)} ngay`
 }
 
@@ -123,7 +123,7 @@ const ThemeToggle: React.FC = () => {
           const oldIds = new Set(old.map((m: Message) => m.message_id))
           const fresh  = reversed.filter((m: Message) => !oldIds.has(m.message_id) && m.sender_id !== user?.user_id)
           if (fresh.length > 0) {
-            const preview = fresh[fresh.length - 1].content || 'Tin nhan moi'
+            const preview = fresh[fresh.length - 1].content || 'Tin nhắn mới'
             setToastMap(t => ({ ...t, [convId]: preview }))
             if (toastTimers.current[convId]) clearTimeout(toastTimers.current[convId])
             toastTimers.current[convId] = setTimeout(() => setToastMap(t => ({ ...t, [convId]: null })), 3000)
@@ -241,13 +241,13 @@ const ThemeToggle: React.FC = () => {
                 <button onClick={closePanel} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--text-secondary)', lineHeight: 1, paddingBottom: 2 }}>&#x2039;</button>
                 <Av src={activeConv.partner_avatar} name={activeConv.partner_name} sz={30} />
                 <span style={{ flex: 1, fontWeight: 700, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeConv.partner_name || 'Shop'}</span>
-                <button onClick={minimizeActive} title="Thu gon" style={{ background: 'var(--bg-highlight,rgba(0,0,0,0.06))', border: 'none', cursor: 'pointer', width: 26, height: 26, borderRadius: '50%', fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#x2212;</button>
-                <button onClick={() => { const id = activeConv.conversation_id; fullClosePanel(); navigate(role === 'shop' || role === 'employee' ? chatPath + '?conv=' + id : chatPath + '?shop=' + activeConv.shop_id) }} title="Mo chat" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--primary,#7C3AED)' }}>&#x2922;</button>
+                <button onClick={minimizeActive} title="Thu gọn" style={{ background: 'var(--bg-highlight,rgba(0,0,0,0.06))', border: 'none', cursor: 'pointer', width: 26, height: 26, borderRadius: '50%', fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#x2212;</button>
+                <button onClick={() => { const id = activeConv.conversation_id; fullClosePanel(); navigate(role === 'shop' || role === 'employee' ? chatPath + '?conv=' + id : chatPath + '?shop=' + activeConv.shop_id) }} title="Mở chat" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--primary,#7C3AED)' }}>&#x2922;</button>
                 <button onClick={fullClosePanel} style={{ background: 'var(--bg-highlight,rgba(0,0,0,0.06))', border: 'none', cursor: 'pointer', width: 26, height: 26, borderRadius: '50%', fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#x2715;</button>
               </div>
               <div style={{ overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 280, maxHeight: 340, background: 'var(--bg-page,#f5f5f5)' }}>
                 {activeMessages.length === 0
-                  ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: 12, paddingTop: 80 }}>Bat dau cuoc tro chuyen</div>
+                  ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: 12, paddingTop: 80 }}>Bắt đầu cuộc trò chuyện</div>
                   : activeMessages.map((m: Message) => {
                       const mine = m.sender_id === user?.user_id
                       return (
@@ -268,7 +268,7 @@ const ThemeToggle: React.FC = () => {
                   value={inputMap[activeConv.conversation_id] ?? ''}
                   onChange={e => setInputMap(m => ({ ...m, [activeConv.conversation_id]: e.target.value }))}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(activeConv.conversation_id) } }}
-                  placeholder="Nhan tin..."
+                  placeholder="Nhắn tin..."
                   style={{ flex: 1, border: '1px solid var(--border-subtle)', borderRadius: 20, padding: '7px 14px', fontSize: 13, outline: 'none', background: 'var(--bg-page,#f5f5f5)', color: 'var(--text-primary)' }}
                 />
                 <button
@@ -283,11 +283,11 @@ const ThemeToggle: React.FC = () => {
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 18 }}>&#x1F4AC;</span>
-                  <span style={{ fontWeight: 800, fontSize: 15, color: 'var(--text-primary)' }}>Tin nhan</span>
+                  <span style={{ fontWeight: 800, fontSize: 15, color: 'var(--text-primary)' }}>Tin nhắn</span>
                   {totalUnread > 0 && <span style={{ background: '#EF4444', color: '#fff', fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 8 }}>{totalUnread} chua doc</span>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <button onClick={() => { setChatOpen(false); navigate(chatPath) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--primary,#7C3AED)', fontWeight: 600 }}>Xem tat ca &#x2192;</button>
+                  <button onClick={() => { setChatOpen(false); navigate(chatPath) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--primary,#7C3AED)', fontWeight: 600 }}>Xem tất cả &#x2192;</button>
                   <button onClick={() => setChatOpen(false)} style={{ background: 'var(--bg-highlight,rgba(0,0,0,0.06))', border: 'none', cursor: 'pointer', width: 28, height: 28, borderRadius: '50%', fontSize: 14, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#x2715;</button>
                 </div>
               </div>
@@ -295,7 +295,7 @@ const ThemeToggle: React.FC = () => {
                 {convs.length === 0
                   ? <div style={{ padding: 32, textAlign: 'center' }}>
                       <div style={{ fontSize: 36, marginBottom: 8 }}>&#x1F4AC;</div>
-                      <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Chua co tin nhan nao</p>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Chưa có tin nhắn nào</p>
                     </div>
                   : convs.map(c => (
                     <div key={c.conversation_id} onClick={() => openConv(c)}
@@ -310,7 +310,7 @@ const ThemeToggle: React.FC = () => {
                           <span style={{ fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0, marginLeft: 4 }}>{timeAgo(c.last_message_at)}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-                          <span style={{ fontSize: 12, color: c.unread_count > 0 ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: c.unread_count > 0 ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{c.last_message || 'Bat dau cuoc tro chuyen'}</span>
+                          <span style={{ fontSize: 12, color: c.unread_count > 0 ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: c.unread_count > 0 ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{c.last_message || 'Bắt đầu cuộc trò chuyện'}</span>
                           {c.unread_count > 0 && <span style={{ minWidth: 16, height: 16, borderRadius: 8, background: '#7C3AED', color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', marginLeft: 4, flexShrink: 0 }}>{c.unread_count}</span>}
                         </div>
                       </div>
@@ -344,7 +344,7 @@ const ThemeToggle: React.FC = () => {
                     <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-primary)' }}>{conv.partner_name || 'Shop'}</span>
                   </div>
                   <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {toast ?? (lastMsg?.content ? (lastMsg.content.length > 34 ? lastMsg.content.slice(0, 34) + '...' : lastMsg.content) : 'Bat dau cuoc tro chuyen')}
+                    {toast ?? (lastMsg?.content ? (lastMsg.content.length > 34 ? lastMsg.content.slice(0, 34) + '...' : lastMsg.content) : 'Bắt đầu cuộc trò chuyện')}
                   </p>
                 </div>
               )}
@@ -353,7 +353,7 @@ const ThemeToggle: React.FC = () => {
               </div>
               {toast && <span style={{ position: 'absolute', top: 0, left: 0, width: 12, height: 12, borderRadius: '50%', background: '#EF4444', border: '2px solid var(--bg-card)', animation: 'cw-pulse 1s ease infinite', pointerEvents: 'none' }} />}
               {hovered && (
-                <button onClick={e => { e.stopPropagation(); closeBubble(convId) }} title="Dong"
+                <button onClick={e => { e.stopPropagation(); closeBubble(convId) }} title="Đóng"
                   style={{ position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%', border: 'none', cursor: 'pointer', background: '#EF4444', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.25)' }}>
                   &#x2715;
                 </button>
@@ -365,7 +365,7 @@ const ThemeToggle: React.FC = () => {
         {/* Chat button */}
         {showChat && (
           <div style={{ position: 'relative' }}>
-            <button type="button" aria-label="Tin nhan" title="Tin nhan"
+            <button type="button" aria-label="Tin nhắn" title="Tin nhắn"
               onClick={() => { setThemeOpen(false); if (chatOpen && !activeConv) { setChatOpen(false) } else { setChatOpen(true); setActiveConv(null); fetchConvs() } }}
               style={{ ...BTN, animation: hasNew ? 'cw-bounce 0.6s ease' : undefined } as React.CSSProperties}
               onMouseEnter={on} onMouseLeave={off}
@@ -378,8 +378,8 @@ const ThemeToggle: React.FC = () => {
           </div>
         )}
 
-        <button type="button" aria-label="Theo doi don hang" title="Theo doi don hang" onClick={() => navigate('/orders')} style={BTN} onMouseEnter={on} onMouseLeave={off}>&#x1F4E6;</button>
-        <button type="button" aria-label="Su kien" title="Su kien" onClick={() => navigate('/events')} style={BTN} onMouseEnter={on} onMouseLeave={off}>&#x1F381;</button>
+        <button type="button" aria-label="Theo dõi đơn hàng" title="Theo dõi đơn hàng" onClick={() => navigate('/orders')} style={BTN} onMouseEnter={on} onMouseLeave={off}>&#x1F4E6;</button>
+        <button type="button" aria-label="Sự kiện" title="Sự kiện" onClick={() => navigate('/events')} style={BTN} onMouseEnter={on} onMouseLeave={off}>&#x1F381;</button>
 
         {/* Theme button + dropdown sang trai */}
         <div style={{ position: 'relative' }}>
@@ -397,7 +397,7 @@ const ThemeToggle: React.FC = () => {
               ))}
             </div>
           )}
-          <button type="button" aria-label="Chuyen doi giao dien" onClick={() => { setThemeOpen(o => !o); setChatOpen(false) }} style={BTN} onMouseEnter={on} onMouseLeave={off}>{icon}</button>
+          <button type="button" aria-label="Chuyển đổi giao diện" onClick={() => { setThemeOpen(o => !o); setChatOpen(false) }} style={BTN} onMouseEnter={on} onMouseLeave={off}>{icon}</button>
         </div>
 
       </div>

@@ -85,7 +85,7 @@ const KEY = 'buyzo_flash_auction_v1'
 
 const FAKE_SHOP_NAMES = [
   'TechWorld Store', 'FashionVN', 'BookStore360', 'Mẹ và Bé Xinh', 'Nhà Sạch Plus',
-  'Đồ Gia Dụng An Phát', 'Giày Sneaker House', 'Mỹ Phẩm Hàn Việt', 'Thế Giới Phụ Kiện',
+  'Đồ Giá Dụng Ẩn Phát', 'Giày Sneaker House', 'Mỹ Phẩm Hàn Việt', 'Thế Giới Phụ Kiện',
 ]
 const FAKE_PRODUCTS = ['Tai nghe Bluetooth', 'Kem dưỡng da Hàn', 'Giày thể thao', 'Bình giữ nhiệt', 'Đèn LED', 'Nồi chiên không dầu']
 
@@ -315,7 +315,7 @@ export function rejectFlashSubmission(id: string, reason?: string): boolean {
 }
 export function cancelFlashSubmissionExpired(id: string): boolean {
   const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false
-  data.submissions[idx] = { ...data.submissions[idx], status: 'cancelled', rejectReason: 'Hết thời gian thanh toán phần còn lại' }
+  data.submissions[idx] = { ...data.submissions[idx], status: 'cancelled', rejectReason: 'Hết thời gián thanh toán phần còn lại' }
   saveStore(data); return true
 }
 

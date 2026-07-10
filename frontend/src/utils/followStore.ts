@@ -40,7 +40,7 @@ const MOCK_FOLLOWERS: FollowedUser[] = [
   { userId: 9002, fullName: 'Trần Thị Hoa',       avatarUrl: '', followedAt: '2025-11-12T10:30:00Z' },
   { userId: 9003, fullName: 'Lê Văn Đức',         avatarUrl: '', followedAt: '2025-12-20T14:00:00Z' },
   { userId: 9004, fullName: 'Phạm Thị Lan',       avatarUrl: '', followedAt: '2026-01-08T09:15:00Z' },
-  { userId: 9005, fullName: 'Hoàng Anh Khoa',     avatarUrl: '', followedAt: '2026-02-14T11:00:00Z' },
+  { userId: 9005, fullName: 'Hoàng Ẩnh Khoa',     avatarUrl: '', followedAt: '2026-02-14T11:00:00Z' },
   { userId: 9006, fullName: 'Đỗ Thị Thanh',       avatarUrl: '', followedAt: '2026-03-01T16:20:00Z' },
 ]
 

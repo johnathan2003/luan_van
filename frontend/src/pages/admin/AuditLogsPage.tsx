@@ -74,7 +74,7 @@ const AuditLogsPage: React.FC = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: C.tint }}>
-              {['Thời gian', 'Admin', 'Hành động', 'Đối tượng', 'ID', 'Ghi chú'].map(h => (
+              {['Thời gián', 'Admin', 'Hành động', 'Đối tượng', 'ID', 'Ghi chú'].map(h => (
                 <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: C.navy }}>{h}</th>
               ))}
             </tr>

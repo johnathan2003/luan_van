@@ -11,8 +11,8 @@ const ROLE_META: Record<string, { icon: string; color: string; label: string }> 
   admin:    { icon: '⚙️', color: '#1D4ED8', label: 'Admin' },
   shop:     { icon: '🏪', color: '#16A34A', label: 'Shop' },
   shipper:  { icon: '🚚', color: '#D97706', label: 'Shipper' },
-  user:     { icon: '👤', color: '#7C3AED', label: 'Khach hang' },
-  employee: { icon: '👷', color: '#DB2777', label: 'Nhan vien' },
+  user:     { icon: '👤', color: '#7C3AED', label: 'Khách hàng' },
+  employee: { icon: '👷', color: '#DB2777', label: 'Nhân viên' },
 }
 
 const BTN       = 36
@@ -258,9 +258,9 @@ const Navbar: React.FC = () => {
     if (role === 'shop')    return { bg: '#DBEAFE', color: '#1D4ED8', label: '🏪 Shop' }
     if (role === 'admin')   return { bg: '#FEF3C7', color: '#D97706', label: '⚙️ Admin' }
     if (role === 'shipper') return { bg: '#FEF9C3', color: '#854D0E', label: '🚚 Shipper' }
-    if (role === 'user')     return { bg: '#EDE9FE', color: '#7C3AED', label: '👤 Khach hang' }
-    if (role === 'employee') return { bg: '#FCE7F3', color: '#DB2777', label: '👷 Nhan vien' }
-    return { bg: '#F3F4F6', color: '#6B7280', label: '👤 Khach hang' }
+    if (role === 'user')     return { bg: '#EDE9FE', color: '#7C3AED', label: '👤 Khách hàng' }
+    if (role === 'employee') return { bg: '#FCE7F3', color: '#DB2777', label: '👷 Nhân viên' }
+    return { bg: '#F3F4F6', color: '#6B7280', label: '👤 Khách hàng' }
   }
   const badge = roleBadgeStyle(currentRole)
 
@@ -301,7 +301,7 @@ const Navbar: React.FC = () => {
               onChange={e => setSearchQuery(e.target.value)}
               onFocus={() => setSearchFocus(true)}
               onBlur={() => setTimeout(() => setSearchFocus(false), 200)}
-              placeholder="Tim kiem san pham, nhan hang, cua hang..."
+              placeholder="Tìm kiếm sản phẩm, nhận hàng, cửa hàng..."
               style={{
                 width: '100%', padding: '8px 40px 8px 14px', fontSize: 14, outline: 'none',
                 borderRadius: showSuggest ? '10px 10px 0 0' : 'var(--radius-full)',
@@ -419,65 +419,65 @@ const Navbar: React.FC = () => {
                     {/* Shop owner */}
                     {currentRole === 'shop' && (
                       <div>
-                        <SectionLabel>Tai khoan</SectionLabel>
-                        <MenuItem icon="👤" label="Trang ca nhan"       path="/profile"               onClick={close} />
-                        <MenuItem icon="📦" label="Don hang cua toi"    sub="Lich su mua hang"         path="/orders"              onClick={close} />
-                        <MenuItem icon="💬" label="Tin nhan khach"      sub="Chat voi nguoi mua"       path="/shop/chat"           onClick={close} />
-                        <SectionLabel border>Quan ly Shop</SectionLabel>
-                        <MenuItem icon="⚙️" label="Quan ly shop"       sub="San pham, don hang, NV"   path="/shop"                onClick={close} />
-                        <MenuItem icon="🏪" label="Xem trang shop"     sub="Giao dien khach thay"     path={`/shops/${user?.user_id}`} onClick={close} />
-                        <MenuItem icon="🎫" label="Voucher shop"        sub="Ma giam gia cua shop"     path="/shop/vouchers"       onClick={close} />
-                        <MenuItem icon="🎁" label="Trung tam voucher"                                  path="/vouchers"            onClick={close} />
-                        <MenuItem icon="⚠️" label="Khieu nai cua toi"                                 path="/complaints"          onClick={close} />
+                        <SectionLabel>Tài khoản</SectionLabel>
+                        <MenuItem icon="👤" label="Trang cá nhân"       path="/profile"               onClick={close} />
+                        <MenuItem icon="📦" label="Đơn hàng của tôi"    sub="Lịch sử mua hàng"         path="/orders"              onClick={close} />
+                        <MenuItem icon="💬" label="Tin nhắn khách"      sub="Chat với người mua"       path="/shop/chat"           onClick={close} />
+                        <SectionLabel border>Quản lý Shop</SectionLabel>
+                        <MenuItem icon="⚙️" label="Quản lý shop"       sub="Sản phẩm, đơn hàng, NV"   path="/shop"                onClick={close} />
+                        <MenuItem icon="🏪" label="Xem trang shop"     sub="Giao diện khách thấy"     path={`/shops/${user?.user_id}`} onClick={close} />
+                        <MenuItem icon="🎫" label="Voucher shop"        sub="Mã giảm giá của shop"     path="/shop/vouchers"       onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tâm voucher"                                  path="/vouchers"            onClick={close} />
+                        <MenuItem icon="⚠️" label="Khiếu nại của tôi"                                 path="/complaints"          onClick={close} />
                       </div>
                     )}
 
                     {/* Admin */}
                     {currentRole === 'admin' && (
                       <div>
-                        <SectionLabel>Tai khoan</SectionLabel>
-                        <MenuItem icon="👤" label="Ho so ca nhan"       path="/profile"  onClick={close} />
-                        <MenuItem icon="📦" label="Don hang cua toi"    path="/orders"   onClick={close} />
-                        <MenuItem icon="🎁" label="Trung tam voucher"   path="/vouchers" onClick={close} />
+                        <SectionLabel>Tài khoản</SectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"  onClick={close} />
+                        <MenuItem icon="📦" label="Đơn hàng của tôi"    path="/orders"   onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tâm voucher"   path="/vouchers" onClick={close} />
                         <SectionLabel border>Quan tri</SectionLabel>
-                        <MenuItem icon="⚙️" label="Admin dashboard"    sub="Nguoi dung, shop, don hang" path="/admin" onClick={close} />
+                        <MenuItem icon="⚙️" label="Admin dashboard"    sub="Người dùng, shop, đơn hàng" path="/admin" onClick={close} />
                       </div>
                     )}
 
                     {/* Shipper */}
                     {currentRole === 'shipper' && (
                       <div>
-                        <SectionLabel>Tai khoan</SectionLabel>
-                        <MenuItem icon="👤" label="Ho so ca nhan"       path="/profile"   onClick={close} />
-                        <MenuItem icon="📦" label="Don hang cua toi"    path="/orders"    onClick={close} />
-                        <MenuItem icon="🎁" label="Trung tam voucher"   path="/vouchers"  onClick={close} />
-                        <SectionLabel border>Giao hang</SectionLabel>
-                        <MenuItem icon="🚚" label="Quan ly giao hang"  sub="Don hang, lo trinh, thu nhap" path="/shipper" onClick={close} />
+                        <SectionLabel>Tài khoản</SectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"   onClick={close} />
+                        <MenuItem icon="📦" label="Đơn hàng của tôi"    path="/orders"    onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tâm voucher"   path="/vouchers"  onClick={close} />
+                        <SectionLabel border>Giao hàng</SectionLabel>
+                        <MenuItem icon="🚚" label="Quản lý giao hàng"  sub="Đơn hàng, lộ trình, thu nhập" path="/shipper" onClick={close} />
                       </div>
                     )}
 
                     {/* Employee */}
                     {currentRole === 'employee' && (
                       <div>
-                        <SectionLabel>Tai khoan</SectionLabel>
-                        <MenuItem icon="👤" label="Ho so ca nhan"           path="/profile"           onClick={close} />
-                        <SectionLabel border>Nhan vien</SectionLabel>
-                        <MenuItem icon="🏠" label="Tong quan"              sub="Dashboard cua ban"    path="/employee"          onClick={close} />
-                        <MenuItem icon="📋" label="Don hang"                                          path="/employee/orders"   onClick={close} />
-                        <MenuItem icon="📦" label="San pham"                                          path="/employee/products" onClick={close} />
-                        <MenuItem icon="💬" label="Tin nhan"                                          path="/employee/messages" onClick={close} />
+                        <SectionLabel>Tài khoản</SectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"           path="/profile"           onClick={close} />
+                        <SectionLabel border>Nhân viên</SectionLabel>
+                        <MenuItem icon="🏠" label="Tổng quan"              sub="Dashboard của bạn"    path="/employee"          onClick={close} />
+                        <MenuItem icon="📋" label="Đơn hàng"                                          path="/employee/orders"   onClick={close} />
+                        <MenuItem icon="📦" label="Sản phẩm"                                          path="/employee/products" onClick={close} />
+                        <MenuItem icon="💬" label="Tin nhắn"                                          path="/employee/messages" onClick={close} />
                       </div>
                     )}
 
                     {/* Customer / default */}
                     {(currentRole === 'user' || !currentRole) && (
                       <div>
-                        <SectionLabel>Tai khoan</SectionLabel>
-                        <MenuItem icon="👤" label="Ho so ca nhan"       path="/profile"     onClick={close} />
-                        <MenuItem icon="📦" label="Don hang cua toi"    path="/orders"      onClick={close} />
-                        <MenuItem icon="💬" label="Tin nhan"            path="/chat"        onClick={close} />
-                        <MenuItem icon="🎁" label="Trung tam voucher"   path="/vouchers"    onClick={close} />
-                        <MenuItem icon="⚠️" label="Khieu nai cua toi"  path="/complaints"  onClick={close} />
+                        <SectionLabel>Tài khoản</SectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"     onClick={close} />
+                        <MenuItem icon="📦" label="Đơn hàng của tôi"    path="/orders"      onClick={close} />
+                        <MenuItem icon="💬" label="Tin nhắn"            path="/chat"        onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tâm voucher"   path="/vouchers"    onClick={close} />
+                        <MenuItem icon="⚠️" label="Khiếu nại của tôi"  path="/complaints"  onClick={close} />
                       </div>
                     )}
 
@@ -488,7 +488,7 @@ const Navbar: React.FC = () => {
                         onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#FFF1F1')}
                         onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'none')}>
                         <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>🚪</span>
-                        Dang xuat
+                        Đăng xuất
                       </button>
                     </div>
 
@@ -499,8 +499,8 @@ const Navbar: React.FC = () => {
             </div>
           ) : (
             <React.Fragment>
-              <Link to="/login" style={{ color: 'var(--text-on-topbar)', fontSize: 14, fontWeight: 500, textDecoration: 'none' }}>Dang nhap</Link>
-              <Link to="/register" style={{ background: 'var(--cta-bg)', color: 'var(--cta-text)', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>Dang ky</Link>
+              <Link to="/login" style={{ color: 'var(--text-on-topbar)', fontSize: 14, fontWeight: 500, textDecoration: 'none' }}>Đăng nhập</Link>
+              <Link to="/register" style={{ background: 'var(--cta-bg)', color: 'var(--cta-text)', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>Đăng ký</Link>
             </React.Fragment>
           )}
         </div>

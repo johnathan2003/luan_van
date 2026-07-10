@@ -756,12 +756,12 @@ const BannerAuctionPage: React.FC = () => {
         return (
           <div>
             {rows.length === 0
-              ? <div style={cardStyle}><p style={{ color: C.gray }}>Bạn chưa tham gia phiên đấu giá nào.</p></div>
+              ? <div style={cardStyle}><p style={{ color: C.gray }}>Bạn chưa tham giá phiên đấu giá nào.</p></div>
               : <>
                   {/* Summary */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
                     {[
-                      { label: 'Tổng phiên tham gia', value: rows.length, color: C.blue, bg: C.blueLight },
+                      { label: 'Tổng phiên tham giá', value: rows.length, color: C.blue, bg: C.blueLight },
                       { label: 'Số phiên thắng', value: rows.filter(r => r.isWinner).length, color: C.primary, bg: C.primaryLight },
                       { label: 'Tổng đã đặt giá', value: rows.reduce((s, r) => s + r.myBids, 0) + ' lượt', color: C.purple, bg: C.purpleLight },
                       { label: 'Tổng tiền thắng (đ)', value: rows.filter(r => r.isWinner && r.confirmation === 'paid').reduce((s, r) => s + (r.amount || 0), 0).toLocaleString('vi-VN'), color: C.orange, bg: C.orangeLight },
@@ -1153,7 +1153,7 @@ const BannerAuctionPage: React.FC = () => {
 
                   {/* Hướng dẫn */}
                   <div style={{ background: C.primaryLight, borderRadius: 8, padding: '10px 14px', fontSize: 12, color: C.primary }}>
-                    💡 Vui lòng chỉnh sửa nội dung theo đúng chính sách, sau đó vào tab <b>⚙️ Chuẩn bị</b> để cập nhật mẫu và tham gia đấu giá lại.
+                    💡 Vui lòng chỉnh sửa nội dung theo đúng chính sách, sau đó vào tab <b>⚙️ Chuẩn bị</b> để cập nhật mẫu và tham giá đấu giá lại.
                   </div>
                 </div>
               </div>

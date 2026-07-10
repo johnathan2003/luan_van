@@ -158,7 +158,7 @@ const FinancePage: React.FC = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: C.tint }}>
-              {['Mã TXN', 'Loại', 'Shop', 'Đơn hàng', 'Số tiền', 'Thời gian', 'Trạng thái'].map(h => (
+              {['Mã TXN', 'Loại', 'Shop', 'Đơn hàng', 'Số tiền', 'Thời gián', 'Trạng thái'].map(h => (
                 <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: C.navy }}>{h}</th>
               ))}
             </tr>

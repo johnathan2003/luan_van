@@ -1,4 +1,4 @@
-// Luu trang thai "theo doi shop" tam o localStorage - phuc vu demo/test, chua co backend thuc
+// Lưu trạng thái "theo dõi shop" tam o localStorage - phuc vu demo/test, chua co backend thuc
 const KEY = 'buyzo_followed_shops_v1'
 
 function readAll(): number[] {
@@ -18,7 +18,7 @@ export function isFollowingShop(shopId: number): boolean {
   return readAll().includes(shopId)
 }
 
-// Tra ve true neu day la lan dau theo doi (vua chuyen tu chua theo doi -> theo doi)
+// Tra ve true neu day la lan dau theo dõi (vua chuyen tu chua theo dõi -> theo dõi)
 export function toggleFollowShop(shopId: number): { following: boolean; justFollowed: boolean } {
   const all = readAll()
   const idx = all.indexOf(shopId)

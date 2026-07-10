@@ -150,7 +150,7 @@ const AddressEntry: React.FC<AddressEntryProps> = ({
         </div>
         {/* Quận */}
         <div>
-          <label style={labelStyle}>Quận / Huyện</label>
+          <label style={labelStyle}>Quận / Hủyện</label>
           <select value={value.district} onChange={handleDistrict}
             disabled={!value.province || geoLoading}
             style={{ ...inputStyle, cursor: value.province ? 'pointer' : 'not-allowed', opacity: value.province ? 1 : 0.5 }}>

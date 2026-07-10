@@ -53,10 +53,10 @@ interface WardItem    { code: number; name: string }
 const GEO_API = 'https://provinces.open-api.vn/api'
 
 const PAYMENT_METHODS = [
-  { id: 'cod',         icon: '💵', label: 'Thanh toan khi nhan hang (COD)', sub: 'Tra tien mat khi nhan duoc hang' },
-  { id: 'vnpay',       icon: '🏦', label: 'Thanh toan VNPay',               sub: 'Chuyen khoan qua ATM / Internet Banking / VNPay' },
-  { id: 'momo',        icon: '🟣', label: 'Vi MoMo',                        sub: 'Thanh toan nhanh qua vi MoMo' },
-  { id: 'credit_card', icon: '💳', label: 'The tin dung / Ghi no',          sub: 'Visa, Mastercard, JCB' },
+  { id: 'cod',         icon: '💵', label: 'Thanh toán khi nhận hàng (COD)', sub: 'Trả tiền mặt khi nhận được hàng' },
+  { id: 'vnpay',       icon: '🏦', label: 'Thanh toán VNPay',               sub: 'Chuyển khoản qua ATM / Internet Banking / VNPay' },
+  { id: 'momo',        icon: '🟣', label: 'Ví MoMo',                        sub: 'Thanh toán nhanh qua ví MoMo' },
+  { id: 'credit_card', icon: '💳', label: 'Thẻ tín dụng / Ghi nợ',          sub: 'Visa, Mastercard, JCB' },
 ]
 
 // ─── Form types ───────────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ const ITruck  = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none
 
 // ─── Steps indicator ──────────────────────────────────────────────────────────
 const Steps: React.FC<{ current: number }> = ({ current }) => {
-  const steps = ['Dia chi giao hang', 'Xac nhan & Thanh toan', 'Hoan thanh']
+  const steps = ['Địa chỉ giao hàng', 'Xác nhận & Thanh toán', 'Hoàn thành']
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 28, gap: 0 }}>
       {steps.map((s, i) => {
@@ -151,7 +151,7 @@ const CheckoutPage: React.FC = () => {
     shopId: i.shop_id ?? 0,
     shopName: i.shop_name ?? 'Shop',
     shopIcon: '🏪',
-    name: i.product_name ?? `San pham #${i.product_id}`,
+    name: i.product_name ?? `Sản phẩm #${i.product_id}`,
     variant: '',
     image: i.product_image ?? '',
     price: i.price,
@@ -223,14 +223,14 @@ const CheckoutPage: React.FC = () => {
   const [orderId, setOrderId] = useState(() => 'BZ' + Date.now().toString().slice(-8))
   const [orderError, setOrderError] = useState<string | null>(null)
   const [myVouchers, setMyVouchers] = useState<VoucherLite[]>([])
-  // undefined = chua khoi tao (cho data), null = nguoi dung chon "khong dung voucher"
+  // undefined = chua khoi tao (cho data), null = người dùng chon "khong dung voucher"
   const [platformVoucherId, setPlatformVoucherId] = useState<number | null | undefined>(undefined)
   const [shopVoucherIds, setShopVoucherIds]       = useState<Record<number, number | null | undefined>>({})
   // dung xu BuyZo de tru vao tien (1 xu = 1 dong)
   const [useXu, setUseXu] = useState(false)
   const [xuBalance, setXuBalance] = useState(() => getXu())
   const [appliedXu, setAppliedXu] = useState(0) // so xu da thuc su tru khi dat hang xong
-  const [postGifts, setPostGifts] = useState<PostPurchaseGift[]>([]) // qua tang hau mai sau khi dat hang
+  const [postGifts, setPostGifts] = useState<PostPurchaseGift[]>([]) // qua tang hau mai sau khi đặt hàng
 
   useEffect(() => {
     voucherService.getMyVouchers()
@@ -273,14 +273,14 @@ const CheckoutPage: React.FC = () => {
   // ── Validate step 1 ──
   const validate = () => {
     const e: Partial<AddressForm> = {}
-    if (!form.name.trim())     e.name     = 'Vui long nhap ho va ten'
-    if (!/^(0|\+84)[3-9]\d{8}$/.test(form.phone.trim())) e.phone = 'So dien thoai khong hop le'
+    if (!form.name.trim())     e.name     = 'Vui lòng nhập họ và tên'
+    if (!/^(0|\+84)[3-9]\d{8}$/.test(form.phone.trim())) e.phone = 'Số điện thoại không hợp lệ'
     // Nếu đã chọn địa chỉ từ hồ sơ, không cần validate province/district/ward/street
     if (selectedAddrIdx === null) {
-      if (!form.province)      e.province = 'Vui long chon tinh/thanh'
-      if (!form.district)      e.district = 'Vui long chon quan/huyen'
-      if (!form.ward)          e.ward     = 'Vui long chon phuong/xa'
-      if (!form.street.trim()) e.street   = 'Vui long nhap dia chi cu the'
+      if (!form.province)      e.province = 'Vui lòng chọn tỉnh/thành'
+      if (!form.district)      e.district = 'Vui lòng chọn quận/huyện'
+      if (!form.ward)          e.ward     = 'Vui lòng chọn phường/xã'
+      if (!form.street.trim()) e.street   = 'Vui lòng nhập địa chỉ cụ thể'
     }
     setErrors(e)
     return Object.keys(e).length === 0
@@ -413,20 +413,20 @@ const CheckoutPage: React.FC = () => {
       <div style={{ textAlign: 'center', maxWidth: 560, padding: '0 16px' }}>
         <div style={{ fontSize: 72, marginBottom: 16 }}>🎉</div>
         <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>
-          Dat hang thanh cong!
+          Đặt hàng thành công!
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: 15, marginBottom: 4 }}>
-          Don hang <strong style={{ color: 'var(--primary, #7C3AED)' }}>#{orderId}</strong> da duoc ghi nhan.
+          Đơn hàng <strong style={{ color: 'var(--primary, #7C3AED)' }}>#{orderId}</strong> đã được ghi nhận.
         </p>
         <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 24 }}>
-          Chung toi se gui thong bao xac nhan qua SDT: <strong>{form.phone}</strong>
+          Chúng tôi sẽ gửi thông báo xác nhận qua SĐT: <strong>{form.phone}</strong>
         </p>
 
-        {/* San pham da mua */}
+        {/* Sản phẩm đã mua */}
         <div className="card" style={{ padding: 16, textAlign: 'left', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <span style={{ fontSize: 16 }}>📦</span>
-            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>San pham da mua ({ORDER_ITEMS.length})</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>Sản phẩm da mua ({ORDER_ITEMS.length})</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {ORDER_ITEMS.map(item => (
@@ -452,7 +452,7 @@ const CheckoutPage: React.FC = () => {
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Phi giao hang</span>
+              <span style={{ color: 'var(--text-secondary)' }}>Phí giao hàng</span>
               <span style={{ color: shipping === 0 ? '#16A34A' : 'var(--text-primary)', fontWeight: 500 }}>{shipping === 0 ? 'Miễn phí' : formatCurrency(shipping)}</span>
             </div>
             {appliedXu > 0 && (
@@ -471,12 +471,12 @@ const CheckoutPage: React.FC = () => {
         <div className="card" style={{ padding: 16, textAlign: 'left', marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <span style={{ color: '#16A34A' }}><ITruck /></span>
-            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>Thong tin giao hang</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>Thong tin giao hàng</span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '0 0 3px', fontWeight: 600 }}>{form.name} — {form.phone}</p>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>{fullAddress}</p>
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Du kien giao hang</span>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Du kien giao hàng</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: '#16A34A' }}>3 - 5 ngay lam viec</span>
           </div>
         </div>
@@ -486,7 +486,7 @@ const CheckoutPage: React.FC = () => {
             Theo doi don hang
           </Link>
           <Link to="/products" style={{ padding: '11px 24px', borderRadius: 8, fontWeight: 600, textDecoration: 'none', border: '1.5px solid var(--border-subtle)', color: 'var(--text-primary)' }}>
-            Tiep tuc mua sam
+            Tiep tuc mua sắm
           </Link>
         </div>
 
@@ -518,7 +518,7 @@ const CheckoutPage: React.FC = () => {
                         <div>
                           <p style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text-primary)' }}>{g.voucher.label}</p>
                           <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2 }}>
-                            {g.type === 'platform_voucher' ? '🏛️ Voucher san BuyZo' : `🏪 Qua tang tu shop: ${g.shopName}`}
+                            {g.type === 'platform_voucher' ? '🏛️ Voucher sàn BuyZo' : `🏪 Qua tang tu shop: ${g.shopName}`}
                           </p>
                         </div>
                         <code style={{ background: 'var(--bg-page)', padding: '2px 8px', borderRadius: 4, fontSize: 10.5, fontWeight: 700, flexShrink: 0 }}>{g.voucher.code}</code>
@@ -563,9 +563,9 @@ const CheckoutPage: React.FC = () => {
 
         {/* Breadcrumb */}
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, display: 'flex', gap: 6, alignItems: 'center' }}>
-          <Link to="/"      style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>Trang chu</Link> /
-          <Link to="/cart"  style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>Gio hang</Link> /
-          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Thanh toan</span>
+          <Link to="/"      style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>Trang chủ</Link> /
+          <Link to="/cart"  style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>Giỏ hàng</Link> /
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Thanh toán</span>
         </div>
 
         {/* Steps */}
@@ -601,7 +601,7 @@ const CheckoutPage: React.FC = () => {
                         <input
                           value={form.name}
                           onChange={e => set('name', e.target.value)}
-                          placeholder="VD: Nguyễn Văn An"
+                          placeholder="VD: Nguyễn Văn Ẩn"
                           style={inputStyle(!!errors.name)}
                         />
                         {errors.name && <p style={errStyle}>{errors.name}</p>}
@@ -729,7 +729,7 @@ const CheckoutPage: React.FC = () => {
 
                     {/* Quan */}
                     <div>
-                      <label style={labelStyle}>Quận / Huyện <span style={{ color: '#EF4444' }}>*</span></label>
+                      <label style={labelStyle}>Quận / Hủyện <span style={{ color: '#EF4444' }}>*</span></label>
                       <select value={form.district} onChange={handleDistrictChange} disabled={!form.province || geoLoading} style={{ ...inputStyle(!!errors.district), cursor: form.province ? 'pointer' : 'not-allowed', opacity: form.province ? 1 : 0.5 }}>
                         <option value="">{geoLoading ? 'Đang tải...' : '-- Chọn quận/huyện --'}</option>
                         {districts.map(d => <option key={d.code} value={d.name} data-code={d.code}>{d.name}</option>)}
@@ -737,7 +737,7 @@ const CheckoutPage: React.FC = () => {
                       {errors.district && <p style={errStyle}>{errors.district}</p>}
                     </div>
 
-                    {/* Phuong */}
+                    {/* Phường */}
                     <div>
                       <label style={labelStyle}>Phường / Xã <span style={{ color: '#EF4444' }}>*</span></label>
                       <select value={form.ward} onChange={handleWardChange} disabled={!form.district || geoLoading} style={{ ...inputStyle(!!errors.ward), cursor: form.district ? 'pointer' : 'not-allowed', opacity: form.district ? 1 : 0.5 }}>
@@ -891,11 +891,11 @@ const CheckoutPage: React.FC = () => {
               <div className="card" style={{ padding: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <h3 style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <ITruck /> Dia chi giao hang
+                    <ITruck /> Địa chỉ giao hàng
                   </h3>
                   <button onClick={() => setStep(0)}
                     style={{ background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <IEdit /> Chinh sua
+                    <IEdit /> Chỉnh sửa
                   </button>
                 </div>
                 <div style={{ background: 'var(--bg-highlight, var(--bg-page))', borderRadius: 8, padding: '12px 16px', border: '1px solid var(--border-subtle)' }}>
@@ -903,7 +903,7 @@ const CheckoutPage: React.FC = () => {
                     {form.name} &nbsp;|&nbsp; {form.phone}
                   </p>
                   <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>{fullAddress}</p>
-                  {form.note && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '6px 0 0', fontStyle: 'italic' }}>Ghi chu: {form.note}</p>}
+                  {form.note && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '6px 0 0', fontStyle: 'italic' }}>Ghi chú: {form.note}</p>}
                 </div>
               </div>
 
@@ -974,7 +974,7 @@ const CheckoutPage: React.FC = () => {
                             onChange={e => setShopVoucherIds(prev => ({ ...prev, [sid]: e.target.value ? Number(e.target.value) : null }))}
                             style={{ fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1.5px solid var(--border-subtle)', color: 'var(--text-primary)', background: 'var(--bg-surface, var(--bg-page))', cursor: 'pointer' }}
                           >
-                            <option value="">Khong dung voucher</option>
+                            <option value="">Không dùng voucher</option>
                             {shopVoucherOptions.map(p => (
                               <option key={p.voucher.voucher_id} value={p.voucher.voucher_id}>
                                 {p.voucher.code} (-{formatCurrency(p.amount)})
@@ -982,11 +982,11 @@ const CheckoutPage: React.FC = () => {
                             ))}
                           </select>
                         ) : (
-                          <span style={{ fontStyle: 'italic', fontSize: 12 }}>Khong co voucher phu hop</span>
+                          <span style={{ fontStyle: 'italic', fontSize: 12 }}>Không có voucher phù hợp</span>
                         )}
                         {shopVoucher && <span style={{ color: '#1D4ED8', fontWeight: 700, fontSize: 12 }}>-{formatCurrency(shopVoucher.amount)}</span>}
                       </div>
-                      <span>Tieu tong shop: <strong style={{ color: 'var(--text-primary)', marginLeft: 6 }}>{formatCurrency(shopItems.reduce((s, i) => s + i.price * i.quantity, 0))}</strong></span>
+                      <span>Tiểu tổng shop: <strong style={{ color: 'var(--text-primary)', marginLeft: 6 }}>{formatCurrency(shopItems.reduce((s, i) => s + i.price * i.quantity, 0))}</strong></span>
                     </div>
                   </div>
                 )
@@ -1023,7 +1023,7 @@ const CheckoutPage: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <button onClick={() => setStep(0)}
                   style={{ padding: '10px 20px', background: 'none', border: '1.5px solid var(--border-subtle)', borderRadius: 8, fontSize: 14, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                  ← Quay lai
+                  ← Quay lại
                 </button>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
                   {orderError && (
@@ -1038,9 +1038,9 @@ const CheckoutPage: React.FC = () => {
                     {placing ? (
                       <>
                         <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2.5px solid rgba(255,255,255,0.35)', borderTop: '2.5px solid #fff', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-                        Dang xu ly...
+                        Đang xử lý...
                       </>
-                    ) : '🎯 Dat hang ngay'}
+                    ) : '🎯 Đặt hàng ngay'}
                     <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
                   </button>
                 </div>
@@ -1091,7 +1091,7 @@ const CheckoutPage: React.FC = () => {
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>🏛️ Voucher toan san</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>🏛️ Voucher toàn sàn</span>
                     {platformAmount > 0 && <span style={{ color: '#16A34A', fontWeight: 600 }}>-{formatCurrency(platformAmount)}</span>}
                   </div>
                   {eligiblePlatformVouchers.length > 0 ? (
@@ -1100,7 +1100,7 @@ const CheckoutPage: React.FC = () => {
                       onChange={e => setPlatformVoucherId(e.target.value ? Number(e.target.value) : null)}
                       style={{ fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1.5px solid var(--border-subtle)', color: 'var(--text-primary)', background: 'var(--bg-surface, var(--bg-page))', cursor: 'pointer' }}
                     >
-                      <option value="">Khong dung voucher</option>
+                      <option value="">Không dùng voucher</option>
                       {eligiblePlatformVouchers.map(p => (
                         <option key={p.voucher.voucher_id} value={p.voucher.voucher_id}>
                           {p.voucher.code} (-{formatCurrency(p.amount)})
@@ -1108,7 +1108,7 @@ const CheckoutPage: React.FC = () => {
                       ))}
                     </select>
                   ) : (
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>Khong co voucher san phu hop</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>Không có voucher sản phẩm phù hợp</span>
                   )}
                 </div>
                 {shopBests.map(s => (
@@ -1118,7 +1118,7 @@ const CheckoutPage: React.FC = () => {
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Phi giao hang</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>Phí giao hàng</span>
                   <span style={{ color: shipping === 0 ? '#16A34A' : 'var(--text-primary)', fontWeight: 500 }}>{shipping === 0 ? 'Miễn phí' : formatCurrency(shipping)}</span>
                 </div>
 
@@ -1157,19 +1157,19 @@ const CheckoutPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Thanh toan qua</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>Thanh toán qua</span>
                   <span style={{ fontWeight: 600 }}>{PAYMENT_METHODS.find(p => p.id === payment)?.icon} {PAYMENT_METHODS.find(p => p.id === payment)?.label.split(' ').slice(0,3).join(' ')}</span>
                 </div>
               </div>
               <div style={{ height: 1, background: 'var(--border-subtle)', margin: '14px 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>Tong thanh toan</span>
+                <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>Tổng thanh toán</span>
                 <span style={{ fontWeight: 800, fontSize: 20, color: 'var(--primary, #7C3AED)' }}>{formatCurrency(grandTotal)}</span>
               </div>
-              {(saved > 0 || voucherDiscount > 0 || xuToApply > 0) && <p style={{ fontSize: 12, color: '#16A34A', margin: '6px 0 0', textAlign: 'right' }}>Tiet kiem {formatCurrency(saved + voucherDiscount + xuToApply)} so voi gia goc</p>}
+              {(saved > 0 || voucherDiscount > 0 || xuToApply > 0) && <p style={{ fontSize: 12, color: '#16A34A', margin: '6px 0 0', textAlign: 'right' }}>Tiết kiệm {formatCurrency(saved + voucherDiscount + xuToApply)} so với giá gốc</p>}
               <div style={{ marginTop: 16, padding: '10px 12px', background: 'var(--bg-highlight, #F0FDF4)', borderRadius: 8, border: '1px solid #BBF7D0' }}>
                 <p style={{ fontSize: 12, color: '#15803D', margin: 0, fontWeight: 500, lineHeight: 1.6 }}>
-                  🔒 Thong tin don hang va thanh toan cua ban duoc bao mat tuyet doi
+                  🔒 Thông tin đơn hàng và thanh toán của bạn được bảo mật tuyệt đối
                 </p>
               </div>
             </div>

@@ -82,5 +82,5 @@ export const DISPUTE_STATUS_COLORS: Record<DisputeStatus, string> = {
 export const DISPUTE_TARGET_LABELS: Record<DisputeTargetType, string> = {
   shop: 'Shop',
   shipper: 'Shipper',
-  user: 'Nguoi mua',
+  user: 'Người mua',
 }

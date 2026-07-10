@@ -161,12 +161,12 @@ const SEED_IMAGES: Omit<ImageEntry, 'id' | 'addedAt'>[] = [
     url: 'https://picsum.photos/seed/white-shirt-slim/400/400',
   },
   {
-    source: 'seed', productName: 'Giay sneaker trang basic', shopName: 'Fashion Hub',
+    source: 'seed', productName: 'Giáy sneaker trang basic', shopName: 'Fashion Hub',
     label: 'Sneaker trắng cổ thấp',
     url: 'https://picsum.photos/seed/white-sneaker/400/400',
   },
   {
-    source: 'seed', productName: 'Giay sneaker trang basic', shopName: 'Fashion Hub',
+    source: 'seed', productName: 'Giáy sneaker trang basic', shopName: 'Fashion Hub',
     label: 'Sneaker trắng on-foot',
     url: 'https://picsum.photos/seed/sneaker-onfoot/400/400',
   },
@@ -213,22 +213,22 @@ const SEED_IMAGES: Omit<ImageEntry, 'id' | 'addedAt'>[] = [
     url: 'https://picsum.photos/seed/people-skills-book/400/400',
   },
   {
-    source: 'seed', productName: 'The Psychology of Money', shopName: 'Book Corner',
-    label: 'Bìa The Psychology of Money',
+    source: 'seed', productName: 'The Psychology of Mởney', shopName: 'Book Corner',
+    label: 'Bìa The Psychology of Mởney',
     url: 'https://covers.openlibrary.org/b/id/10710480-L.jpg',
   },
   {
-    source: 'seed', productName: 'The Psychology of Money', shopName: 'Book Corner',
-    label: 'Psychology of Money nội dung',
+    source: 'seed', productName: 'The Psychology of Mởney', shopName: 'Book Corner',
+    label: 'Psychology of Mởney nội dung',
     url: 'https://picsum.photos/seed/money-psychology/400/400',
   },
   {
-    source: 'seed', productName: 'Sapiens: Luoc su loai nguoi', shopName: 'Book Corner',
+    source: 'seed', productName: 'Sapiens: Lược sử loài người', shopName: 'Book Corner',
     label: 'Bìa Sapiens',
     url: 'https://covers.openlibrary.org/b/id/8739161-L.jpg',
   },
   {
-    source: 'seed', productName: 'Sapiens: Luoc su loai nguoi', shopName: 'Book Corner',
+    source: 'seed', productName: 'Sapiens: Lược sử loài người', shopName: 'Book Corner',
     label: 'Sapiens bản tiếng Việt',
     url: 'https://picsum.photos/seed/sapiens-book/400/400',
   },
