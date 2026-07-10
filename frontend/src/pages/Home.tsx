@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import ProductList from '../components/product/ProductList'
 import ProductFilter from '../components/product/ProductFilter'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
-import { fetchProducts, fetchCategories, setFilters } from '../store/slices/productSlice'
+import { fetchProducts, fetchCategories, setFilters, resetFilters } from '../store/slices/productSlice'
 import { formatCurrency } from '../utils/formatters'
 
 // ─── Banner ───────────────────────────────────────────────────────────────────
@@ -123,7 +123,7 @@ const FlashSaleSection: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 28 }}>⚡</span>
             <div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: -0.5, lineHeight: 1.1 }}>SẢN PHẨM NỔI BẬT</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: -0.5, lineHeight: 1.1 }}>FLASH SALE</div>
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: 500 }}>Bán chạy nhất hôm nay</div>
             </div>
           </div>
@@ -188,7 +188,7 @@ const MallAdBanner: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', gap: 12, width: '100%', height: 400 }}>
-      {/* Trai 7 phan - banner chay */}
+      {/* Trái 7 phần - banner chạy */}
       <div style={{ position: 'relative', flex: 7, height: '100%', overflow: 'hidden', borderRadius: 14, background: '#0f0f0f' }}>
         {MALL_ADS.map((src, i) => (
           <img key={src} src={src} alt={`Quang cao ${i + 1}`} className="banner-img"
@@ -370,18 +370,21 @@ const Home: React.FC = () => {
   const [searchParams] = useSearchParams()
   const { products, categories, filters, loading, total, pages, page } = useAppSelector(s => s.product)
 
-  // On mount: pick up ?search= from URL (e.g. from navbar search)
+  // filterMountedRef: ngăn useEffect[filters] chạy lần render đầu tiên
+  const filterMountedRef = useRef(false)
+
+  // On mount: luôn fetch trực tiếp + sync lại Redux filters
   useEffect(() => {
     dispatch(fetchCategories())
     const search = searchParams.get('search')
-    if (search) {
-      dispatch(setFilters({ search }))
-    } else {
-      dispatch(fetchProducts({ page: 1, limit: 12, sort: 'popular' }))
-    }
+    const params = { page: 1, limit: 12, sort: 'popular' as const, ...(search ? { search } : {}) }
+    dispatch(resetFilters(search ? { search } : undefined))  // sync filters state
+    dispatch(fetchProducts(params))                          // luôn fetch, không phụ thuộc cascade
   }, [])
 
+  // Fetch khi filter thay đổi SAU lần mount đầu
   useEffect(() => {
+    if (!filterMountedRef.current) { filterMountedRef.current = true; return }
     dispatch(fetchProducts(filters))
   }, [filters, dispatch])
 
@@ -409,7 +412,7 @@ const Home: React.FC = () => {
             <button type="button" className="btn btn-primary btn-sm"
               onClick={() => { dispatch(setFilters({ category_id: undefined })); scrollToProducts() }}
               style={{ borderRadius: 'var(--radius-full)', flexShrink: 0 }}>
-              Tat ca
+              Tất cả
             </button>
             {categories.map(cat => (
               <button key={cat.category_id} type="button"
@@ -427,7 +430,7 @@ const Home: React.FC = () => {
       {/* Flash Sale */}
       <FlashSaleSection />
 
-      {/* Banner quang cao tren BuyZo Mall */}
+      {/* Banner quảng cáo trên BuyZo Mall */}
       <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '20px 0 0' }}>
         <div className="container"><MallAdBanner /></div>
       </div>
@@ -440,7 +443,7 @@ const Home: React.FC = () => {
       {/* Sản phẩm mới nhất */}
       <NewProductsSection />
 
-      {/* San pham noi bat + Bo loc — cung 1 section */}
+      {/* Sản phẩm nổi bật + Bộ lọc — cùng 1 section */}
       <div ref={productSectionRef} id="products-section" style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-page)' }}>
         <div className="container" style={{ paddingTop: 48, paddingBottom: 56 }}>
 
@@ -449,13 +452,13 @@ const Home: React.FC = () => {
             <div>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(245,158,11,0.12)', borderRadius: 20, padding: '4px 12px', marginBottom: 8 }}>
                 <span style={{ fontSize: 14 }}>🌟</span>
-                <span style={{ color: '#d97706', fontWeight: 700, fontSize: 12 }}>NOI BAT</span>
+                <span style={{ color: '#d97706', fontWeight: 700, fontSize: 12 }}>NỔI BẬT</span>
               </div>
-              <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Sản phẩm noi bat</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Sản phẩm nổi bật</h2>
             </div>
             {total > 0 && (
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>
-                Tim thay <strong style={{ color: 'var(--text-primary)' }}>{total}</strong> sản phẩm
+                Tìm thấy <strong style={{ color: 'var(--text-primary)' }}>{total}</strong> sản phẩm
               </p>
             )}
           </div>
@@ -523,8 +526,8 @@ const Home: React.FC = () => {
                 onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-md)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}>
                 <div style={{ fontSize: 44, marginBottom: 12 }}>{f.icon}</div>
-                <h3 style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)', fontSize: 15 }}>{f.title}</h3>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>{f.desc}</p>
+                <h3 style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>{f.title}</h3>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>{f.desc}</p>
               </div>
             ))}
           </div>
@@ -533,5 +536,5 @@ const Home: React.FC = () => {
     </>
   )
 }
-export default Home
 
+export default Home

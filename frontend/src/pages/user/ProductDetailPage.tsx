@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
+import { trackViewedProduct } from '../../store/searchTrackingStore'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Loading from '../../components/common/Loading'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
@@ -301,6 +302,21 @@ const ProductDetailPage: React.FC = () => {
   const [recommended, setRecommended] = useState<any[]>([])
 
   useEffect(() => { if (id) { dispatch(fetchProductById(Number(id))); trackMissionEvent('view_product') } }, [id, dispatch])
+
+  // Track sản phẩm đã xem >= 4 giây (chưa mua)
+  useEffect(() => {
+    if (!product) return
+    const timer = setTimeout(() => {
+      trackViewedProduct({
+        product_id: product.product_id,
+        product_name: product.product_name,
+        price: String(product.price),
+        image_url: (product as any).image_urls?.[0] ?? null,
+        shop_name: (product as any).shop_name ?? undefined,
+      })
+    }, 4000)
+    return () => clearTimeout(timer)
+  }, [product])
   useEffect(() => { if (id) setReviews(getProductReviews(Number(id))) }, [id])
   useEffect(() => {
     API.get('/api/v1/vouchers/platform').then(r => setVouchers((r.data?.vouchers || r.data || []).slice(0, 6))).catch(() => setVouchers([]))
@@ -585,7 +601,7 @@ const ProductDetailPage: React.FC = () => {
         {recommended.length > 0 && (
           <div style={{ background: 'white', border: '1px solid var(--gray-200)', borderRadius: 16, padding: 28 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <SectionTitle icon="✨">Gợi ý cho bạn</SectionTitle>
+                          <SectionTitle icon="✨">Gợi ý cho bạn</SectionTitle>
               <Link to="/products" style={{ fontSize: 13, color: C.primary, fontWeight: 600, textDecoration: 'none' }}>Xem thêm →</Link>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14 }}>

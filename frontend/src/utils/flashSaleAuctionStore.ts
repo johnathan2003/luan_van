@@ -47,9 +47,20 @@ export interface FlashBid {
 export interface FlashAuctionSession {
   id: string; slot: FlashSlotKey; startedAt: string; endsAt: string; bids: FlashBid[]
   status: 'active' | 'ended'; winner?: FlashBid
+  scheduledStartAt?: string  // chờ đến thời điểm này mới mở đặt giá
+  description?: string       // mô tả admin
   confirmation?: 'pending' | 'deposit_paid' | 'declined' | 'expired' | 'paid'
   depositDeadline?: string; depositAmount?: number
   paymentDeadline?: string; displayDurationMs?: number
+}
+
+export function isAuctionLive(session: FlashAuctionSession): boolean {
+  if (!session.scheduledStartAt) return true
+  return Date.now() >= new Date(session.scheduledStartAt).getTime()
+}
+export function msUntilStart(session: FlashAuctionSession): number {
+  if (!session.scheduledStartAt) return 0
+  return Math.max(0, new Date(session.scheduledStartAt).getTime() - Date.now())
 }
 
 export interface AuctionAdminSettings {
@@ -93,12 +104,20 @@ function defaultSettings(basePrice: number): AuctionAdminSettings {
   return { basePrice, biddingDurationMs: AUCTION_DURATION_MS, displayDurationMs: 6 * 60 * 60 * 1000, locked: false }
 }
 
-function newSession(slot: FlashSlotKey, settings: AuctionAdminSettings): FlashAuctionSession {
+function newSession(
+  slot: FlashSlotKey,
+  settings: AuctionAdminSettings,
+  opts?: { startDelayMinutes?: number; description?: string }
+): FlashAuctionSession {
   const now = Date.now()
+  const delayMs = (opts?.startDelayMinutes ?? 0) * 60000
+  const scheduledStartAt = delayMs > 0 ? new Date(now + delayMs).toISOString() : undefined
   return {
     id: slot + '-' + now, slot,
     startedAt: new Date(now).toISOString(),
-    endsAt: new Date(now + settings.biddingDurationMs).toISOString(),
+    endsAt: new Date(now + delayMs + settings.biddingDurationMs).toISOString(),
+    scheduledStartAt,
+    description: opts?.description || undefined,
     bids: [], status: 'active',
   }
 }
@@ -342,7 +361,10 @@ export function lockSlot(slot: FlashSlotKey): void {
   delete (data.sessions as any)[slot]; saveStore(data)
 }
 
-export function openAuction(slot: FlashSlotKey): FlashAuctionSession {
+export function openAuction(
+  slot: FlashSlotKey,
+  opts?: { startDelayMinutes?: number; description?: string }
+): FlashAuctionSession {
   const data = getStore(); const session = data.sessions[slot]
   if (session && session.status === 'active') {
     const winner = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)) : undefined
@@ -351,14 +373,29 @@ export function openAuction(slot: FlashSlotKey): FlashAuctionSession {
       confirmation: winner ? 'pending' : undefined,
       depositDeadline: winner ? new Date(Date.now() + DEPOSIT_WINDOW_MS).toISOString() : undefined,
       depositAmount: winner ? Math.ceil(winner.amount * DEPOSIT_RATE) : undefined,
-      paymentDeadline: winner ? new Date(Date.now() + PAYMENT_WINDOW_MS).toISOString() : undefined,
+       paymentDeadline: winner ? new Date(Date.now() + PAYMENT_WINDOW_MS).toISOString() : undefined,
       displayDurationMs: data.settings[slot].displayDurationMs,
     }
     data.history.unshift(ended); data.history = data.history.slice(0, 30)
   }
   data.settings[slot] = { ...data.settings[slot], locked: false }
-  const fresh = newSession(slot, data.settings[slot])
-  data.sessions[slot] = fresh; saveStore(data); return fresh
+  const fresh = newSession(slot, data.settings[slot], opts)
+  data.sessions[slot] = fresh; saveStore(data)
+
+  // 📢 Broadcast thông báo đến tất cả shop
+  const slotLabel = FLASH_SLOTS.find(s => s.key === slot)?.label ?? slot
+  const delayMin = opts?.startDelayMinutes ?? 0
+  const startTimeStr = delayMin > 0
+    ? `sau ${delayMin} phút (${new Date(Date.now() + delayMin * 60000).toLocaleTimeString('vi-VN')})`
+    : 'ngay bây giờ'
+  addNotificationFor('', 'shop', 0, {
+    title: '⚡ Phiên đấu giá Flash Sale mới!',
+    message: `"${slotLabel}" mở đấu giá ${startTimeStr}.${opts?.description ? '\n📋 ' + opts.description : ''}\nVào trang Đấu giá để tham gia!`,
+    type: 'auction_open',
+    action_url: '/shop/auction',
+  })
+
+  return fresh
 }
 
 export function isLocked(slot: FlashSlotKey): boolean { return !!getStore().settings[slot]?.locked }

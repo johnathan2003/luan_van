@@ -3,8 +3,24 @@ import { useNavigate } from 'react-router-dom'
 import { useNotifications } from '../../hooks/useNotifications'
 import { formatDate } from '../../utils/formatters'
 
+type TabKey = 'all' | 'product' | 'auction' | 'message'
+
+const TABS: { key: TabKey; label: string; emoji: string; types: string[] }[] = [
+  { key: 'all',     label: 'Tất cả',    emoji: '🔔', types: [] },
+  { key: 'product', label: 'Sản phẩm',  emoji: '🏪', types: ['product_', 'approved', 'rejected', 'product'] },
+  { key: 'auction', label: 'Đấu giá',   emoji: '⚡', types: ['auction_', 'bid_', 'deposit_'] },
+  { key: 'message', label: 'Tin nhắn',  emoji: '💬', types: ['message_', 'support_', 'customer_', 'chat_'] },
+]
+
+function matchTab(type: string | undefined, tab: TabKey): boolean {
+  if (tab === 'all') return true
+  const patterns = TABS.find(t => t.key === tab)?.types ?? []
+  return patterns.some(p => type?.includes(p) || type === p.replace('_', ''))
+}
+
 const NotificationCenter: React.FC = () => {
   const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState<TabKey>('all')
   const { notifications, unread_count, read, readAll } = useNotifications()
   const ref = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -16,6 +32,13 @@ const NotificationCenter: React.FC = () => {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  const filtered = tab === 'all' ? notifications : notifications.filter(n => matchTab(n.type, tab))
+
+  const unreadByTab = (t: TabKey) =>
+    t === 'all'
+      ? unread_count
+      : notifications.filter(n => !n.is_read && matchTab(n.type, t)).length
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -39,34 +62,56 @@ const NotificationCenter: React.FC = () => {
         <div style={{
           position: 'absolute', top: '100%', right: 0, background: 'white',
           borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)',
-          width: 360, maxHeight: 480, display: 'flex', flexDirection: 'column',
+          width: 380, maxHeight: 520, display: 'flex', flexDirection: 'column',
           marginTop: 4, zIndex: 200,
         }}>
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--gray-100)' }}>
-            <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--gray-800)' }}>Thông báo ({unread_count})</span>
+            <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--gray-800)' }}>Thông báo</span>
             {unread_count > 0 && (
               <button onClick={readAll} style={{ background: 'none', border: 'none', fontSize: 13, color: 'var(--primary)', cursor: 'pointer', fontWeight: 500 }}>
-                Đánh dấu tất cả đã đọc
+                Đọc tất cả
               </button>
             )}
           </div>
 
+          {/* Tabs */}
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--gray-100)', padding: '0 8px' }}>
+            {TABS.map(t => {
+              const cnt = unreadByTab(t.key)
+              const active = tab === t.key
+              return (
+                <button key={t.key} onClick={() => setTab(t.key)} style={{
+                  flex: 1, padding: '8px 4px', border: 'none', background: 'none',
+                  fontSize: 12, fontWeight: active ? 700 : 400,
+                  color: active ? 'var(--primary)' : 'var(--gray-500)',
+                  borderBottom: active ? '2px solid var(--primary)' : '2px solid transparent',
+                  cursor: 'pointer', position: 'relative', whiteSpace: 'nowrap',
+                }}>
+                  {t.emoji} {t.label}
+                  {cnt > 0 && (
+                    <span style={{
+                      marginLeft: 4, background: '#EF4444', color: 'white',
+                      borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 700,
+                    }}>{cnt}</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
           {/* List */}
           <div style={{ overflowY: 'auto', flex: 1 }}>
-            {notifications.length === 0 ? (
+            {filtered.length === 0 ? (
               <div style={{ padding: 32, textAlign: 'center', color: 'var(--gray-400)', fontSize: 14 }}>
                 Không có thông báo
               </div>
-            ) : notifications.map(n => (
+            ) : filtered.map(n => (
               <div
                 key={n.notification_id}
                 onClick={() => {
                   read(n.notification_id)
-                  if (n.action_url) {
-                    setOpen(false)
-                    navigate(n.action_url)
-                  }
+                  if (n.action_url) { setOpen(false); navigate(n.action_url) }
                 }}
                 style={{
                   padding: '12px 16px', borderBottom: '1px solid var(--gray-100)',

@@ -84,6 +84,8 @@ export interface BannerAuctionSession {
   position: BannerPositionKey
   startedAt: string
   endsAt: string
+  scheduledStartAt?: string  // nếu set → chờ đến thời điểm này mới mở đặt giá
+  description?: string       // mô tả admin đặt khi mở phiên
   bids: BannerBid[]
   status: 'active' | 'ended'
   winner?: BannerBid
@@ -92,6 +94,17 @@ export interface BannerAuctionSession {
   depositAmount?: number     // 20% số tiền thắng
   paymentDeadline?: string   // hạn thanh toán đủ (sau khi cọc)
   displayDurationMs?: number
+}
+
+/** True khi phiên đã qua thời gian chờ và đang nhận đặt giá */
+export function isAuctionLive(session: BannerAuctionSession): boolean {
+  if (!session.scheduledStartAt) return true
+  return Date.now() >= new Date(session.scheduledStartAt).getTime()
+}
+/** ms còn lại đến khi phiên bắt đầu (0 nếu đã live) */
+export function msUntilStart(session: BannerAuctionSession): number {
+  if (!session.scheduledStartAt) return 0
+  return Math.max(0, new Date(session.scheduledStartAt).getTime() - Date.now())
 }
 
 export interface AuctionAdminSettings {
@@ -154,12 +167,20 @@ function defaultSettings(basePrice: number): AuctionAdminSettings {
   return { basePrice, biddingDurationMs: AUCTION_DURATION_MS, displayDurationMs: 2 * 24 * 60 * 60 * 1000, locked: false }
 }
 
-function newSession(position: BannerPositionKey, settings: AuctionAdminSettings): BannerAuctionSession {
+function newSession(
+  position: BannerPositionKey,
+  settings: AuctionAdminSettings,
+  opts?: { startDelayMinutes?: number; description?: string }
+): BannerAuctionSession {
   const now = Date.now()
+  const delayMs = (opts?.startDelayMinutes ?? 0) * 60000
+  const scheduledStartAt = delayMs > 0 ? new Date(now + delayMs).toISOString() : undefined
   return {
     id: position + '-' + now, position,
     startedAt: new Date(now).toISOString(),
-    endsAt: new Date(now + settings.biddingDurationMs).toISOString(),
+    endsAt: new Date(now + delayMs + settings.biddingDurationMs).toISOString(),
+    scheduledStartAt,
+    description: opts?.description || undefined,
     bids: [], status: 'active',
   }
 }
@@ -259,6 +280,7 @@ export function placeBid(position: BannerPositionKey, shopName: string, amount: 
   if (!session) return { ok: false, error: 'Vị trí này đang bị Admin tạm khoá, chưa thể đặt giá.' }
   const basePrice = data.settings[position]?.basePrice ?? BANNER_POSITIONS.find(d => d.key === position)!.basePrice
   const minNext = (session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice - MIN_STEP) + MIN_STEP
+  if (!isAuctionLive(session)) return { ok: false, error: `⏳ Phiên chưa bắt đầu. Vui lòng chờ đến ${session.scheduledStartAt ? new Date(session.scheduledStartAt).toLocaleTimeString('vi-VN') : ''}` }
   if (new Date(session.endsAt).getTime() <= Date.now()) return { ok: false, error: 'Phiên đấu giá đã kết thúc, vui lòng đặt giá ở phiên mới.' }
   const lastByShop = session.bids.find(b => b.shopName === shopName)
   if (lastByShop) {
@@ -428,8 +450,11 @@ export function lockPosition(position: BannerPositionKey): void {
   delete (data.sessions as any)[position]; saveStore(data)
 }
 
-export function openAuction(position: BannerPositionKey): BannerAuctionSession {
-  const data = getStore(); const session = data.sessions[position]
+export function openAuction(
+  position: BannerPositionKey,
+  opts?: { startDelayMinutes?: number; description?: string }
+): BannerAuctionSession {
+   const data = getStore(); const session = data.sessions[position]
   if (session && session.status === 'active') {
     const winner = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)) : undefined
     const ended: BannerAuctionSession = {
@@ -441,8 +466,23 @@ export function openAuction(position: BannerPositionKey): BannerAuctionSession {
     data.history.unshift(ended); data.history = data.history.slice(0, 30)
   }
   data.settings[position] = { ...data.settings[position], locked: false }
-  const fresh = newSession(position, data.settings[position])
-  data.sessions[position] = fresh; saveStore(data); return fresh
+  const fresh = newSession(position, data.settings[position], opts)
+  data.sessions[position] = fresh; saveStore(data)
+
+  // 📢 Broadcast thông báo đến tất cả shop
+  const posLabel = BANNER_POSITIONS.find(p => p.key === position)?.label ?? position
+  const delayMin = opts?.startDelayMinutes ?? 0
+  const startTimeStr = delayMin > 0
+    ? `sau ${delayMin} phút (${new Date(Date.now() + delayMin * 60000).toLocaleTimeString('vi-VN')})`
+    : 'ngay bây giờ'
+  addNotificationFor('', 'shop', 0, {
+    title: '⚡ Phiên đấu giá mới sắp mở!',
+    message: `Vị trí "${posLabel}" mở đấu giá ${startTimeStr}.${opts?.description ? '\n📋 ' + opts.description : ''}\nVào trang Đấu giá để tham gia!`,
+    type: 'auction_open',
+    action_url: '/shop/auction',
+  })
+
+  return fresh
 }
 
 export function isLocked(position: BannerPositionKey): boolean { return !!getStore().settings[position]?.locked }

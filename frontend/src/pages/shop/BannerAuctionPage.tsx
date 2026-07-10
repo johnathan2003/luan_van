@@ -6,6 +6,7 @@ import {
   BANNER_IMAGE_SPECS, ImageSpec,
   formatCountdown, getAllActiveSessions, getHistory, getMinNextBid,
   getShopCooldownRemaining, msUntilEnd,
+  isAuctionLive, msUntilStart,
   placeBid, sweepExpiredWins, getPendingWinsForShop, payDeposit, payWin,
   submitBanner, getSubmissionByHistoryId, getAllSubmissions as getAllBannerSubmissions,
 } from '../../utils/bannerAuctionStore'
@@ -15,6 +16,7 @@ import {
   getAllActiveSessions as getAllFlashSessions, getHistory as getFlashHistory,
   getMinNextBid as getFlashMinNextBid, getShopCooldownRemaining as getFlashCooldown,
   msUntilEnd as flashMsUntilEnd,
+  isAuctionLive as isFlashLive, msUntilStart as flashMsUntilStart,
   placeBid as placeFlashBid, sweepExpiredWins as sweepFlash,
   getPendingWinsForShop as getFlashPendingWins,
   payDeposit as payFlashDeposit, payWin as payFlashWin,
@@ -504,10 +506,33 @@ const BannerAuctionPage: React.FC = () => {
                     <p style={{ color: C.gray, fontSize: 12, margin: '4px 0 0' }}>{bannerDef.description}</p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {countdown[selectedBannerPos] || '–'}</div>
-                    <div style={{ fontSize: 11, color: C.gray }}>còn lại</div>
+                    {isAuctionLive(currentBannerSession) ? (
+                      <>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {countdown[selectedBannerPos] || '–'}</div>
+                        <div style={{ fontSize: 11, color: C.gray }}>còn lại</div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: '#D97706' }}>⏳ {formatCountdown(msUntilStart(currentBannerSession))}</div>
+                        <div style={{ fontSize: 11, color: C.gray }}>đến khi bắt đầu</div>
+                      </>
+                    )}
                   </div>
                 </div>
+
+                {/* Banner chưa bắt đầu */}
+                {!isAuctionLive(currentBannerSession) && (
+                  <div style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid #FCD34D', borderRadius: 10, padding: '16px 18px', marginBottom: 16 }}>
+                    <p style={{ margin: '0 0 6px', fontWeight: 700, color: '#92400E' }}>⏰ Phiên đấu giá sắp khai mạc!</p>
+                    {currentBannerSession.description && (
+                      <p style={{ margin: '0 0 6px', fontSize: 13, color: '#78350F', whiteSpace: 'pre-line' }}>📋 {currentBannerSession.description}</p>
+                    )}
+                    <p style={{ margin: 0, fontSize: 12, color: '#92400E' }}>
+                      Khai mạc lúc: <b>{currentBannerSession.scheduledStartAt ? new Date(currentBannerSession.scheduledStartAt).toLocaleString('vi-VN') : '–'}</b>
+                    </p>
+                    <p style={{ margin: '6px 0 0', fontSize: 12, color: '#B45309' }}>Bạn có thể xem thông tin phiên nhưng chưa thể đặt giá.</p>
+                  </div>
+                )}
 
                 {/* Preview ảnh vị trí */}
                 {bannerDef.previewImage && (
@@ -557,8 +582,11 @@ const BannerAuctionPage: React.FC = () => {
                     onChange={e => setBidAmounts(p => ({ ...p, [selectedBannerPos]: e.target.value }))}
                     style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }}
                   />
-                  <button style={btnStyle(bannerCooldown > 0 ? '#9CA3AF' : C.primary)} disabled={bannerCooldown > 0} onClick={handlePlaceBannerBid}>
-                    {bannerCooldown > 0 ? `Chờ ${Math.ceil(bannerCooldown / 1000)}s` : '🏹 Đặt giá'}
+                  <button
+                    style={btnStyle(!isAuctionLive(currentBannerSession) || bannerCooldown > 0 ? '#9CA3AF' : C.primary)}
+                    disabled={!isAuctionLive(currentBannerSession) || bannerCooldown > 0}
+                    onClick={handlePlaceBannerBid}>
+                    {!isAuctionLive(currentBannerSession) ? '⏳ Chưa bắt đầu' : bannerCooldown > 0 ? `Chờ ${Math.ceil(bannerCooldown / 1000)}s` : '🏹 Đặt giá'}
                   </button>
                 </div>
               </div>
@@ -638,10 +666,33 @@ const BannerAuctionPage: React.FC = () => {
                   <p style={{ color: C.gray, fontSize: 12, margin: '4px 0 0' }}>{flashSlotDef.description}</p>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {countdown[selectedFlashSlot] || '–'}</div>
-                  <div style={{ fontSize: 11, color: C.gray }}>còn lại</div>
+                  {isFlashLive(currentFlashSession) ? (
+                    <>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {countdown[selectedFlashSlot] || '–'}</div>
+                      <div style={{ fontSize: 11, color: C.gray }}>còn lại</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: '#D97706' }}>⏳ {formatCountdown(flashMsUntilStart(currentFlashSession))}</div>
+                      <div style={{ fontSize: 11, color: C.gray }}>đến khi bắt đầu</div>
+                    </>
+                  )}
                 </div>
               </div>
+
+              {/* Flash chưa bắt đầu */}
+              {!isFlashLive(currentFlashSession) && (
+                <div style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid #FCD34D', borderRadius: 10, padding: '16px 18px', marginBottom: 16 }}>
+                  <p style={{ margin: '0 0 6px', fontWeight: 700, color: '#92400E' }}>⏰ Phiên đấu giá Flash Sale sắp khai mạc!</p>
+                  {currentFlashSession.description && (
+                    <p style={{ margin: '0 0 6px', fontSize: 13, color: '#78350F', whiteSpace: 'pre-line' }}>📋 {currentFlashSession.description}</p>
+                  )}
+                  <p style={{ margin: 0, fontSize: 12, color: '#92400E' }}>
+                    Khai mạc lúc: <b>{currentFlashSession.scheduledStartAt ? new Date(currentFlashSession.scheduledStartAt).toLocaleString('vi-VN') : '–'}</b>
+                  </p>
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: '#B45309' }}>Bạn có thể xem thông tin nhưng chưa thể đặt giá.</p>
+                </div>
+              )}
 
               <div style={{ marginBottom: 16 }}>
                 <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Bảng đấu giá ({currentFlashSession.bids.length} lượt)</p>
@@ -687,8 +738,11 @@ const BannerAuctionPage: React.FC = () => {
                   onChange={e => setFlashBidAmounts(p => ({ ...p, [selectedFlashSlot]: e.target.value }))}
                   style={{ flex: 1, minWidth: 160, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }}
                 />
-                <button style={btnStyle(flashCooldown > 0 ? '#9CA3AF' : C.orange)} disabled={flashCooldown > 0} onClick={handlePlaceFlashBid}>
-                  {flashCooldown > 0 ? `Chờ ${Math.ceil(flashCooldown / 1000)}s` : '⚡ Đặt giá'}
+                <button
+                  style={btnStyle(!isFlashLive(currentFlashSession) || flashCooldown > 0 ? '#9CA3AF' : C.orange)}
+                  disabled={!isFlashLive(currentFlashSession) || flashCooldown > 0}
+                  onClick={handlePlaceFlashBid}>
+                  {!isFlashLive(currentFlashSession) ? '⏳ Chưa bắt đầu' : flashCooldown > 0 ? `Chờ ${Math.ceil(flashCooldown / 1000)}s` : '⚡ Đặt giá'}
                 </button>
               </div>
             </div>
@@ -1113,13 +1167,12 @@ const BannerAuctionPage: React.FC = () => {
                 {image ? (
                   <div style={{ background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 180, maxHeight: 280, overflow: 'hidden' }}>
                     <img src={image} alt="nội dung bị từ chối" style={{ width: '100%', maxHeight: 280, objectFit: isBanner ? 'cover' : 'contain', display: 'block' }} />
-                  </div>
+                               </div>
                 ) : (
                   <div style={{ height: 120, background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.gray }}>Không có ảnh</div>
                 )}
 
                 <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {/* Thông tin nội dung */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, color: isBanner ? C.blue : C.orange, background: isBanner ? C.blueLight : C.orangeLight }}>
                       {isBanner ? '🖼️ Banner' : '⚡ Flash Sale'}
@@ -1134,7 +1187,6 @@ const BannerAuctionPage: React.FC = () => {
                     <div style={{ fontSize: 13, color: C.gray }}>💰 Giá: <b style={{ color: C.orange }}>{Number(fs.price).toLocaleString('vi-VN')}đ</b></div>
                   )}
 
-                  {/* Lý do từ chối */}
                   <div style={{ background: 'rgba(220,38,38,0.07)', border: '1.5px solid rgba(220,38,38,0.2)', borderRadius: 10, padding: '14px 16px' }}>
                     <div style={{ fontWeight: 700, fontSize: 13, color: '#DC2626', marginBottom: 8 }}>📋 Lý do từ chối</div>
                     {rejectReason ? (
@@ -1151,20 +1203,30 @@ const BannerAuctionPage: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Hướng dẫn */}
                   <div style={{ background: C.primaryLight, borderRadius: 8, padding: '10px 14px', fontSize: 12, color: C.primary }}>
                     💡 Vui lòng chỉnh sửa nội dung theo đúng chính sách, sau đó vào tab <b>⚙️ Chuẩn bị</b> để cập nhật mẫu và tham giá đấu giá lại.
                   </div>
                 </div>
               </div>
 
-              {/* Footer */}
               <div style={{ padding: '14px 20px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: C.gray }} onClick={() => setRejectedModal(null)}>Đóng</button>
                 <button style={{ background: C.primary, color: 'white', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
                   onClick={() => { setRejectedModal(null); setTab('prepare') }}>
                   ⚙️ Cập nhật mẫu
                 </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+    </div>
+  )
+}
+
+export default BannerAuctionPage
+         </button>
               </div>
             </div>
           </div>

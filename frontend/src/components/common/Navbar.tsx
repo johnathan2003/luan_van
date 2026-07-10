@@ -2,10 +2,15 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
-import { useAppSelector } from '../../store/hooks'
+import { useAppSelector, useAppDispatch } from '../../store/hooks'
+import { resetFilters } from '../../store/slices/productSlice'
 import NotificationCenter from './NotificationCenter'
 import { formatCurrency } from '../../utils/formatters'
 import { getImageUrl } from '../../utils/helpers'
+import {
+  getSearchHistory, saveSearchTerm, removeSearchTerm, clearSearchHistory,
+  getRecentlyViewed, type SearchHistoryItem
+} from '../../store/searchTrackingStore'
 
 const ROLE_META: Record<string, { icon: string; color: string; label: string }> = {
   admin:    { icon: '⚙️', color: '#1D4ED8', label: 'Admin' },
@@ -24,17 +29,50 @@ const BRAND_NAME = import.meta.env.VITE_APP_NAME   || 'BuyZo'
 
 const ANIM_CSS = '@keyframes fsd{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}} @keyframes sug{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}'
 
-// ─── SuggestBox — gọi API thật ───────────────────────────────────────────────
-// ─── SuggestBox — gọi API thật ───────────────────────────────────────────────
+// ─── SuggestBox ───────────────────────────────────────────────────────────────
 interface SuggestBoxProps {
   query: string
   onNavigate: (path: string) => void
+  onRefreshHistory: () => void
 }
 
-const SuggestBox: React.FC<SuggestBoxProps> = ({ query, onNavigate }) => {
-  const [products, setProducts] = React.useState<any[]>([])
-  const [shops,    setShops]    = React.useState<any[]>([])
-  const [loading,  setLoading]  = React.useState(false)
+// helper: highlight chữ khớp
+const Hl: React.FC<{ text: string; q: string }> = ({ text, q }) => {
+  if (!q) return <>{text}</>
+  const idx = text.toLowerCase().indexOf(q.toLowerCase())
+  if (idx < 0) return <>{text}</>
+  return <>{text.slice(0, idx)}<strong style={{ color: 'var(--primary,#7C3AED)' }}>{text.slice(idx, idx + q.length)}</strong>{text.slice(idx + q.length)}</>
+}
+
+const SuggestBox: React.FC<SuggestBoxProps> = ({ query, onNavigate, onRefreshHistory }) => {
+  const [products,  setProducts]  = React.useState<any[]>([])
+  const [shops,     setShops]     = React.useState<any[]>([])
+  const [loading,   setLoading]   = React.useState(false)
+  // dữ liệu placeholder (load 1 lần khi mount)
+  const [flashItems,    setFlashItems]    = React.useState<any[]>([])
+  const [featuredItems, setFeaturedItems] = React.useState<any[]>([])
+  const [suggestShops,  setSuggestShops]  = React.useState<any[]>([])
+  const [history,       setHistory]       = React.useState<SearchHistoryItem[]>([])
+  const viewed = getRecentlyViewed().slice(0, 2)
+
+  React.useEffect(() => {
+    setHistory(getSearchHistory())
+    // fetch flash sale + nổi bật + shop gợi ý
+    fetch('/api/v1/shop/public/featured/products?limit=6')
+      .then(r => r.ok ? r.json() : { products: [] })
+      .then(d => {
+        const all: any[] = d.products ?? []
+        setFlashItems(all.slice(0, 2))
+        setFeaturedItems(all.slice(2, 4))
+      }).catch(() => {})
+    fetch('/api/v1/shop/search?q=&limit=4')
+      .then(r => r.ok ? r.json() : { shops: [] })
+      .then(d => setSuggestShops(d.shops ?? []))
+      .catch(() => {})
+  }, [])
+
+  // reload history khi parent báo cập nhật
+  React.useEffect(() => { setHistory(getSearchHistory()) }, [onRefreshHistory])
 
   React.useEffect(() => {
     if (!query.trim()) { setProducts([]); setShops([]); return }
@@ -48,7 +86,7 @@ const SuggestBox: React.FC<SuggestBoxProps> = ({ query, onNavigate }) => {
         setProducts(pRes.items ?? [])
         setShops(sRes.shops ?? [])
       }).finally(() => setLoading(false))
-    }, 300)  // debounce 300ms
+    }, 300)
     return () => clearTimeout(timer)
   }, [query])
 
@@ -56,99 +94,172 @@ const SuggestBox: React.FC<SuggestBoxProps> = ({ query, onNavigate }) => {
     (e.currentTarget as HTMLDivElement).style.background = enter ? 'var(--bg-highlight,#f3f4f6)' : 'transparent'
   }
 
-  if (loading) return (
-    <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
-      Đang tìm kiếm...
+  const SectionLabel = ({ icon, label, action, onAction }: { icon: string; label: string; action?: string; onAction?: () => void }) => (
+    <div style={{ padding: '10px 16px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span style={{ fontSize: 13 }}>{icon}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</span>
+      </div>
+      {action && onAction && (
+        <button onMouseDown={e => { e.preventDefault(); onAction() }}
+          style={{ fontSize: 11, color: 'var(--primary,#7C3AED)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
+          {action}
+        </button>
+      )}
     </div>
   )
 
-  if (!query.trim()) return (
+  const ProductRow = ({ p, badge, badgeColor }: { p: any; badge?: string; badgeColor?: string }) => (
+    <div onMouseDown={e => { e.preventDefault(); onNavigate(`/products/${p.product_id}`) }}
+      onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
+      {p.image_urls?.[0] || p.image_url
+        ? <img src={p.image_urls?.[0] ?? p.image_url} alt={p.product_name} style={{ width: 38, height: 38, borderRadius: 6, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+        : <div style={{ width: 38, height: 38, borderRadius: 6, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>📦</div>
+      }
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Hl text={p.product_name} q={query} />
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: badgeColor === '#ef4444' ? '#ef4444' : 'var(--primary,#7C3AED)' }}>{formatCurrency(parseFloat(p.price))}</span>
+          {badge && <span style={{ fontSize: 10, background: badgeColor === '#ef4444' ? '#fef2f2' : 'rgba(124,58,237,0.1)', color: badgeColor ?? 'var(--primary,#7C3AED)', fontWeight: 700, padding: '1px 6px', borderRadius: 10 }}>{badge}</span>}
+        </div>
+      </div>
+    </div>
+  )
+
+  const Divider = () => <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
+
+  // ── Khi đang gõ ──────────────────────────────────────────────────────────────
+  if (query.trim()) {
+    if (loading) return <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>Đang tìm kiếm...</div>
+    const empty = products.length === 0 && shops.length === 0
+    return (
+      <div>
+        {products.length > 0 && (
+          <>
+            <SectionLabel icon="📦" label="Sản phẩm" action="Xem tất cả →" onAction={() => onNavigate(`/products?search=${encodeURIComponent(query.trim())}`)} />
+            {products.map((p: any) => <ProductRow key={p.product_id} p={p} />)}
+          </>
+        )}
+        {products.length > 0 && shops.length > 0 && <Divider />}
+        {shops.length > 0 && (
+          <>
+            <SectionLabel icon="🏪" label="Cửa hàng" />
+            {shops.map((sh: any) => (
+              <div key={sh.shop_id} onMouseDown={e => { e.preventDefault(); onNavigate(`/shops/${sh.shop_id}`) }}
+                onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
+                {sh.avatar_url
+                  ? <img src={sh.avatar_url} alt={sh.shop_name} style={{ width: 38, height: 38, borderRadius: 6, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+                  : <div style={{ width: 38, height: 38, borderRadius: 6, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🏪</div>
+                }
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Hl text={sh.shop_name} q={query} /></p>
+                  <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>⭐ {sh.rating}{sh.address && ` · ${sh.address}`}</p>
+                </div>
+                <span style={{ flexShrink: 0, padding: '2px 8px', background: '#dcfce7', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#16a34a' }}>Shop</span>
+              </div>
+            ))}
+          </>
+        )}
+        {empty && (
+          <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>🔍</div>
+            Không tìm thấy kết quả cho "{query}"
+          </div>
+        )}
+        {!empty && (
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-highlight,#f8f9fa)' }}>
+            <button onMouseDown={e => { e.preventDefault(); onNavigate(`/products?search=${encodeURIComponent(query.trim())}`) }}
+              style={{ width: '100%', padding: '7px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary,#7C3AED)', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              🔍 Tìm kiếm tất cả kết quả cho "{query}"
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Khi chưa gõ: hiện gợi ý đầy đủ ─────────────────────────────────────────
+  const recentHistory = history.slice(0, 5)
+  const hasAny = viewed.length > 0 || flashItems.length > 0 || featuredItems.length > 0 || suggestShops.length > 0 || recentHistory.length > 0
+
+  if (!hasAny) return (
     <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
       Nhập từ khoá để tìm sản phẩm hoặc cửa hàng
     </div>
   )
 
-  const empty = products.length === 0 && shops.length === 0
-
   return (
-    <div>
-      {/* Sản phẩm */}
-      {products.length > 0 && (
-        <div>
-          <div style={{ padding: '10px 16px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6 }}>Sản phẩm</span>
-            <button onMouseDown={e => { e.preventDefault(); onNavigate(`/products?search=${encodeURIComponent(query.trim())}`) }}
-              style={{ fontSize: 11, color: 'var(--primary,#7C3AED)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
-              Xem tất cả →
-            </button>
-          </div>
-          {products.map((p: any) => (
-            <div key={p.product_id} onMouseDown={e => { e.preventDefault(); onNavigate(`/products/${p.product_id}`) }}
-              onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
-              {p.image_urls?.[0]
-                ? <img src={p.image_urls[0]} alt={p.product_name} style={{ width: 40, height: 40, borderRadius: 7, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
-                : <div style={{ width: 40, height: 40, borderRadius: 7, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>📦</div>
-              }
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.product_name}</p>
-                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary,#7C3AED)', margin: 0 }}>{formatCurrency(parseFloat(p.price))}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+    <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+      {/* Vừa xem */}
+      {viewed.length > 0 && (
+        <>
+          <SectionLabel icon="🕐" label="Vừa xem" />
+          {viewed.map((p: any) => <ProductRow key={p.product_id} p={p} />)}
+          <Divider />
+        </>
       )}
 
-      {/* Divider */}
-      {products.length > 0 && shops.length > 0 && (
-        <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
+      {/* Flash Sale */}
+      {flashItems.length > 0 && (
+        <>
+          <SectionLabel icon="⚡" label="Flash Sale" />
+          {flashItems.map((p: any) => <ProductRow key={p.product_id} p={p} badge="⚡ HOT" badgeColor="#ef4444" />)}
+          <Divider />
+        </>
       )}
 
-      {/* Cửa hàng */}
-      {shops.length > 0 && (
-        <div>
-          <div style={{ padding: '10px 16px 6px' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6 }}>Cửa hàng</span>
-          </div>
-          {shops.map((sh: any) => (
+      {/* Nổi bật */}
+      {featuredItems.length > 0 && (
+        <>
+          <SectionLabel icon="🌟" label="Nổi bật" />
+          {featuredItems.map((p: any) => <ProductRow key={p.product_id} p={p} badge="🌟 TOP" />)}
+          <Divider />
+        </>
+      )}
+
+      {/* Shop gợi ý */}
+      {suggestShops.length > 0 && (
+        <>
+          <SectionLabel icon="🏪" label="Cửa hàng nổi bật" />
+          {suggestShops.slice(0, 4).map((sh: any) => (
             <div key={sh.shop_id} onMouseDown={e => { e.preventDefault(); onNavigate(`/shops/${sh.shop_id}`) }}
               onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
               {sh.avatar_url
-                ? <img src={sh.avatar_url} alt={sh.shop_name} style={{ width: 40, height: 40, borderRadius: 7, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
-                : <div style={{ width: 40, height: 40, borderRadius: 7, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🏪</div>
+                ? <img src={sh.avatar_url} alt={sh.shop_name} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+                : <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>🏪</div>
               }
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sh.shop_name}</p>
-                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>
-                  <span style={{ color: '#f59e0b' }}>★</span> {sh.rating}
-                  {sh.address && <span> · {sh.address}</span>}
-                </p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sh.shop_name}</p>
               </div>
-              <div style={{ flexShrink: 0, padding: '2px 8px', background: '#dcfce7', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#16a34a' }}>Shop</div>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>⭐ {sh.rating}</span>
             </div>
           ))}
-        </div>
+          <Divider />
+        </>
       )}
 
-      {/* Không tìm thấy */}
-      {empty && (
-        <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>🔍</div>
-          Không tìm thấy kết quả cho "{query}"
-        </div>
-      )}
-
-      {/* Xem tất cả */}
-      {!empty && (
-        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-highlight,#f8f9fa)' }}>
-          <button
-            onMouseDown={e => { e.preventDefault(); onNavigate(`/products?search=${encodeURIComponent(query.trim())}`) }}
-            style={{ width: '100%', padding: '7px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary,#7C3AED)', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-          >
-            🔍 Tìm kiếm tất cả kết quả cho "{query}"
-          </button>
-        </div>
+      {/* Lịch sử tìm kiếm */}
+      {recentHistory.length > 0 && (
+        <>
+          <SectionLabel icon="🔍" label="Tìm kiếm gần đây" action="Xoá tất cả"
+            onAction={() => { clearSearchHistory(); setHistory([]) }} />
+          {recentHistory.map((item, i) => (
+            <div key={i}
+              onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
+              <span style={{ fontSize: 14, color: 'var(--text-secondary)', flexShrink: 0 }}>{item.type === 'shop' ? '🏪' : '🔍'}</span>
+              <span onMouseDown={e => { e.preventDefault(); onNavigate(item.type === 'shop' ? `/shops?q=${encodeURIComponent(item.q)}` : `/products?search=${encodeURIComponent(item.q)}`) }}
+                style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{item.q}</span>
+              <button onMouseDown={e => { e.preventDefault(); removeSearchTerm(item.q); setHistory(h => h.filter(x => x.q !== item.q)) }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 16, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+            </div>
+          ))}
+        </>
       )}
     </div>
   )
@@ -175,7 +286,7 @@ const MenuItem: React.FC<MenuItemProps> = ({ icon, label, sub, path, onClick }) 
   </Link>
 )
 
-const SectionLabel: React.FC<{ children: React.ReactNode; border?: boolean }> = ({ children, border }) => (
+const NavSectionLabel: React.FC<{ children: React.ReactNode; border?: boolean }> = ({ children, border }) => (
   <div style={{ padding: '8px 16px 4px', fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6, borderTop: border ? '1px solid var(--border-subtle)' : 'none', marginTop: border ? 4 : 0 }}>
     {children}
   </div>
@@ -187,11 +298,13 @@ const Navbar: React.FC = () => {
   const { resolvedTheme } = useTheme()
   const { cart }          = useAppSelector(s => s.cart)
   const navigate          = useNavigate()
+  const dispatch          = useAppDispatch()
 
-  const [radialOpen,   setRadialOpen]   = useState(false)
-  const [logoError,    setLogoError]    = useState(false)
-  const [searchQuery,  setSearchQuery]  = useState('')
-  const [searchFocus,  setSearchFocus]  = useState(false)
+  const [radialOpen,      setRadialOpen]      = useState(false)
+  const [logoError,       setLogoError]       = useState(false)
+  const [searchQuery,     setSearchQuery]     = useState('')
+  const [searchFocus,     setSearchFocus]     = useState(false)
+  const [historyVersion,  setHistoryVersion]  = useState(0)
 
   const radialRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
@@ -267,6 +380,7 @@ const Navbar: React.FC = () => {
   const close = () => setRadialOpen(false)
 
   return (
+    <>
     <nav style={{
       background: navBg,
       color: 'var(--text-on-topbar)',
@@ -284,14 +398,21 @@ const Navbar: React.FC = () => {
         paddingLeft: 'var(--navbar-padding-x)', paddingRight: 'var(--navbar-padding-x)',
       }}>
 
-        {/* Logo */}
-        <Link to="/" title={BRAND_NAME} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, textDecoration: 'none', marginRight: 'var(--space-2)', gap: 2 }}>
+        {/* Logo — click khi đang ở trang chủ thì reset filter & scroll lên đầu */}
+        <div title={BRAND_NAME} onClick={() => {
+          if (window.location.pathname === '/') {
+            dispatch(resetFilters())
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+          } else {
+            navigate('/')
+          }
+        }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, textDecoration: 'none', marginRight: 'var(--space-2)', gap: 2, cursor: 'pointer' }}>
           {!logoError
             ? <img key={logoSrc} src={logoSrc} alt={BRAND_NAME} onError={() => setLogoError(true)} style={{ height: 'var(--logo-height)', width: 'auto', maxWidth: 'var(--logo-max-width)', objectFit: 'contain', display: 'block' }} />
             : <span style={{ fontWeight: 700, fontSize: 28, color: 'var(--text-on-topbar)', letterSpacing: -0.5 }}>{BRAND_NAME}</span>
           }
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.5, color: 'var(--text-on-topbar)', opacity: 0.85, lineHeight: 1 }}>BuyZO.com</span>
-        </Link>
+        </div>
 
         {/* Search */}
         <div ref={searchRef} style={{ flex: 1, maxWidth: 560, marginLeft: 'var(--space-4)', marginRight: 'var(--space-4)', position: 'relative' }}>
@@ -312,6 +433,8 @@ const Navbar: React.FC = () => {
               }}
               onKeyDown={e => {
                 if (e.key === 'Enter' && searchQuery.trim()) {
+                  saveSearchTerm(searchQuery.trim(), 'keyword')
+                  setHistoryVersion(v => v + 1)
                   setSearchFocus(false)
                   navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`)
                   setSearchQuery('')
@@ -333,7 +456,7 @@ const Navbar: React.FC = () => {
                 animation: 'sug 0.18s cubic-bezier(0.34,1.2,0.64,1)',
                 maxHeight: 460, overflowY: 'auto',
               }}>
-                <SuggestBox query={searchQuery} onNavigate={handleSearchNav} />
+                <SuggestBox query={searchQuery} onNavigate={handleSearchNav} onRefreshHistory={() => setHistoryVersion(v => v + 1)} />
               </div>
             </div>
           )}
@@ -414,16 +537,17 @@ const Navbar: React.FC = () => {
                     </div>
 
 
+              
                     {/* ── Menu theo current_role ── */}
 
                     {/* Shop owner */}
                     {currentRole === 'shop' && (
                       <div>
-                        <SectionLabel>Tài khoản</SectionLabel>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
                         <MenuItem icon="👤" label="Trang cá nhân"       path="/profile"               onClick={close} />
                         <MenuItem icon="📦" label="Đơn hàng của tôi"    sub="Lịch sử mua hàng"         path="/orders"              onClick={close} />
                         <MenuItem icon="💬" label="Tin nhắn khách"      sub="Chat với người mua"       path="/shop/chat"           onClick={close} />
-                        <SectionLabel border>Quản lý Shop</SectionLabel>
+                        <NavSectionLabel border>Quản lý Shop</NavSectionLabel>
                         <MenuItem icon="⚙️" label="Quản lý shop"       sub="Sản phẩm, đơn hàng, NV"   path="/shop"                onClick={close} />
                         <MenuItem icon="🏪" label="Xem trang shop"     sub="Giao diện khách thấy"     path={`/shops/${user?.user_id}`} onClick={close} />
                         <MenuItem icon="🎫" label="Voucher shop"        sub="Mã giảm giá của shop"     path="/shop/vouchers"       onClick={close} />
@@ -435,11 +559,11 @@ const Navbar: React.FC = () => {
                     {/* Admin */}
                     {currentRole === 'admin' && (
                       <div>
-                        <SectionLabel>Tài khoản</SectionLabel>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
                         <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"  onClick={close} />
                         <MenuItem icon="📦" label="Đơn hàng của tôi"    path="/orders"   onClick={close} />
                         <MenuItem icon="🎁" label="Trung tâm voucher"   path="/vouchers" onClick={close} />
-                        <SectionLabel border>Quan tri</SectionLabel>
+                        <NavSectionLabel border>Quản trị</NavSectionLabel>
                         <MenuItem icon="⚙️" label="Admin dashboard"    sub="Người dùng, shop, đơn hàng" path="/admin" onClick={close} />
                       </div>
                     )}
@@ -447,11 +571,11 @@ const Navbar: React.FC = () => {
                     {/* Shipper */}
                     {currentRole === 'shipper' && (
                       <div>
-                        <SectionLabel>Tài khoản</SectionLabel>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
                         <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"   onClick={close} />
                         <MenuItem icon="📦" label="Đơn hàng của tôi"    path="/orders"    onClick={close} />
                         <MenuItem icon="🎁" label="Trung tâm voucher"   path="/vouchers"  onClick={close} />
-                        <SectionLabel border>Giao hàng</SectionLabel>
+                        <NavSectionLabel border>Giao hàng</NavSectionLabel>
                         <MenuItem icon="🚚" label="Quản lý giao hàng"  sub="Đơn hàng, lộ trình, thu nhập" path="/shipper" onClick={close} />
                       </div>
                     )}
@@ -459,9 +583,9 @@ const Navbar: React.FC = () => {
                     {/* Employee */}
                     {currentRole === 'employee' && (
                       <div>
-                        <SectionLabel>Tài khoản</SectionLabel>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
                         <MenuItem icon="👤" label="Hồ sơ cá nhân"           path="/profile"           onClick={close} />
-                        <SectionLabel border>Nhân viên</SectionLabel>
+                        <NavSectionLabel border>Nhân viên</NavSectionLabel>
                         <MenuItem icon="🏠" label="Tổng quan"              sub="Dashboard của bạn"    path="/employee"          onClick={close} />
                         <MenuItem icon="📋" label="Đơn hàng"                                          path="/employee/orders"   onClick={close} />
                         <MenuItem icon="📦" label="Sản phẩm"                                          path="/employee/products" onClick={close} />
@@ -472,7 +596,7 @@ const Navbar: React.FC = () => {
                     {/* Customer / default */}
                     {(currentRole === 'user' || !currentRole) && (
                       <div>
-                        <SectionLabel>Tài khoản</SectionLabel>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
                         <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"     onClick={close} />
                         <MenuItem icon="📦" label="Đơn hàng của tôi"    path="/orders"      onClick={close} />
                         <MenuItem icon="💬" label="Tin nhắn"            path="/chat"        onClick={close} />
@@ -499,14 +623,24 @@ const Navbar: React.FC = () => {
             </div>
           ) : (
             <React.Fragment>
-              <Link to="/login" style={{ color: 'var(--text-on-topbar)', fontSize: 14, fontWeight: 500, textDecoration: 'none' }}>Đăng nhập</Link>
-              <Link to="/register" style={{ background: 'var(--cta-bg)', color: 'var(--cta-text)', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>Đăng ký</Link>
+              <Link to="/login" style={{ color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: 14, padding: '7px 16px', borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.15)', transition: 'background var(--transition)' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.25)')}
+                onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.15)')}>
+                Đăng nhập
+              </Link>
+              <Link to="/register" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 600, fontSize: 14, padding: '7px 16px', borderRadius: 'var(--radius)', background: 'white', transition: 'background var(--transition)' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.background = '#F0F4FF')}
+                onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.background = 'white')}>
+                Đăng ký
+              </Link>
             </React.Fragment>
           )}
         </div>
-
       </div>
-    </nav>
+      </nav>
+
+      {/* Search mobile */}
+    </>
   )
 }
 
