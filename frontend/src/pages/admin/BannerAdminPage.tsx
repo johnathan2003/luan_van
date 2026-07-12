@@ -5,13 +5,21 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'react-toastify'
 import { adminService } from '../../services/adminService'
 import { addNotificationFor } from '../../utils/notificationStore'
+import { idbDelete, resolveImageAsync, isIDBRef } from '../../utils/imageDB'
 import {
-  BANNER_POSITIONS, BannerSubmission,
+  BANNER_POSITIONS, BannerPositionKey, BannerSubmission,
   getAllSubmissions as getAuctionBannerSubs,
   approveSubmission as approveAuctionBanner,
   rejectSubmission as rejectAuctionBanner,
   cancelSubmissionExpired,
+  expireDisplaySubmission,
+  adminCreateBanner,
+  deleteSubmission as deleteBannerSub,
+  updateSubmission as updateBannerSub,
+  purgeAdminBanners,
+  resolveImage,
   getHistory as getBannerHistory,
+  seedTestPendingSubmissions,
 } from '../../utils/bannerAuctionStore'
 import {
   FLASH_SLOTS, FlashSubmission,
@@ -19,6 +27,7 @@ import {
   approveFlashSubmission,
   rejectFlashSubmission,
   cancelFlashSubmissionExpired,
+  expireFlashDisplaySubmission,
   getHistory as getFlashHistory,
 } from '../../utils/flashSaleAuctionStore'
 
@@ -40,6 +49,15 @@ function formatMmSs(ms: number): string {
   const m = Math.floor(ms / 60000)
   const s = Math.floor((ms % 60000) / 1000)
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+function formatDisplayTime(ms: number): string {
+  if (ms <= 0) return 'Hết hạn'
+  const d = Math.floor(ms / 86400000)
+  const h = Math.floor((ms % 86400000) / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  if (d > 0) return `${d} ngày ${h} giờ ${m} phút`
+  if (h > 0) return `${h} giờ ${m} phút`
+  return `${m} phút`
 }
 
 const C = {
@@ -87,6 +105,8 @@ const BannerAdminPage: React.FC = () => {
   const [auctionSubs, setAuctionSubs] = useState<AuctionSub[]>([])
   const [bannerHistory, setBannerHistory] = useState<any[]>([])
   const [flashHistory, setFlashHistory] = useState<any[]>([])
+  // Resolved image map: raw ref → actual data URL (for IDB refs)
+  const [imageMap, setImageMap] = useState<Record<string, string>>({})
 
   // Countdown: subId → remaining ms
   const [countdowns, setCountdowns] = useState<Record<string, number>>({})
@@ -97,6 +117,128 @@ const BannerAdminPage: React.FC = () => {
   const [selectedReasons, setSelectedReasons] = useState<string[]>([])
   const [customReason, setCustomReason] = useState('')
   const [showCustom, setShowCustom] = useState(false)
+
+  // Create banner modal (admin)
+  const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const POSITION_OPTIONS: { key: BannerPositionKey; label: string; desc: string; spec: string }[] = [
+    { key: 'home_slider',    label: '🖼️ Hero Slider (Hình 1)',      desc: 'Slider chính trên đầu trang chủ',        spec: '1280×160px — tỉ lệ 8:1 ngang dài' },
+    { key: 'mall_ads_main',  label: '📢 Quảng Cáo Center (Hình 2)', desc: 'Khu QUẢNG CÁO 7 phần bên trái',         spec: '1536×1024px — tỉ lệ 3:2' },
+    { key: 'mall_ads_fixed', label: '🏬 BuyZo Mall Fixed (Hình 3)', desc: 'Ảnh cố định bên phải khu Mall',          spec: '400×400px — tỉ lệ 1:1 vuông' },
+  ]
+  const DURATION_OPTIONS = [
+    { label: '1 ngày',   ms: 1  * 24 * 60 * 60 * 1000 },
+    { label: '3 ngày',   ms: 3  * 24 * 60 * 60 * 1000 },
+    { label: '7 ngày',   ms: 7  * 24 * 60 * 60 * 1000 },
+    { label: '14 ngày',  ms: 14 * 24 * 60 * 60 * 1000 },
+    { label: '30 ngày',  ms: 30 * 24 * 60 * 60 * 1000 },
+    { label: 'Vĩnh viễn', ms: 999 * 24 * 60 * 60 * 1000 },
+  ]
+  // Multi-image create
+  type CreateImage = { url: string; preview: string; title: string }
+  const [createImages, setCreateImages] = useState<CreateImage[]>([])
+  const [createShared, setCreateShared] = useState({
+    link: '', position: 'home_slider' as BannerPositionKey, durationMs: 7 * 24 * 60 * 60 * 1000,
+  })
+  const patchShared = (patch: Partial<typeof createShared>) => setCreateShared(f => ({ ...f, ...patch }))
+  // Custom delete confirm
+  const [deleteConfirm, setDeleteConfirm] = useState<BannerSubmission | null>(null)
+
+  // Edit banner modal (admin)
+  const [showEdit, setShowEdit] = useState(false)
+  const [editTarget, setEditTarget] = useState<BannerSubmission | null>(null)
+  const [editForm, setEditForm] = useState({ title: '', image_url: '', link: '' })
+  const patchEdit = (patch: Partial<typeof editForm>) => setEditForm(f => ({ ...f, ...patch }))
+  const [editImageChanged, setEditImageChanged] = useState(false)
+  const [editNewPath, setEditNewPath] = useState('')   // path lưu store khi đổi ảnh
+  const openEdit = (sub: BannerSubmission) => {
+    setEditTarget(sub)
+    setEditImageChanged(false)
+    setEditNewPath('')
+    const resolved = imageMap[sub.image] ?? resolveImage(sub.image)
+    setEditForm({ title: sub.title, image_url: resolved, link: sub.link ?? '' })
+    if (!resolved && isIDBRef(sub.image)) {
+      resolveImageAsync(sub.image).then(url => patchEdit({ image_url: url }))
+    }
+    setShowEdit(true)
+  }
+  const handleEditImagePick = (file: File) => {
+    setEditNewPath(`/img/banner_admin/${file.name}`)   // path tĩnh để lưu
+    readAsDataURL(file).then(dataUrl => patchEdit({ image_url: dataUrl })) // data URL chỉ để preview
+    setEditImageChanged(true)
+  }
+  const handleEditSave = async () => {
+    if (!editTarget) return
+    if (!editForm.title.trim()) { toast.error('Vui lòng nhập tiêu đề'); return }
+    if (!editForm.image_url.trim()) { toast.error('Vui lòng chọn ảnh'); return }
+    try {
+      let imageRef = editTarget.image
+      if (editImageChanged) {
+        if (isIDBRef(editTarget.image)) await idbDelete(editTarget.image).catch(() => {})
+        imageRef = editNewPath   // lưu path tĩnh
+      }
+      updateBannerSub(editTarget.id, { title: editForm.title, image: imageRef, link: editForm.link || undefined })
+      toast.success('✅ Đã cập nhật banner!')
+      setShowEdit(false)
+      setEditTarget(null)
+      loadAuction()
+    } catch {
+      toast.error('Không thể cập nhật banner')
+    }
+  }
+  const handleDelete = (sub: BannerSubmission) => setDeleteConfirm(sub)
+  const confirmDelete = () => {
+    if (!deleteConfirm) return
+    idbDelete(deleteConfirm.image).catch(() => {}) // xóa ảnh IDB (best-effort)
+    deleteBannerSub(deleteConfirm.id)
+    setDeleteConfirm(null)
+    toast.success('🗑️ Đã xóa banner!')
+    loadAuction()
+    setTimeout(loadAuction, 100)
+  }
+
+  const readAsDataURL = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload  = e => resolve(e.target?.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+
+  const handleCreateFilesPick = (files: FileList) => {
+    const arr = Array.from(files)
+    Promise.all(arr.map(f => readAsDataURL(f))).then(previews => {
+      setCreateImages(prev => [
+        ...prev,
+        ...arr.map((f, i) => ({
+          url:     `/img/banner_admin/${f.name}`,
+          preview: previews[i],
+          title:   f.name.replace(/\.[^.]+$/, ''),
+        })),
+      ])
+    })
+  }
+
+  const handleCreate = () => {
+    if (createImages.length === 0) { toast.error('Vui lòng chọn ít nhất 1 ảnh'); return }
+    const invalid = createImages.find(img => !img.title.trim())
+    if (invalid) { toast.error('Vui lòng nhập tiêu đề cho tất cả ảnh'); return }
+    for (const img of createImages) {
+      adminCreateBanner({
+        position: createShared.position,
+        title: img.title,
+        image: img.url,   // '/img/banner_admin/filename.png' — lưu link, gọi ảnh theo URL
+        link: createShared.link || undefined,
+        displayDurationMs: createShared.durationMs,
+      })
+    }
+    toast.success(`✅ Đã đăng ${createImages.length} banner lên trang chủ!`)
+    setShowCreate(false)
+    setCreateImages([])
+    setCreateShared({ link: '', position: 'home_slider', durationMs: 7 * 24 * 60 * 60 * 1000 })
+    setTab('active')
+    loadAuction()
+  }
 
   const openRejectModal = (kind: 'banner' | 'flash', id: string) => {
     setRejectTarget({ kind, id })
@@ -125,7 +267,7 @@ const BannerAdminPage: React.FC = () => {
 
   const loadAuction = useCallback(() => {
     const bannerSubs = getAuctionBannerSubs()
-    const flashSubs = getAllFlashSubmissions()
+    const flashSubs  = getAllFlashSubmissions()
     const combined: AuctionSub[] = [
       ...bannerSubs.map(s => ({ kind: 'banner' as const, sub: s })),
       ...flashSubs.map(s => ({ kind: 'flash' as const, sub: s })),
@@ -133,6 +275,19 @@ const BannerAdminPage: React.FC = () => {
     setAuctionSubs(combined)
     setBannerHistory(getBannerHistory())
     setFlashHistory(getFlashHistory())
+    // Resolve IDB image refs async
+    const refs = combined
+      .map(({ sub }) => (sub as any).image || (sub as any).productImage || '')
+      .filter(r => r.startsWith('idb:') || r.startsWith('ref:'))
+    if (refs.length > 0) {
+      Promise.all(refs.map(r => resolveImageAsync(r).then(url => ({ r, url }))))
+        .then(entries => {
+          const m: Record<string, string> = {}
+          entries.forEach(({ r, url }) => { m[r] = url })
+          setImageMap(prev => ({ ...prev, ...m }))
+        })
+        .catch(() => {})
+    }
   }, [])
 
   useEffect(() => {
@@ -151,6 +306,10 @@ const BannerAdminPage: React.FC = () => {
       const next: Record<string, number> = {}
       let needReload = false
 
+      // Đọc history để kiểm tra trạng thái thanh toán & displayDuration
+      const bHistory = getBannerHistory()
+      const fHistory = getFlashHistory()
+
       allSubs.forEach(({ kind, sub }) => {
         if (sub.status !== 'approved') return
         // Auto-patch: nếu approved nhưng chưa có paymentDeadline (data cũ), gán mới
@@ -160,14 +319,42 @@ const BannerAdminPage: React.FC = () => {
           needReload = true
           return // interval tick tiếp theo sẽ có deadline
         }
+
+        // Kiểm tra đã thanh toán đủ chưa (tránh cancel nhầm khi đã paid)
+        const histEntry = kind === 'banner'
+          ? bHistory.find(h => h.id === sub.historyId)
+          : fHistory.find(h => h.id === sub.historyId)
+        const isPaid = histEntry?.confirmation === 'paid'
+
+        // Countdown hiển thị banner (cho paid subs)
+        if (isPaid && sub.approvedAt) {
+          const displayMs = histEntry?.displayDurationMs ?? 2 * 24 * 60 * 60 * 1000
+          const displayRemMs = Math.max(0, new Date(sub.approvedAt).getTime() + displayMs - Date.now())
+          next['disp_' + sub.id] = displayRemMs
+
+          // Hết thời gian hiển thị → tự xoá khỏi store + trang chủ
+          if (displayRemMs <= 0) {
+            if (kind === 'banner') expireDisplaySubmission(sub.id)
+            else expireFlashDisplaySubmission(sub.id)
+            needReload = true
+            const name = (sub as BannerSubmission).title || (sub as FlashSubmission).productName
+            addNotificationFor('', 'shop', 0, {
+              title: '📴 Banner đã hết thời gian hiển thị',
+              message: `Banner "${name}" đã kết thúc thời gian hiển thị và được gỡ khỏi trang chủ tự động.`,
+              type: 'info',
+              action_url: '/shop/auction',
+            })
+          }
+        }
+
         // Kiểm tra đã thanh toán đủ chưa
         const remaining = new Date(sub.paymentDeadline).getTime() - Date.now()
         next[sub.id] = remaining
 
         const remainMin = Math.ceil(remaining / 60000)
 
-        if (remaining <= 0) {
-          // Hết giờ → auto cancel
+        if (remaining <= 0 && !isPaid) {
+          // Hết giờ → auto cancel (chỉ khi chưa thanh toán)
           if (kind === 'banner') cancelSubmissionExpired(sub.id)
           else cancelFlashSubmissionExpired(sub.id)
           needReload = true
@@ -317,7 +504,11 @@ const BannerAdminPage: React.FC = () => {
 
   // ── Auction card renderer ────────────────────────────────────────────
   const renderAuctionCard = ({ kind, sub }: AuctionSub) => {
-    const image = (sub as any).image || (sub as any).productImage
+    const rawImageRef = (sub as any).image || (sub as any).productImage || ''
+    // IDB refs phải chờ async resolve vào imageMap — không dùng chuỗi 'idb:...' làm src
+    const image = rawImageRef.startsWith('idb:')
+      ? (imageMap[rawImageRef] || '')
+      : (imageMap[rawImageRef] ?? resolveImage(rawImageRef))
     const isBanner = kind === 'banner'
     const posLabel = isBanner
       ? BANNER_POSITIONS.find(p => p.key === (sub as BannerSubmission).position)?.label
@@ -336,8 +527,8 @@ const BannerAdminPage: React.FC = () => {
       <div key={sub.id} className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', marginBottom: 0 }}>
         {/* Ảnh full-width */}
         {image ? (
-          <div style={{ background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160, maxHeight: 260, overflow: 'hidden' }}>
-            <img src={image} alt="preview" style={{ width: '100%', maxHeight: 260, objectFit: isBanner ? 'cover' : 'contain', display: 'block' }} />
+          <div style={{ background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <img src={image} alt="preview" style={{ width: '100%', height: 'auto', display: 'block' }} />
           </div>
         ) : (
           <div style={{ height: 100, background: 'rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.gray, fontSize: 13 }}>Không có ảnh</div>
@@ -397,28 +588,76 @@ const BannerAdminPage: React.FC = () => {
             const pct = (!isPaid && remMs > 0)
               ? Math.max(0, Math.min(100, (remMs / totalMs) * 100))
               : null
+
+            // Display countdown (chỉ khi đã paid)
+            const displayDurationMs = histEntry?.displayDurationMs ?? 2 * 24 * 60 * 60 * 1000
+            const displayRemMs = isPaid && sub.approvedAt
+              ? (countdowns['disp_' + sub.id] ?? Math.max(0, new Date(sub.approvedAt).getTime() + displayDurationMs - Date.now()))
+              : null
+            const displayEndAt = isPaid && sub.approvedAt
+              ? new Date(new Date(sub.approvedAt).getTime() + displayDurationMs)
+              : null
+            const dispPct = displayRemMs !== null && displayDurationMs > 0
+              ? Math.max(0, Math.min(100, (displayRemMs / displayDurationMs) * 100))
+              : null
+            const dispExpired = displayRemMs !== null && displayRemMs <= 0
+
             return (
-              <div style={{ borderRadius: 8, overflow: 'hidden', border: `1px solid ${isPaid ? 'rgba(22,163,74,0.25)' : isUrgent ? 'rgba(220,38,38,0.3)' : 'rgba(217,119,6,0.3)'}` }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 14px', fontSize: 13, fontWeight: 600,
-                  background: isPaid ? C.successLight : isUrgent ? 'rgba(220,38,38,0.08)' : C.warningLight,
-                  color: isPaid ? C.success : isUrgent ? '#DC2626' : C.warning,
-                }}>
-                  <span>
-                    {isPaid ? '🟢 Đang hiển thị trên trang chủ'
-                      : remMs > 0 ? `${isUrgent ? '🚨' : '⏳'} Chờ shop thanh toán — còn ${formatMmSs(remMs)}`
-                      : '❌ Hết hạn thanh toán'}
-                  </span>
-                  {!isPaid && remMs > 0 && (
-                    <span style={{ fontSize: 11, fontWeight: 400, opacity: 0.75 }}>
-                      Hạn: {new Date(sub.paymentDeadline).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {/* Trạng thái thanh toán / chờ TT */}
+                <div style={{ borderRadius: 8, overflow: 'hidden', border: `1px solid ${isPaid ? 'rgba(22,163,74,0.25)' : isUrgent ? 'rgba(220,38,38,0.3)' : 'rgba(217,119,6,0.3)'}` }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 14px', fontSize: 13, fontWeight: 600,
+                    background: isPaid ? C.successLight : isUrgent ? 'rgba(220,38,38,0.08)' : C.warningLight,
+                    color: isPaid ? C.success : isUrgent ? '#DC2626' : C.warning,
+                  }}>
+                    <span>
+                      {isPaid ? '🟢 Đang hiển thị trên trang chủ'
+                        : remMs > 0 ? `${isUrgent ? '🚨' : '⏳'} Chờ shop thanh toán — còn ${formatMmSs(remMs)}`
+                        : '❌ Hết hạn thanh toán'}
                     </span>
+                    {!isPaid && remMs > 0 && (
+                      <span style={{ fontSize: 11, fontWeight: 400, opacity: 0.75 }}>
+                        Hạn: {new Date(sub.paymentDeadline).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                  {pct !== null && (
+                    <div style={{ height: 5, background: 'rgba(0,0,0,0.07)' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: isUrgent ? '#DC2626' : C.warning, transition: 'width 1s linear', borderRadius: '0 3px 3px 0' }} />
+                    </div>
                   )}
                 </div>
-                {pct !== null && (
-                  <div style={{ height: 5, background: 'rgba(0,0,0,0.07)' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: isUrgent ? '#DC2626' : C.warning, transition: 'width 1s linear', borderRadius: '0 3px 3px 0' }} />
+
+                {/* Bộ đếm thời gian hiển thị (chỉ khi đã paid) */}
+                {isPaid && displayRemMs !== null && (
+                  <div style={{ borderRadius: 8, overflow: 'hidden', border: `1px solid ${dispExpired ? 'rgba(220,38,38,0.25)' : dispPct! < 20 ? 'rgba(220,38,38,0.25)' : 'rgba(22,163,74,0.2)'}` }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 14px', fontSize: 12,
+                      background: dispExpired ? 'rgba(220,38,38,0.07)' : dispPct! < 20 ? 'rgba(220,38,38,0.05)' : 'rgba(22,163,74,0.06)',
+                    }}>
+                      <span style={{ fontWeight: 700, color: dispExpired ? '#DC2626' : dispPct! < 20 ? '#DC2626' : C.success }}>
+                        {dispExpired ? '🔴 Hết thời hạn hiển thị' : `🕐 Còn ${formatDisplayTime(displayRemMs)} hiển thị`}
+                      </span>
+                      {displayEndAt && !dispExpired && (
+                        <span style={{ fontSize: 11, color: C.gray }}>
+                          Hết hạn: {displayEndAt.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                    {dispPct !== null && (
+                      <div style={{ height: 4, background: 'rgba(0,0,0,0.06)' }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${dispPct}%`,
+                          background: dispPct < 20 ? '#DC2626' : dispPct < 50 ? C.warning : C.success,
+                          transition: 'width 1s linear',
+                          borderRadius: '0 3px 3px 0',
+                        }} />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -438,6 +677,20 @@ const BannerAdminPage: React.FC = () => {
             <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
               <button style={{ ...btnStyle(C.successLight, C.success), flex: 1 }} onClick={() => handleApprove(kind, sub.id)}>✅ Duyệt</button>
               <button style={{ ...btnStyle(C.errorLight, C.error), flex: 1 }} onClick={() => openRejectModal(kind, sub.id)}>❌ Từ chối</button>
+            </div>
+          )}
+
+          {/* Nút Sửa / Xóa — chỉ banner do admin tạo */}
+          {sub.status === 'approved' && sub.shopName === 'BuyZo Admin' && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                style={{ ...btnStyle(C.blueLight, C.blue), flex: 1 }}
+                onClick={() => openEdit(sub as BannerSubmission)}
+              >✏️ Chỉnh sửa</button>
+              <button
+                style={{ ...btnStyle(C.errorLight, C.error), flex: 1 }}
+                onClick={() => handleDelete(sub as BannerSubmission)}
+              >🗑️ Xóa</button>
             </div>
           )}
 
@@ -467,9 +720,36 @@ const BannerAdminPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: C.navy }}>🖼️ Quản lý Banner</h1>
-        <p style={{ fontSize: 13, color: C.gray, marginTop: 2 }}>Duyệt banner thường và banner đấu giá từ cửa hàng</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: C.navy }}>🖼️ Quản lý Banner</h1>
+          <p style={{ fontSize: 13, color: C.gray, marginTop: 2 }}>Duyệt banner thường và banner đấu giá từ cửa hàng</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {tab === 'pending' && (
+            <button
+              onClick={() => { seedTestPendingSubmissions(); loadAuction(); toast.success('✅ Đã tạo 3 submission test!') }}
+              style={{ ...btnStyle(C.purpleLight, C.purple, true), marginTop: 4 }}
+            >🧪 Tạo dữ liệu test</button>
+          )}
+          {tab === 'active' && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => {
+                  if (!window.confirm('Xóa hết tất cả banner do admin tạo?')) return
+                  const n = purgeAdminBanners()
+                  toast.success(`🗑️ Đã xóa ${n} banner admin cũ!`)
+                  loadAuction()
+                }}
+                style={{ ...btnStyle(C.errorLight, C.error, true), marginTop: 4 }}
+              >🗑️ Xóa hết banner admin cũ</button>
+              <button
+                onClick={() => setShowCreate(true)}
+                style={{ ...btnStyle(C.success, 'white', true), marginTop: 4 }}
+              >➕ Tạo banner admin</button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Stats */}
@@ -541,22 +821,278 @@ const BannerAdminPage: React.FC = () => {
       )}
 
       {/* ── Banner đấu giá (localStorage) ───────────────────────────────── */}
-      {auctionFiltered.length > 0 && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: C.gray, textTransform: 'uppercase', letterSpacing: 1 }}>🏆 Banner đấu giá</span>
-            <div style={{ flex: 1, height: 1, background: C.border }} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-            {auctionFiltered.map(item => renderAuctionCard(item))}
-          </div>
-        </>
+      {tab === 'pending' ? (() => {
+        const pendingBanner = (pos: string) => auctionFiltered.filter(({ kind, sub }) => kind === 'banner' && (sub as BannerSubmission).position === pos)
+        const pendingFlash  = auctionFiltered.filter(({ kind }) => kind === 'flash')
+        const sections: { icon: string; label: string; items: AuctionSub[] }[] = [
+          { icon: '🖼️', label: 'Banner đầu Trang chủ',          items: pendingBanner('home_slider')  },
+          { icon: '📢', label: 'Banner Quảng Cáo (Center)',      items: pendingBanner('mall_ads_main') },
+          { icon: '🏬', label: 'Banner BuyZo Mall (khu cố định)', items: pendingBanner('mall_ads_fixed') },
+          { icon: '⚡', label: 'Flash Sale',                     items: pendingFlash                   },
+        ]
+        return (
+          <>
+            {sections.map(({ icon, label, items }) => (
+              <div key={label}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: C.gray, textTransform: 'uppercase', letterSpacing: 1 }}>{icon} {label}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: items.length > 0 ? C.warningLight : C.tint, color: items.length > 0 ? C.warning : C.gray }}>{items.length}</span>
+                  <div style={{ flex: 1, height: 1, background: C.border }} />
+                </div>
+                {items.length > 0
+                  ? <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {items.map(item => renderAuctionCard(item))}
+                    </div>
+                  : <div style={{ padding: '14px 18px', borderRadius: 10, background: C.tint, color: C.gray, fontSize: 13, textAlign: 'center', marginBottom: 4 }}>
+                      Không có banner chờ duyệt
+                    </div>
+                }
+              </div>
+            ))}
+          </>
+        )
+      })() : (
+        auctionFiltered.length > 0 && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: C.gray, textTransform: 'uppercase', letterSpacing: 1 }}>🏆 Banner đấu giá</span>
+              <div style={{ flex: 1, height: 1, background: C.border }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {auctionFiltered.map(item => renderAuctionCard(item))}
+            </div>
+          </>
+        )
       )}
 
-      {/* Empty state */}
-      {regularByTab.length === 0 && auctionFiltered.length === 0 && !loadingApi && (
+      {/* Empty state — only for active/rejected tabs */}
+      {tab !== 'pending' && regularByTab.length === 0 && auctionFiltered.length === 0 && !loadingApi && (
         <div className="card" style={{ padding: 40, textAlign: 'center', color: C.gray }}>
           Không có banner nào ở trạng thái này
+        </div>
+      )}
+
+      {/* ── Create banner modal (admin) ──────────────────────────────────── */}
+      {showCreate && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+          <div style={{ background: C.cardBg, borderRadius: 14, padding: 28, width: 580, maxWidth: '95vw', maxHeight: '92vh', overflowY: 'auto' }}>
+            <h3 style={{ marginBottom: 4, fontSize: 17, fontWeight: 800, color: C.navy }}>➕ Tạo banner admin</h3>
+            <p style={{ fontSize: 12, color: C.gray, marginBottom: 20 }}>Banner hiển thị ngay trên trang chủ — không cần duyệt. Chọn nhiều ảnh cùng lúc để tạo nhanh nhiều banner.</p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* Chọn vị trí */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: C.gray, display: 'block', marginBottom: 8 }}>Vị trí hiển thị *</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {POSITION_OPTIONS.map(opt => (
+                    <div key={opt.key} onClick={() => patchShared({ position: opt.key })}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10,
+                        border: `2px solid ${createShared.position === opt.key ? C.blue : C.border}`,
+                        background: createShared.position === opt.key ? C.blueLight : 'transparent',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                      }}>
+                      <div style={{ fontSize: 20, lineHeight: 1 }}>{opt.label.split(' ')[0]}</div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: createShared.position === opt.key ? C.blue : 'var(--text-primary)' }}>{opt.label.slice(3)}</div>
+                        <div style={{ fontSize: 11, color: C.gray }}>{opt.desc} · <span style={{ fontStyle: 'italic' }}>{opt.spec}</span></div>
+                      </div>
+                      {createShared.position === opt.key && <div style={{ marginLeft: 'auto', color: C.blue, fontWeight: 800 }}>✓</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Chọn nhiều ảnh */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: C.gray }}>
+                    Hình ảnh * {createImages.length > 0 && <span style={{ color: C.blue }}>({createImages.length} ảnh)</span>}
+                  </span>
+                  {createImages.length > 0 && (
+                    <label htmlFor="banner-admin-file-input"
+                      style={{ ...btnStyle(C.blueLight, C.blue, true), display: 'inline-block', cursor: 'pointer' }}>+ Thêm ảnh</label>
+                  )}
+                </div>
+
+                {/* Input file — dùng htmlFor thay vì ref.click() để tránh browser chặn */}
+                <input
+                  id="banner-admin-file-input"
+                  type="file" accept="image/*" multiple
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    if (e.target.files?.length) {
+                      handleCreateFilesPick(e.target.files)
+                      e.target.value = ''
+                    }
+                  }}
+                />
+
+                {createImages.length === 0 ? (
+                  <label htmlFor="banner-admin-file-input" style={{
+                    border: `2px dashed ${C.border}`, borderRadius: 10, padding: '32px 20px',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                    cursor: 'pointer', background: C.tint,
+                  }}>
+                    <span style={{ fontSize: 36 }}>📁</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.blue }}>Bấm để chọn ảnh (chọn nhiều cùng lúc)</span>
+                    <span style={{ fontSize: 11, color: C.gray }}>
+                      {POSITION_OPTIONS.find(p => p.key === createShared.position)?.spec}
+                    </span>
+                  </label>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {createImages.map((img, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: 12, padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.tint, alignItems: 'flex-start' }}>
+                        <div style={{ width: 80, height: 56, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: '#0a0a0a' }}>
+                          <img src={img.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, color: C.gray, marginBottom: 3 }}>Tiêu đề banner #{idx + 1}</div>
+                          <input
+                            value={img.title}
+                            onChange={e => {
+                              const next = [...createImages]
+                              next[idx] = { ...next[idx], title: e.target.value }
+                              setCreateImages(next)
+                            }}
+                            placeholder="Nhập tiêu đề..."
+                            style={{ width: '100%', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <button onClick={() => setCreateImages(prev => prev.filter((_, i) => i !== idx))}
+                          style={{ ...btnStyle(C.errorLight, C.error, true), flexShrink: 0, marginTop: 18 }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Link */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: C.gray }}>Link đích (khi click — áp dụng cho tất cả)</label>
+                <input value={createShared.link} onChange={e => patchShared({ link: e.target.value })}
+                  placeholder="https://... hoặc /products"
+                  style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, boxSizing: 'border-box', fontSize: 13 }} />
+              </div>
+
+              {/* Thời gian hiển thị */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: C.gray, display: 'block', marginBottom: 8 }}>Thời gian hiển thị</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {DURATION_OPTIONS.map(opt => (
+                    <button key={opt.ms} onClick={() => patchShared({ durationMs: opt.ms })}
+                      style={{
+                        padding: '6px 14px', borderRadius: 8, border: `2px solid ${createShared.durationMs === opt.ms ? C.blue : C.border}`,
+                        background: createShared.durationMs === opt.ms ? C.blueLight : 'transparent',
+                        color: createShared.durationMs === opt.ms ? C.blue : C.gray,
+                        fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                      }}>{opt.label}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 24, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setShowCreate(false); setCreateImages([]) }} style={{ ...btnStyle('var(--bg-card)', C.gray), border: `1px solid ${C.border}` }}>Huỷ</button>
+              <button onClick={handleCreate} disabled={creating || createImages.length === 0}
+                style={{ ...btnStyle(C.success), opacity: (creating || createImages.length === 0) ? 0.6 : 1 }}>
+                {creating ? 'Đang tạo...' : `✅ Tạo ${createImages.length > 1 ? createImages.length + ' banner' : 'banner'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete confirm modal ─────────────────────────────────────────── */}
+      {deleteConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+          <div style={{ background: C.cardBg, borderRadius: 14, padding: 28, width: 400, maxWidth: '92vw' }}>
+            <div style={{ fontSize: 36, textAlign: 'center', marginBottom: 12 }}>🗑️</div>
+            <h3 style={{ fontSize: 16, fontWeight: 800, textAlign: 'center', marginBottom: 8 }}>Xác nhận xóa banner</h3>
+            <p style={{ fontSize: 13, color: C.gray, textAlign: 'center', marginBottom: 6 }}>
+              Bạn chắc muốn xóa banner
+            </p>
+            <p style={{ fontSize: 14, fontWeight: 700, textAlign: 'center', color: C.error, marginBottom: 20 }}>
+              "{deleteConfirm.title}"
+            </p>
+            <p style={{ fontSize: 12, color: C.gray, textAlign: 'center', marginBottom: 24 }}>
+              Banner sẽ biến mất khỏi trang chủ ngay lập tức và không thể khôi phục.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setDeleteConfirm(null)}
+                style={{ ...btnStyle('var(--bg-card)', C.gray), flex: 1, border: `1px solid ${C.border}` }}>Huỷ</button>
+              <button onClick={confirmDelete}
+                style={{ ...btnStyle(C.error), flex: 1 }}>🗑️ Xóa banner</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit banner modal (admin) ────────────────────────────────────── */}
+      {showEdit && editTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+          <div style={{ background: C.cardBg, borderRadius: 14, padding: 28, width: 540, maxWidth: '95vw', maxHeight: '92vh', overflowY: 'auto' }}>
+            <h3 style={{ marginBottom: 4, fontSize: 17, fontWeight: 800, color: C.navy }}>✏️ Chỉnh sửa banner</h3>
+            <p style={{ fontSize: 12, color: C.gray, marginBottom: 20 }}>
+              Vị trí: <strong>{POSITION_OPTIONS.find(p => p.key === editTarget.position)?.label}</strong>
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Tiêu đề */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: C.gray }}>Tiêu đề *</label>
+                <input
+                  value={editForm.title}
+                  onChange={e => patchEdit({ title: e.target.value })}
+                  style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, boxSizing: 'border-box', fontSize: 13 }}
+                />
+              </div>
+
+              {/* Ảnh */}
+              <div>
+                <span style={{ fontSize: 12, fontWeight: 700, color: C.gray, display: 'block', marginBottom: 6 }}>Hình ảnh *</span>
+                <input
+                  id="banner-edit-file-input"
+                  type="file" accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) { handleEditImagePick(f); e.target.value = '' } }}
+                />
+                {editForm.image_url ? (
+                  <label htmlFor="banner-edit-file-input" style={{ display: 'block', position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#0a0a0a', cursor: 'pointer' }}>
+                    <img src={editForm.image_url} alt="preview"
+                      style={{ width: '100%', maxHeight: 200, objectFit: editTarget.position === 'mall_ads_fixed' ? 'contain' : 'cover', display: 'block' }} />
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ color: 'white', fontWeight: 700, fontSize: 13 }}>🖼️ Bấm để đổi ảnh</span>
+                    </div>
+                  </label>
+                ) : (
+                  <label htmlFor="banner-edit-file-input"
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, border: `2px dashed ${C.border}`, borderRadius: 10, padding: '32px 20px', cursor: 'pointer', background: C.tint }}>
+                    <span style={{ fontSize: 32 }}>📁</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.blue }}>Bấm để chọn ảnh</span>
+                  </label>
+                )}
+              </div>
+
+              {/* Link */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: C.gray }}>Link đích (khi click)</label>
+                <input
+                  value={editForm.link}
+                  onChange={e => patchEdit({ link: e.target.value })}
+                  placeholder="https://... hoặc /products"
+                  style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, boxSizing: 'border-box', fontSize: 13 }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 24, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setShowEdit(false); setEditTarget(null) }} style={{ ...btnStyle('var(--bg-card)', C.gray), border: `1px solid ${C.border}` }}>Huỷ</button>
+              <button onClick={handleEditSave} style={btnStyle(C.blue)}>💾 Lưu thay đổi</button>
+            </div>
+          </div>
         </div>
       )}
 

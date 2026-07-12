@@ -5,13 +5,22 @@ import ProductFilter from '../components/product/ProductFilter'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { fetchProducts, fetchCategories, setFilters, resetFilters } from '../store/slices/productSlice'
 import { formatCurrency } from '../utils/formatters'
+import { getAllSubmissions, resolveImage } from '../utils/bannerAuctionStore'
+import { resolveImageAsync } from '../utils/imageDB'
 
 // ─── Banner ───────────────────────────────────────────────────────────────────
-const BANNERS = ['/banner/1.png', '/banner/2.png', '/banner/3.png', '/banner/4.png']
+type BannerItem = { src: string; link?: string; title?: string }
+const STATIC_BANNERS: BannerItem[] = [
+  { src: '/img/banner_admin/1.png' },
+  { src: '/img/banner_admin/2.png' },
+  { src: '/img/banner_admin/3.png' },
+  { src: '/img/banner_admin/4.png' },
+]
 const AUTO_MS = 4000
 const DUR_MS  = 600
 
 const BannerSlider: React.FC = () => {
+  const [banners, setBanners] = useState<BannerItem[]>(STATIC_BANNERS)
   const [cur, setCur]     = useState(0)
   const [next, setNext]   = useState<number | null>(null)
   const [phase, setPhase] = useState<'idle' | 'out' | 'in'>('idle')
@@ -20,10 +29,32 @@ const BannerSlider: React.FC = () => {
   const progRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const busyRef = useRef(false)
 
-  const go = useCallback((to: number) => {
-    if (busyRef.current) return
+  // Load approved home_slider submissions from store
+  const loadApproved = useCallback(() => {
+    const subs = getAllSubmissions().filter(s => s.position === 'home_slider' && s.status === 'approved')
+    // Resolve all image refs (sync for localStorage, async for IDB)
+    Promise.all(subs.map(async s => ({
+      src: await resolveImageAsync(s.image) || resolveImage(s.image),
+      link: s.link,
+      title: s.title,
+    }))).then(approved => {
+      const valid = approved.filter(a => a.src) // bỏ banner có src rỗng (ref bị lỗi)
+      // Nếu đã có banner admin hợp lệ thì chỉ show chúng, không kèm static
+      setBanners(valid.length > 0 ? valid : STATIC_BANNERS)
+    })
+  }, [])
+
+  useEffect(() => {
+    loadApproved()
+    // Tự cập nhật khi admin duyệt banner (localStorage thay đổi từ tab khác)
+    window.addEventListener('storage', loadApproved)
+    return () => window.removeEventListener('storage', loadApproved)
+  }, [loadApproved])
+
+  const go = useCallback((to: number, total: number) => {
+    if (busyRef.current || total === 0) return
     busyRef.current = true
-    const nxt = (to + BANNERS.length) % BANNERS.length
+    const nxt = (to + total) % total
     setNext(nxt)
     setPhase('out')
     setTimeout(() => {
@@ -32,7 +63,7 @@ const BannerSlider: React.FC = () => {
     }, DUR_MS * 0.6)
   }, [])
 
-  const advance = useCallback(() => go(cur + 1), [cur, go])
+  const advance = useCallback(() => go(cur + 1, banners.length), [cur, go, banners.length])
 
   const resetAuto = useCallback(() => {
     if (autoRef.current) clearInterval(autoRef.current)
@@ -45,8 +76,8 @@ const BannerSlider: React.FC = () => {
 
   useEffect(() => { resetAuto(); return () => { clearInterval(autoRef.current!); clearInterval(progRef.current!) } }, [resetAuto])
 
-  const handleGo  = (dir: number) => { go(cur + dir); resetAuto() }
-  const handleDot = (i: number)   => { if (i !== cur) { go(i); resetAuto() } }
+  const handleGo  = (dir: number) => { go(cur + dir, banners.length); resetAuto() }
+  const handleDot = (i: number)   => { if (i !== cur) { go(i, banners.length); resetAuto() } }
 
   const curStyle = (): React.CSSProperties => {
     if (phase === 'out') return { opacity: 0, transform: 'scale(0.94)', filter: 'blur(3px)', transition: `all ${DUR_MS * 0.6}ms cubic-bezier(0.76,0,0.24,1)` }
@@ -58,14 +89,27 @@ const BannerSlider: React.FC = () => {
     return { opacity: 0, transform: 'scale(1.06)', filter: 'blur(4px)', transition: 'none' }
   }
 
+  const renderBannerImg = (item: BannerItem, style: React.CSSProperties, extraStyle?: React.CSSProperties) => {
+    const img = (
+      <img src={item.src} alt={item.title || 'Banner'} className="banner-img"
+        style={{ display: 'block', width: '100%', height: 'auto', maxHeight: 480, objectFit: 'cover', ...style, ...extraStyle }} />
+    )
+    if (item.link) {
+      const isExternal = item.link.startsWith('http')
+      return isExternal
+        ? <a href={item.link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', ...style, ...extraStyle, height: 'auto', maxHeight: 'unset' }}>{img}</a>
+        : <Link to={item.link} style={{ display: 'block', ...style, ...extraStyle, height: 'auto', maxHeight: 'unset' }}>{img}</Link>
+    }
+    return img
+  }
+
+  const curBanner = banners[cur] ?? STATIC_BANNERS[0]
+  const nxtBanner = next !== null ? (banners[next] ?? null) : null
+
   return (
     <div style={{ position: 'relative', width: '100%', overflow: 'hidden', background: '#0f0f0f', userSelect: 'none' }}>
-      <img src={BANNERS[cur]} alt={`Banner ${cur + 1}`} className="banner-img"
-        style={{ display: 'block', width: '100%', height: 'auto', maxHeight: 480, objectFit: 'cover', position: 'relative', zIndex: 2, willChange: 'transform,opacity', ...curStyle() }} />
-      {next !== null && (
-        <img src={BANNERS[next]} alt={`Banner ${next + 1}`} className="banner-img"
-          style={{ display: 'block', width: '100%', height: 'auto', maxHeight: 480, objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 3, willChange: 'transform,opacity', ...nxtStyle() }} />
-      )}
+      {renderBannerImg(curBanner, { position: 'relative', zIndex: 2, willChange: 'transform,opacity' }, curStyle())}
+      {nxtBanner && renderBannerImg(nxtBanner, { position: 'absolute', inset: '0', zIndex: 3, willChange: 'transform,opacity' }, nxtStyle())}
       {(['prev', 'next'] as const).map(d => (
         <button key={d} onClick={() => handleGo(d === 'prev' ? -1 : 1)}
           style={{ position: 'absolute', top: '50%', [d === 'prev' ? 'left' : 'right']: 16, transform: 'translateY(-50%)', zIndex: 10, width: 42, height: 42, borderRadius: '50%', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', fontSize: 20, cursor: 'pointer', lineHeight: 1, backdropFilter: 'blur(4px)', transition: 'background 0.2s' }}
@@ -74,7 +118,7 @@ const BannerSlider: React.FC = () => {
         >{d === 'prev' ? '‹' : '›'}</button>
       ))}
       <div style={{ position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 10 }}>
-        {BANNERS.map((_, i) => (
+        {banners.map((_, i) => (
           <div key={i} onClick={() => handleDot(i)} style={{ width: i === cur ? 24 : 8, height: 8, borderRadius: 4, background: `rgba(255,255,255,${i === cur ? 0.95 : 0.4})`, cursor: 'pointer', transition: 'all 0.35s cubic-bezier(0.76,0,0.24,1)' }} />
         ))}
       </div>
@@ -169,138 +213,301 @@ const FlashSaleSection: React.FC = () => {
 }
 
 // ─── Banner quang cao tren BuyZo Mall ─────────────────────────────────────────
-const MALL_ADS = [
+const STATIC_MALL_ADS = [
   encodeURI('/banner_thueQC/ChatGPT Image Jun 19, 2026, 01_09_11 PM.png'),
   encodeURI('/banner_thueQC/ChatGPT Image Jun 19, 2026, 01_28_18 PM.png'),
   encodeURI('/banner_thueQC/ChatGPT Image Jun 19, 2026, 01_31_52 PM.png'),
 ]
+const STATIC_MALL_FIXED = '/banner/4.png'
 const MALL_AD_AUTO_MS = 3500
 
-const MALL_AD_FIXED = '/banner/4.png'
+type MallAdItem = { src: string; link?: string }
 
 const MallAdBanner: React.FC = () => {
   const [cur, setCur] = useState(0)
+  const [mainAds, setMainAds] = useState<MallAdItem[]>(STATIC_MALL_ADS.map(src => ({ src })))
+  const [fixedSrc, setFixedSrc] = useState(STATIC_MALL_FIXED)
+  const [fixedLink, setFixedLink] = useState<string | undefined>()
+
+  const loadMallAds = useCallback(() => {
+    const subs  = getAllSubmissions().filter(s => s.status === 'approved')
+    const mains = subs.filter(s => s.position === 'mall_ads_main')
+    const fixed = subs.find(s => s.position === 'mall_ads_fixed')
+    Promise.all(mains.map(async s => ({ src: await resolveImageAsync(s.image) || resolveImage(s.image), link: s.link })))
+      .then(main => setMainAds(main.length > 0 ? [...main, ...STATIC_MALL_ADS.map(src => ({ src }))] : STATIC_MALL_ADS.map(src => ({ src }))))
+    if (fixed) {
+      resolveImageAsync(fixed.image).then(url => {
+        setFixedSrc(url || resolveImage(fixed.image))
+        setFixedLink(fixed.link)
+      })
+    }
+  }, [])
 
   useEffect(() => {
-    const id = setInterval(() => setCur(c => (c + 1) % MALL_ADS.length), MALL_AD_AUTO_MS)
+    loadMallAds()
+    window.addEventListener('storage', loadMallAds)
+    return () => window.removeEventListener('storage', loadMallAds)
+  }, [loadMallAds])
+
+  useEffect(() => {
+    if (mainAds.length === 0) return
+    const id = setInterval(() => setCur(c => (c + 1) % mainAds.length), MALL_AD_AUTO_MS)
     return () => clearInterval(id)
-  }, [])
+  }, [mainAds.length])
+
+  const wrapLink = (content: React.ReactNode, link?: string, key?: string | number) =>
+    link ? (
+      link.startsWith('http') || link.startsWith('//')
+        ? <a key={key} href={link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', position: 'absolute', inset: 0 }}>{content}</a>
+        : <Link key={key} to={link} style={{ display: 'block', position: 'absolute', inset: 0 }}>{content}</Link>
+    ) : <>{content}</>
 
   return (
     <div style={{ display: 'flex', gap: 12, width: '100%', height: 400 }}>
-      {/* Trái 7 phần - banner chạy */}
+      {/* Trái 7 phần - banner chạy (mall_ads_main) */}
       <div style={{ position: 'relative', flex: 7, height: '100%', overflow: 'hidden', borderRadius: 14, background: '#0f0f0f' }}>
-        {MALL_ADS.map((src, i) => (
-          <img key={src} src={src} alt={`Quang cao ${i + 1}`} className="banner-img"
+        {mainAds.map((ad, i) => (
+          <img key={ad.src + i} src={ad.src} alt={`Quang cao ${i + 1}`} className="banner-img"
             style={{
               position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
               opacity: i === cur ? 1 : 0, transition: 'opacity 0.6s ease',
             }} />
         ))}
-        <div style={{ position: 'absolute', top: 10, left: 12, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: 0.5 }}>
+        {mainAds[cur]?.link && wrapLink(null, mainAds[cur].link)}
+        <div style={{ position: 'absolute', top: 10, left: 12, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: 0.5, zIndex: 2 }}>
           QUẢNG CÁO
         </div>
-        <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6 }}>
-          {MALL_ADS.map((_, i) => (
+        <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 2 }}>
+          {mainAds.map((_, i) => (
             <div key={i} onClick={() => setCur(i)} style={{ width: i === cur ? 18 : 6, height: 6, borderRadius: 3, background: `rgba(255,255,255,${i === cur ? 0.95 : 0.4})`, cursor: 'pointer', transition: 'all 0.3s' }} />
           ))}
         </div>
       </div>
 
-      {/* Phải 3 phần - hình cố định */}
+      {/* Phải 3 phần - hình cố định (mall_ads_fixed) */}
       <div style={{ position: 'relative', flex: 3, height: '100%', overflow: 'hidden', borderRadius: 14, background: '#0f0f0f' }}>
-        <img src={MALL_AD_FIXED} alt="Quảng cáo cố định" className="banner-img"
+        <img src={fixedSrc} alt="Quảng cáo cố định" className="banner-img"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        {fixedLink && wrapLink(null, fixedLink)}
       </div>
     </div>
   )
 }
 
-// ─── BuyZo Mall (sản phẩm thật từ Mall shops) ────────────────────────────────
-const Stars: React.FC<{ rating: number }> = ({ rating }) => {
-  const r = parseFloat(String(rating)) || 0
-  return (
-    <span style={{ color: '#f59e0b', fontSize: 11 }}>
-      {'★'.repeat(Math.floor(r))}{'☆'.repeat(5 - Math.floor(r))}
-      <span style={{ color: '#6b7280', marginLeft: 3 }}>{r.toFixed(1)}</span>
-    </span>
-  )
+// ─── BuyZo Mall ───────────────────────────────────────────────────────────────
+const MALL_MOCK = [
+  { name: 'LOreal Paris',   promo: 'Ưu đãi đến 50%',   img: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=200&h=200&fit=crop' },
+  { name: 'Unilever',       promo: 'Mua 1 tặng 1',      img: 'https://images.unsplash.com/photo-1526045612212-70caf35c14df?w=200&h=200&fit=crop' },
+  { name: 'Samsung',        promo: 'Giảm đến 30%',      img: 'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=200&h=200&fit=crop' },
+  { name: 'Coolmate',       promo: 'Mua 1 tặng 1',      img: 'https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=200&h=200&fit=crop' },
+  { name: 'Cocoon',         promo: 'Mua 1 tặng 1',      img: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=200&h=200&fit=crop' },
+  { name: 'Vaseline',       promo: 'Combo tiết kiệm',   img: 'https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=200&h=200&fit=crop' },
+  { name: 'La Roche-Posay', promo: 'Mua là có quà',     img: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=200&h=200&fit=crop' },
+  { name: 'CeraVe',         promo: 'Mua 1 được 6',      img: 'https://images.unsplash.com/photo-1631730486784-74757276baa5?w=200&h=200&fit=crop' },
+]
+
+// 5 slides cho carousel panel trái (240×320px)
+const MallCarouselSlides: React.FC<{ slide: number }> = ({ slide }) => {
+  const slides = [
+    // Slide 0 – BuyZo Mall intro (tím logo)
+    <div key={0} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#3b0764 0%,#6d28d9 45%,#4f46e5 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', gap: 10, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: -40, right: -40, width: 140, height: 140, borderRadius: '50%', background: 'rgba(167,139,250,0.15)' }} />
+      <div style={{ position: 'absolute', bottom: -30, left: -30, width: 110, height: 110, borderRadius: '50%', background: 'rgba(99,102,241,0.2)' }} />
+      <div style={{ position: 'absolute', top: 16, right: 16, width: 8, height: 8, borderRadius: '50%', background: '#a78bfa' }} />
+      <div style={{ position: 'absolute', top: 28, right: 30, width: 5, height: 5, borderRadius: '50%', background: '#7c3aed' }} />
+      {/* Logo-style text */}
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0, marginBottom: 4 }}>
+          <div style={{ background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(167,139,250,0.6)', borderRadius: 8, padding: '4px 14px 4px 10px' }}>
+            <span style={{ fontSize: 28, fontWeight: 900, color: '#e9d5ff', letterSpacing: -1, fontStyle: 'italic' }}>Buy</span>
+            <span style={{ fontSize: 28, fontWeight: 900, color: '#fbbf24', letterSpacing: -1, fontStyle: 'italic' }}>Z</span>
+          </div>
+          <div style={{ fontSize: 32, marginLeft: -4 }}>🛒</div>
+        </div>
+        <div style={{ textAlign: 'center', color: '#fbbf24', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>CHÍNH HÃNG • UY TÍN</div>
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+        <div style={{ color: '#e9d5ff', fontWeight: 900, fontSize: 16, lineHeight: 1.3, textTransform: 'uppercase', letterSpacing: 0.5 }}>Mua sắm<br />thả ga</div>
+        <div style={{ color: '#fbbf24', fontWeight: 900, fontSize: 13, marginTop: 4 }}>Không lo hàng giả</div>
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 6, justifyContent: 'center', width: '100%' }}>
+        {['✅ Chính hãng', '🔄 Đổi trả 30 ngày'].map(t => (
+          <div key={t} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(167,139,250,0.4)', borderRadius: 6, padding: '5px 4px', textAlign: 'center', fontSize: 9.5, color: '#e9d5ff', fontWeight: 700, lineHeight: 1.3 }}>{t}</div>
+        ))}
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, background: 'linear-gradient(135deg,#fbbf24,#f59e0b)', borderRadius: 20, padding: '6px 20px', color: '#1e0a3c', fontWeight: 900, fontSize: 12, letterSpacing: 0.5 }}>
+        🏆 BUYZO MALL
+      </div>
+    </div>,
+
+    // Slide 1 – LOreal Paris
+    <div key={1} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#1a0533 0%,#4a044e 50%,#86198f 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', gap: 10, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: -30, left: -30, width: 120, height: 120, borderRadius: '50%', background: 'rgba(192,38,211,0.2)' }} />
+      <div style={{ position: 'absolute', bottom: -20, right: -20, width: 100, height: 100, borderRadius: '50%', background: 'rgba(168,85,247,0.15)' }} />
+      <div style={{ position: 'relative', zIndex: 1, fontSize: 44 }}>💄</div>
+      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+        <div style={{ color: '#fdf4ff', fontWeight: 900, fontSize: 15, letterSpacing: 1, textTransform: 'uppercase' }}>L&apos;Oréal</div>
+        <div style={{ color: '#e879f9', fontWeight: 700, fontSize: 11, letterSpacing: 2 }}>PARIS</div>
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(233,30,99,0.5)', borderRadius: 8, padding: '8px 16px', textAlign: 'center' }}>
+        <div style={{ color: '#fdf4ff', fontSize: 10, fontWeight: 600 }}>Bộ sưu tập mới nhất</div>
+        <div style={{ color: '#f0abfc', fontWeight: 900, fontSize: 20, marginTop: 2 }}>ƯU ĐÃI 50%</div>
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 4 }}>
+        {['Son môi', 'Kem dưỡng', 'Mascara'].map(t => (
+          <div key={t} style={{ background: 'rgba(192,38,211,0.3)', borderRadius: 4, padding: '3px 6px', fontSize: 9, color: '#f5d0fe', fontWeight: 600 }}>{t}</div>
+        ))}
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, color: '#fbbf24', fontSize: 11, fontWeight: 700 }}>⭐ Chính hãng tại BuyZo Mall</div>
+    </div>,
+
+    // Slide 2 – Samsung
+    <div key={2} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#0c1445 0%,#1e3a8a 50%,#1d4ed8 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', gap: 10, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: -20, right: -20, width: 130, height: 130, borderRadius: '50%', background: 'rgba(59,130,246,0.2)' }} />
+      <div style={{ position: 'absolute', bottom: 20, left: -40, width: 100, height: 100, borderRadius: '50%', background: 'rgba(99,102,241,0.15)' }} />
+      <div style={{ position: 'relative', zIndex: 1, fontSize: 44 }}>📱</div>
+      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+        <div style={{ color: '#93c5fd', fontWeight: 900, fontSize: 18, letterSpacing: 2, textTransform: 'uppercase' }}>SAMSUNG</div>
+        <div style={{ color: '#dbeafe', fontSize: 10, fontWeight: 600, letterSpacing: 1 }}>Galaxy Series 2026</div>
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(147,197,253,0.4)', borderRadius: 10, padding: '10px 16px', textAlign: 'center', width: '100%' }}>
+        <div style={{ color: '#bfdbfe', fontSize: 10, fontWeight: 600 }}>Flash deal hôm nay</div>
+        <div style={{ color: '#fbbf24', fontWeight: 900, fontSize: 24, lineHeight: 1.1 }}>GIẢM<br />30%</div>
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, color: '#93c5fd', fontSize: 10.5, fontWeight: 700 }}>🚚 Miễn phí vận chuyển</div>
+    </div>,
+
+    // Slide 3 – Cocoon Vietnam
+    <div key={3} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#052e16 0%,#166534 50%,#15803d 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', gap: 10, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: -20, left: -20, width: 110, height: 110, borderRadius: '50%', background: 'rgba(134,239,172,0.15)' }} />
+      <div style={{ position: 'absolute', bottom: -30, right: -30, width: 130, height: 130, borderRadius: '50%', background: 'rgba(74,222,128,0.1)' }} />
+      <div style={{ position: 'relative', zIndex: 1, fontSize: 44 }}>🌿</div>
+      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+        <div style={{ color: '#bbf7d0', fontWeight: 900, fontSize: 17, letterSpacing: 1 }}>COCOON</div>
+        <div style={{ color: '#86efac', fontSize: 10, fontWeight: 600, letterSpacing: 1 }}>VIETNAM</div>
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(134,239,172,0.35)', borderRadius: 8, padding: '8px 14px', textAlign: 'center' }}>
+        <div style={{ color: '#d1fae5', fontSize: 10, fontWeight: 600 }}>Thiên nhiên thuần Việt</div>
+        <div style={{ color: '#fbbf24', fontWeight: 900, fontSize: 16, marginTop: 3 }}>MUA 1 TẶNG 1</div>
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 4 }}>
+        {['🌾 Tự nhiên', '🐰 Cruelty-free'].map(t => (
+          <div key={t} style={{ background: 'rgba(22,163,74,0.35)', borderRadius: 4, padding: '3px 6px', fontSize: 9, color: '#bbf7d0', fontWeight: 700 }}>{t}</div>
+        ))}
+      </div>
+    </div>,
+
+    // Slide 4 – Coolmate
+    <div key={4} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#0f0f0f 0%,#1c1c1c 50%,#27272a 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', gap: 10, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg,#7c3aed,#4f46e5,#7c3aed)' }} />
+      <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(124,58,237,0.15)' }} />
+      <div style={{ position: 'relative', zIndex: 1, fontSize: 44 }}>👕</div>
+      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+        <div style={{ color: '#ffffff', fontWeight: 900, fontSize: 20, letterSpacing: 2, textTransform: 'uppercase' }}>COOLMATE</div>
+        <div style={{ color: '#a1a1aa', fontSize: 10, fontWeight: 500, letterSpacing: 1 }}>Thời trang nam cao cấp</div>
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, background: 'rgba(124,58,237,0.25)', border: '1px solid rgba(124,58,237,0.5)', borderRadius: 8, padding: '8px 16px', textAlign: 'center', width: '100%' }}>
+        <div style={{ color: '#c4b5fd', fontSize: 10, fontWeight: 600 }}>Deal độc quyền BuyZo</div>
+        <div style={{ color: '#a78bfa', fontWeight: 900, fontSize: 18, marginTop: 2 }}>MUA 1 TẶNG 1</div>
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, color: '#71717a', fontSize: 10, fontWeight: 600 }}>Free ship đơn từ 299k 🚚</div>
+    </div>,
+  ]
+  return <>{slides[slide]}</>
 }
 
 const BuyZoMallSection: React.FC = () => {
-  const [items, setItems]   = useState<any[]>([])
-  const [hasMall, setHasMall] = useState(true)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const scroll = (dir: number) => scrollRef.current?.scrollBy({ left: dir * 240, behavior: 'smooth' })
+  const [apiItems, setApiItems] = useState<any[]>([])
+  const [slide, setSlide] = useState(0)
+  const TOTAL_SLIDES = 5
+  const SLIDE_MS = 3500
 
   useEffect(() => {
-    fetch('/api/v1/shop/public/mall/products?limit=12')
-      .then(r => r.ok ? r.json() : { products: [], has_mall: false })
-      .then(d => { setItems(d.products ?? []); setHasMall(d.has_mall ?? false) })
+    fetch('/api/v1/shop/public/mall/products?limit=8')
+      .then(r => r.ok ? r.json() : { products: [] })
+      .then(d => { if ((d.products ?? []).length > 0) setApiItems(d.products.slice(0, 8)) })
+      .catch(() => {})
   }, [])
 
-  // Chưa có Mall shop → ẩn section này
-  if (!hasMall || items.length === 0) return null
+  useEffect(() => {
+    const id = setInterval(() => setSlide(s => (s + 1) % TOTAL_SLIDES), SLIDE_MS)
+    return () => clearInterval(id)
+  }, [])
+
+  const cells = MALL_MOCK.map((m, i) => {
+    const p = apiItems[i]
+    return { name: p?.shop_name || m.name, promo: m.promo, img: p?.image_urls?.[0] || m.img, id: p?.product_id ?? null }
+  })
+
+  const BORDER = '1px solid #efefef'
 
   return (
-    <div style={{ background: 'var(--bg-page)', padding: '48px 0' }}>
-      <div className="container">
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 28 }}>
-          <div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%)', borderRadius: 20, padding: '4px 14px', marginBottom: 10 }}>
-              <span style={{ fontSize: 14 }}>🏆</span>
-              <span style={{ color: '#fff', fontWeight: 800, fontSize: 13, letterSpacing: 0.5 }}>BUYZO MALL</span>
-            </div>
-            <h2 style={{ fontSize: 26, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 6px', lineHeight: 1.2 }}>
-              Hàng chính hãng <span style={{ color: '#7C3AED' }}>100%</span>
-            </h2>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>Sản phẩm từ các shop được BuyZo xét duyệt Mall</p>
+    <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid #e8e8e8', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', background: '#fff' }}>
+
+      {/* ── Header bar ── */}
+      <div style={{ display: 'flex', alignItems: 'center', borderBottom: BORDER, padding: '0 16px', height: 46, gap: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 16, borderRight: '1.5px solid #e0e0e0', marginRight: 20, flexShrink: 0 }}>
+          <div style={{ background: 'linear-gradient(135deg,#7C3AED,#4F46E5)', borderRadius: 6, padding: '3px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12 }}>🏆</span>
+            <span style={{ color: '#fff', fontWeight: 900, fontSize: 13, letterSpacing: 1 }}>BUYZO MALL</span>
           </div>
         </div>
-
-        <div style={{ display: 'flex', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
-          {[{ icon: '✅', text: 'Hàng chính hãng 100%' }, { icon: '🔄', text: 'Đổi trả 30 ngày' }, { icon: '🛡️', text: 'Bảo hành chính hãng' }, { icon: '🚚', text: 'Giao hàng ưu tiên' }].map(b => (
-            <div key={b.text} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 20, fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>
-              <span>{b.icon}</span>{b.text}
-            </div>
+        <div style={{ display: 'flex', gap: 20, flex: 1, alignItems: 'center' }}>
+          {[{ icon: '🔄', text: 'Trả Hàng Miễn Phí 30 Ngày' }, { icon: '✅', text: 'Hàng Chính Hãng 100%' }, { icon: '🚚', text: 'Miễn Phí Vận Chuyển' }].map(b => (
+            <span key={b.text} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: '#4b5563', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              {b.icon} {b.text}
+            </span>
           ))}
         </div>
+        <Link to="/mall" style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 13, color: '#7C3AED', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          Xem Tất Cả <span style={{ fontSize: 17, lineHeight: 1 }}>›</span>
+        </Link>
+      </div>
 
-        <div style={{ position: 'relative' }}>
-          <button onClick={() => scroll(-1)} style={{ position: 'absolute', left: -18, top: '42%', transform: 'translateY(-50%)', zIndex: 5, width: 38, height: 38, borderRadius: '50%', background: 'var(--bg-card)', border: '1.5px solid var(--border-subtle)', boxShadow: '0 2px 12px rgba(0,0,0,0.15)', cursor: 'pointer', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
-          <button onClick={() => scroll(1)}  style={{ position: 'absolute', right: -18, top: '42%', transform: 'translateY(-50%)', zIndex: 5, width: 38, height: 38, borderRadius: '50%', background: 'var(--bg-card)', border: '1.5px solid var(--border-subtle)', boxShadow: '0 2px 12px rgba(0,0,0,0.15)', cursor: 'pointer', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
-          <div ref={scrollRef} style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 8, scrollbarWidth: 'none' }}>
-            {items.map((item: any) => (
-              <Link key={item.product_id} to={`/products/${item.product_id}`} style={{ textDecoration: 'none', flexShrink: 0, width: 200 }}>
-                <div style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border-subtle)', borderRadius: 14, overflow: 'hidden', transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-5px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 12px 32px rgba(124,58,237,0.18)'; (e.currentTarget as HTMLDivElement).style.borderColor = '#7C3AED' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border-subtle)' }}>
-                  <div style={{ position: 'relative', background: 'var(--bg-highlight, #f3f4f6)', height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {item.image_urls?.[0]
-                      ? <img src={item.image_urls[0]} alt={item.product_name} style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} />
-                      : <span style={{ fontSize: 48 }}>📦</span>
-                    }
-                    <div style={{ position: 'absolute', top: 8, left: 8, background: 'linear-gradient(135deg, #7C3AED, #4F46E5)', color: '#fff', fontWeight: 800, fontSize: 10, padding: '3px 7px', borderRadius: 20 }}>🏆 MALL</div>
-                  </div>
-                  <div style={{ padding: '12px' }}>
-                    {item.shop_name && <div style={{ fontSize: 10, color: '#7C3AED', fontWeight: 700, marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 }}>{item.shop_name}</div>}
-                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: 8, height: 36, overflow: 'hidden' }}>{item.product_name}</p>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 5 }}>
-                      <span style={{ fontWeight: 800, fontSize: 16, color: 'var(--primary, #7C3AED)' }}>{formatCurrency(parseFloat(item.price))}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Stars rating={item.rating} />
-                      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Đã bán {item.sales_count}</span>
-                    </div>
-                    <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 4, padding: '5px 8px', background: 'rgba(124,58,237,0.07)', borderRadius: 6, border: '1px solid rgba(124,58,237,0.2)' }}>
-                      <span style={{ fontSize: 11 }}>✅</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#7C3AED' }}>Chính hãng BuyZo đảm bảo</span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
+      {/* ── Body ── */}
+      <div style={{ display: 'flex' }}>
+        {/* Left carousel panel */}
+        <div style={{ width: 240, flexShrink: 0, position: 'relative', borderRight: BORDER }}>
+          {/* Slide area */}
+          <div style={{ width: 240, height: '100%', minHeight: 320, position: 'relative', overflow: 'hidden' }}>
+            <MallCarouselSlides slide={slide} />
+          </div>
+          {/* Dot indicators */}
+          <div style={{ position: 'absolute', bottom: 10, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 5, zIndex: 10 }}>
+            {Array.from({ length: TOTAL_SLIDES }).map((_, i) => (
+              <div key={i} onClick={() => setSlide(i)} style={{ cursor: 'pointer', width: i === slide ? 16 : 6, height: 6, borderRadius: 3, background: i === slide ? '#fff' : 'rgba(255,255,255,0.45)', transition: 'all 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
             ))}
           </div>
+        </div>
+
+        {/* Right 2×4 grid */}
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gridTemplateRows: 'repeat(2,1fr)' }}>
+          {cells.map((c, i) => {
+            const isLastRow = i >= 4
+            const isFirstCol = i % 4 === 0
+            return (
+              <Link key={i} to={c.id ? `/products/${c.id}` : '/mall'} style={{
+                textDecoration: 'none',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                padding: '20px 12px 16px',
+                borderLeft: isFirstCol ? 'none' : BORDER,
+                borderBottom: isLastRow ? 'none' : BORDER,
+                gap: 10, background: '#fff', transition: 'background 0.15s',
+              }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#faf5ff')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
+              >
+                <div style={{ width: 80, height: 80, borderRadius: 10, overflow: 'hidden', background: '#f3f4f6', flexShrink: 0 }}>
+                  <img src={c.img} alt={c.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                </div>
+                <div style={{ background: '#f3f4f6', borderRadius: 999, padding: '4px 16px', maxWidth: '100%' }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: 120, textAlign: 'center' }}>{c.name}</span>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', textAlign: 'center', lineHeight: 1.3 }}>{c.promo}</span>
+              </Link>
+            )
+          })}
         </div>
       </div>
     </div>
@@ -436,8 +643,10 @@ const Home: React.FC = () => {
       </div>
 
       {/* BuyZo Mall */}
-      <div>
-        <BuyZoMallSection />
+      <div style={{ background: 'var(--bg-page)', padding: '24px 0 32px' }}>
+        <div className="container">
+          <BuyZoMallSection />
+        </div>
       </div>
 
       {/* Sản phẩm mới nhất */}

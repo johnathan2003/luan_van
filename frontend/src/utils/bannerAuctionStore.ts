@@ -26,7 +26,10 @@ function readJSON<T>(key: string, fallback: T): T {
 }
 
 function writeJSON(key: string, value: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch (e) {
+    console.error('[bannerAuctionStore] localStorage write failed (quota?):', e)
+    throw e  // re-throw so callers know save failed
+  }
 }
 
 // ── Định nghĩa vị trí đấu giá ────────────────────────────────────────────────
@@ -50,8 +53,8 @@ export const BANNER_POSITIONS: BannerPositionDef[] = [
   },
   {
     key: 'mall_ads_main',
-    label: 'Banner BuyZo Mall (khu chính)',
-    description: 'Banner chạy lớn (7 phần) trong khu quảng cáo BuyZo Mall trên Trang chủ.',
+    label: 'Banner Quảng Cáo (Center)',
+    description: 'Banner chạy lớn (7 phần) trong khu quảng cáo trung tâm trên Trang chủ.',
     basePrice: 1_200_000,
     previewImage: encodeURI('/banner_thueQC/ChatGPT Image Jun 19, 2026, 01_09_11 PM.png'),
   },
@@ -127,8 +130,8 @@ export interface ImageSpec {
 }
 
 export const BANNER_IMAGE_SPECS: Record<BannerPositionKey, ImageSpec> = {
-  home_slider:    { ratioLabel: '8:3 (ngang dài)', ratio: 1280/480, tolerance: 0.1, recommendedW: 1280, recommendedH: 480, maxKB: 2048 },
-  mall_ads_main:  { ratioLabel: '9:4 (ngang)',     ratio: 900/400,  tolerance: 0.1, recommendedW: 900,  recommendedH: 400, maxKB: 2048 },
+  home_slider:    { ratioLabel: '8:1 (ngang rất dài)', ratio: 1280/160, tolerance: 0.2, recommendedW: 1280, recommendedH: 160, maxKB: 2048 },
+  mall_ads_main:  { ratioLabel: '3:2 (ngang)',     ratio: 1536/1024, tolerance: 0.25, recommendedW: 1536, recommendedH: 1024, maxKB: 4096 },
   mall_ads_fixed: { ratioLabel: '1:1 (vuông)',     ratio: 1,        tolerance: 0.1, recommendedW: 400,  recommendedH: 400, maxKB: 2048 },
 }
 
@@ -266,16 +269,6 @@ export function getShopCooldownRemaining(position: BannerPositionKey, shopName: 
 }
 
 export function placeBid(position: BannerPositionKey, shopName: string, amount: number, bannerImage?: string): PlaceBidResult {
-  // Kiểm tra shop đã chuẩn bị mẫu banner chưa
-  try {
-    const KEY_DRAFT = 'buyzo_banner_draft_v1'
-    const raw = localStorage.getItem(KEY_DRAFT)
-    const drafts = raw ? JSON.parse(raw) : {}
-    const draft = drafts?.banners?.[position]
-    if (!draft || draft.shopName !== shopName) {
-      return { ok: false, error: '⚠️ Bạn chưa chuẩn bị mẫu banner cho vị trí này. Vào tab ⚙️ Chuẩn bị để upload trước khi đặt giá.' }
-    }
-  } catch {}
   const data = getStore(); const session = rollIfExpired(data, position)
   if (!session) return { ok: false, error: 'Vị trí này đang bị Admin tạm khoá, chưa thể đặt giá.' }
   const basePrice = data.settings[position]?.basePrice ?? BANNER_POSITIONS.find(d => d.key === position)!.basePrice
@@ -338,8 +331,8 @@ export function getPendingWinsForShop(shopName: string): BannerAuctionSession[] 
   )
 }
 
-/** Shop đặt cọc 20% — tự động submit draft banner lên admin duyệt */
-export function payDeposit(historyId: string): boolean {
+/** Shop đặt cọc 20% — tự động submit draft banner lên admin duyệt nếu có draft */
+export function payDeposit(historyId: string, draft?: { title: string; link?: string; image: string }): boolean {
   const data = getStore(); const idx = data.history.findIndex(h => h.id === historyId); if (idx === -1) return false
   const h = data.history[idx]
   if (h.confirmation !== 'pending') return false
@@ -355,29 +348,20 @@ export function payDeposit(historyId: string): boolean {
       action_url: '/shop/auction',
     })
   }
-  // Auto-submit draft nếu chưa có submission
-  if (h.winner) {
-    try {
-      const KEY_DRAFT = 'buyzo_banner_draft_v1'
-      const raw = localStorage.getItem(KEY_DRAFT)
-      const drafts = raw ? JSON.parse(raw) : {}
-      const draft = drafts?.banners?.[h.position]
-      if (draft && draft.shopName === h.winner.shopName) {
-        // Tạo submission từ draft
-        const existing = data.submissions ?? []
-        const alreadyExists = existing.some(s => s.historyId === historyId)
-        if (!alreadyExists) {
-          const sub: BannerSubmission = {
-            id: 'sub-' + Date.now(), historyId, position: h.position,
-            shopName: h.winner.shopName, title: draft.title,
-            link: draft.link, image: draft.image,
-            status: 'pending', createdAt: new Date().toISOString(),
-          }
-          data.submissions = [...existing, sub]
-          saveStore(data)
-        }
+  // Auto-submit draft nếu được truyền vào và chưa có submission
+  if (h.winner && draft?.title && draft?.image) {
+    const existing = data.submissions ?? []
+    const alreadyExists = existing.some(s => s.historyId === historyId)
+    if (!alreadyExists) {
+      const sub: BannerSubmission = {
+        id: 'sub-' + Date.now(), historyId, position: h.position,
+        shopName: h.winner.shopName, title: draft.title,
+        link: draft.link, image: draft.image,
+        status: 'pending', createdAt: new Date().toISOString(),
       }
-    } catch {}
+      data.submissions = [sub, ...existing]
+      saveStore(data)
+    }
   }
   return true
 }
@@ -391,7 +375,7 @@ export function payWin(historyId: string): boolean {
 
 export function submitBanner(historyId: string, payload: { title: string; link?: string; image: string }): BannerSubmission | null {
   const data = getStore(); const h = data.history.find(x => x.id === historyId)
-  if (!h || h.confirmation !== 'paid' || !h.winner) return null
+  if (!h || !['deposit_paid', 'paid'].includes(h.confirmation ?? '') || !h.winner) return null
   const existingIdx = data.submissions.findIndex(s => s.historyId === historyId)
   if (existingIdx !== -1 && data.submissions[existingIdx].status !== 'rejected') return null
   const submission: BannerSubmission = {
@@ -410,6 +394,30 @@ export function getSubmissionByHistoryId(historyId: string): BannerSubmission | 
 }
 export function getAllSubmissions(): BannerSubmission[] { return getStore().submissions }
 
+/** Seed 3 pending submissions (1 per position) — dùng để test admin UI */
+export function seedTestPendingSubmissions(): void {
+  const data = getStore()
+  const testEntries: Array<{ position: BannerPositionKey; title: string; image: string }> = [
+    { position: 'home_slider',   title: '[TEST] Banner Đầu Trang', image: 'https://placehold.co/1280x160/1E3A8A/white?text=Banner+Dau+Trang' },
+    { position: 'mall_ads_main', title: '[TEST] Banner Quảng Cáo Center', image: 'https://placehold.co/1536x1024/7C3AED/white?text=Banner+Quang+Cao+Center' },
+    { position: 'mall_ads_fixed',title: '[TEST] Banner BuyZo Mall Fixed', image: 'https://placehold.co/400x400/EA580C/white?text=Banner+Mall+Fixed' },
+  ]
+  for (const { position, title, image } of testEntries) {
+    const exists = data.submissions.some(s => s.position === position && s.status === 'pending')
+    if (exists) continue
+    const fakeHistId = 'test-hist-' + position
+    const sub: BannerSubmission = {
+      id: 'test-sub-' + position + '-' + Date.now(),
+      historyId: fakeHistId, position,
+      shopName: 'Shop Demo', title,
+      image, status: 'pending',
+      createdAt: new Date().toISOString(),
+    }
+    data.submissions.unshift(sub)
+  }
+  saveStore(data)
+}
+
 const PAYMENT_WINDOW_FINAL_MS = 30 * 60 * 1000 // 30 phút thanh toán phần còn lại
 
 export function approveSubmission(id: string): boolean {
@@ -426,6 +434,145 @@ export function rejectSubmission(id: string, reason?: string): boolean {
 export function cancelSubmissionExpired(id: string): boolean {
   const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false
   data.submissions[idx] = { ...data.submissions[idx], status: 'cancelled', rejectReason: 'Hết thời gián thanh toán phần còn lại' }
+  saveStore(data); return true
+}
+// ── Image ref system: lưu ảnh lớn ở key riêng, tránh vượt quota ─────────────
+const IMG_KEY_PREFIX = 'buyzo_img_'
+
+/** Lưu ảnh vào key riêng, trả về ref string 'ref:<key>' */
+export function saveImage(dataUrl: string): string {
+  const key = IMG_KEY_PREFIX + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
+  // First try to free space by migrating old raw-embedded images
+  migrateRawImages()
+  localStorage.setItem(key, dataUrl) // throws if quota exceeded — caller handles
+  return 'ref:' + key
+}
+
+/** Migrate ảnh raw base64 nhúng trong main store → key riêng (giải phóng quota) */
+export function migrateRawImages(): void {
+  try {
+    const data = getStore()
+    let changed = false
+    for (const sub of data.submissions) {
+      if (sub.image && sub.image.startsWith('data:')) {
+        try {
+          const key = IMG_KEY_PREFIX + sub.id
+          localStorage.setItem(key, sub.image)
+          sub.image = 'ref:' + key
+          changed = true
+        } catch { /* nếu vẫn fail thì bỏ qua */ }
+      }
+    }
+    if (changed) saveStore(data)
+  } catch { /* ignore */ }
+}
+
+/** Xóa key ảnh nếu là ref */
+export function removeImage(imageOrRef: string): void {
+  if (imageOrRef.startsWith('ref:')) localStorage.removeItem(imageOrRef.slice(4))
+}
+
+/** Trả về data URL thực — hỗ trợ cả ref lẫn raw data URL (backward compat) */
+export function resolveImage(imageOrRef: string): string {
+  if (imageOrRef.startsWith('ref:')) return localStorage.getItem(imageOrRef.slice(4)) ?? ''
+  return imageOrRef
+}
+
+/** Dọn dẹp: xóa key ảnh của các submission không còn tồn tại */
+export function cleanupOrphanImages(): number {
+  const data = getStore()
+  const activeRefs = new Set(data.submissions.map(s => s.image).filter(i => i.startsWith('ref:')).map(i => i.slice(4)))
+  let count = 0
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && key.startsWith(IMG_KEY_PREFIX) && !activeRefs.has(key)) {
+      localStorage.removeItem(key)
+      i--; count++
+    }
+  }
+  return count
+}
+
+/** Admin tạo banner trực tiếp lên trang chủ (không qua đấu giá) */
+export function adminCreateBanner(opts: {
+  position: BannerPositionKey
+  title: string
+  image: string
+  link?: string
+  displayDurationMs?: number
+}): void {
+  const data = getStore()
+  const now = new Date().toISOString()
+  const fakeHistId = 'admin_' + Date.now()
+  const fakeHistory: BannerAuctionSession = {
+    id: fakeHistId,
+    position: opts.position,
+    startedAt: now,
+    endedAt: now,
+    bids: [],
+    status: 'ended',
+    confirmation: 'paid',
+    displayDurationMs: opts.displayDurationMs ?? 7 * 24 * 60 * 60 * 1000,
+  }
+  data.history.unshift(fakeHistory)
+  // Lưu ảnh vào key riêng để tránh làm store blob quá lớn
+  const imageRef = saveImage(opts.image)
+  const sub: BannerSubmission = {
+    id: 'admin_sub_' + Date.now(),
+    historyId: fakeHistId,
+    position: opts.position,
+    shopName: 'BuyZo Admin',
+    title: opts.title,
+    link: opts.link,
+    image: imageRef,
+    status: 'approved',
+    createdAt: now,
+    approvedAt: now,
+    paymentDeadline: new Date(Date.now() + 999 * 24 * 60 * 60 * 1000).toISOString(),
+  }
+  data.submissions.unshift(sub)
+  saveStore(data)
+}
+
+/** Xóa toàn bộ banner do admin tạo (shopName === 'BuyZo Admin') */
+export function purgeAdminBanners(): number {
+  const data = getStore()
+  const toDelete = data.submissions.filter(s => s.shopName === 'BuyZo Admin')
+  toDelete.forEach(s => removeImage(s.image))
+  const histIds = new Set(toDelete.map(s => s.historyId))
+  data.submissions = data.submissions.filter(s => s.shopName !== 'BuyZo Admin')
+  data.history = data.history.filter(h => !histIds.has(h.id))
+  saveStore(data)
+  return toDelete.length
+}
+
+export function deleteSubmission(id: string): boolean {
+  const data = getStore()
+  const idx = data.submissions.findIndex(s => s.id === id)
+  if (idx === -1) return false
+  removeImage(data.submissions[idx].image) // xóa key ảnh riêng nếu có
+  data.submissions.splice(idx, 1)
+  saveStore(data)
+  return true
+}
+
+export function updateSubmission(id: string, patch: Partial<Pick<BannerSubmission, 'title' | 'image' | 'link'>>): boolean {
+  const data = getStore()
+  const idx = data.submissions.findIndex(s => s.id === id)
+  if (idx === -1) return false
+  if (patch.image) {
+    removeImage(data.submissions[idx].image) // xóa ảnh cũ
+    patch.image = saveImage(patch.image)     // lưu ảnh mới vào key riêng
+  }
+  data.submissions[idx] = { ...data.submissions[idx], ...patch }
+  saveStore(data)
+  return true
+}
+
+export function expireDisplaySubmission(id: string): boolean {
+  const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false
+  if (data.submissions[idx].status !== 'approved') return false
+  data.submissions[idx] = { ...data.submissions[idx], status: 'cancelled', rejectReason: 'Hết thời gian hiển thị' }
   saveStore(data); return true
 }
 

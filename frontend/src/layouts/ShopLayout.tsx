@@ -2,7 +2,7 @@
  * ShopLayout — dùng cho tất cả trang của Shop Owner / Shop Employee
  */
 import React, { useEffect, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import Navbar from '../components/common/Navbar'
 import { shopService } from '../services/shopService'
 import { shopFlagStore } from '../utils/shopFlagStore'
@@ -117,6 +117,32 @@ const ShopSidebar: React.FC = () => {
             </NavLink>
           ))}
         </nav>
+
+        {/* Link trang shop bán hàng */}
+        {shopId != null && (
+          <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <Link to={`/shops/${shopId}`}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, fontSize: 12, color: '#16A34A', textDecoration: 'none', background: 'rgba(22,163,74,0.08)', fontWeight: 600 }}>
+                🛍️ Xem trang shop
+                <span style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 11 }}>↗</span>
+              </Link>
+              <button
+                title="Sao chép link"
+                onClick={() => {
+                  const url = `${window.location.origin}/shops/${shopId}`
+                  navigator.clipboard.writeText(url).then(() => {
+                    const btn = document.getElementById('copy-shop-link-btn')
+                    if (btn) { btn.textContent = '✅'; setTimeout(() => { btn.textContent = '📋' }, 1500) }
+                  })
+                }}
+                id="copy-shop-link-btn"
+                style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', cursor: 'pointer', fontSize: 14 }}>
+                📋
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   )

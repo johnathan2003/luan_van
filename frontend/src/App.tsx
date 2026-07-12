@@ -7,7 +7,7 @@ import ThemeToggle from './components/common/ThemeToggle'
 import { useAppDispatch, useAppSelector } from './store/hooks'
 import { checkAuth } from './store/slices/authSlice'
 import { setEventsEmail } from './utils/eventsStore'
-import { setBannerDraftEmail } from './utils/bannerDraftStore'
+import { setBannerDraftEmail, clearBase64Drafts } from './utils/bannerDraftStore'
 
 const AppContent: React.FC = () => {
   const dispatch = useAppDispatch()
@@ -15,6 +15,7 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     dispatch(checkAuth())
+    clearBase64Drafts() // xóa base64 cũ, migrate sang path-based
   }, [dispatch])
 
   // Scope tất cả localStorage stores theo email tài khoản đang đăng nhập

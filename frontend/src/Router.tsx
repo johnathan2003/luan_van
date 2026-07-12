@@ -39,8 +39,8 @@ import AnalyticsPage            from './pages/shop/AnalyticsPage'
 import VoucherManagementPage    from './pages/shop/VoucherManagementPage'
 import VoucherCenterPage        from './pages/VoucherCenterPage'
 
-import BannerAuctionPage         from './pages/shop/BannerAuctionPage'
-import AuctionManagementPage     from './pages/admin/AuctionManagementPage'
+const BannerAuctionPage     = React.lazy(() => import('./pages/shop/BannerAuctionPage'))
+const AuctionManagementPage = React.lazy(() => import('./pages/admin/AuctionManagementPage'))
 
 // ── ⚙️ Admin pages ────────────────────────────────────────────────────────────
 import AdminOverviewPage        from './pages/admin/AdminOverviewPage'
@@ -90,6 +90,7 @@ const inShop     = (el: React.ReactNode) => <ShopLayout>{el}</ShopLayout>
 const inShipper  = (el: React.ReactNode) => <ShipperLayout>{el}</ShipperLayout>
 
 const Router: React.FC = () => (
+  <React.Suspense fallback={<div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontSize:16 }}>Đang tải...</div>}>
   <Routes>
     {/* ── Auth (không layout) ─────────────────────────────────────────────── */}
     <Route path="/login"    element={<AuthLayout title="Đăng nhập"    subtitle="Chào mừng bạn quay trở lại"><Login /></AuthLayout>} />
@@ -182,11 +183,11 @@ const Router: React.FC = () => (
       <Route path="/shipper/tracking/:shipmentId"  element={inShipper(<TrackingPage />)} />
     </Route>
 
-    {/* ── ⚡ Superadmin — tách biệt, layout riêng, không dùng Redux auth ─── */}
+    {/* ── ⚡ Superadmin — tách biệt, layout riêng ───────────────────────── */}
     <Route path="/super/*" element={<SuperRouter />} />
 
-    <Route path="*" element={inPublic(<NotFoundPage />)} />
   </Routes>
+  </React.Suspense>
 )
 
 export default Router
