@@ -214,33 +214,41 @@ const FlashSaleSection: React.FC = () => {
 
 // ─── Banner quang cao tren BuyZo Mall ─────────────────────────────────────────
 const STATIC_MALL_ADS = [
-  encodeURI('/banner_thueQC/ChatGPT Image Jun 19, 2026, 01_09_11 PM.png'),
-  encodeURI('/banner_thueQC/ChatGPT Image Jun 19, 2026, 01_28_18 PM.png'),
-  encodeURI('/banner_thueQC/ChatGPT Image Jun 19, 2026, 01_31_52 PM.png'),
+  '/img/banner_admin/mall_main_1.png',
+  '/img/banner_admin/mall_main_2.png',
+  '/img/banner_admin/mall_main_3.png',
+  '/img/banner_admin/mall_main_4.png',
+  '/img/banner_admin/mall_main_5.png',
 ]
-const STATIC_MALL_FIXED = '/banner/4.png'
+const STATIC_MALL_FIXED = '/img/banner_admin/mall_fixed_1.png'
 const MALL_AD_AUTO_MS = 3500
 
 type MallAdItem = { src: string; link?: string }
 
 const MallAdBanner: React.FC = () => {
-  const [cur, setCur] = useState(0)
-  const [mainAds, setMainAds] = useState<MallAdItem[]>(STATIC_MALL_ADS.map(src => ({ src })))
-  const [fixedSrc, setFixedSrc] = useState(STATIC_MALL_FIXED)
-  const [fixedLink, setFixedLink] = useState<string | undefined>()
+  const [cur,      setCur]      = useState(0)
+  const [fixedCur, setFixedCur] = useState(0)
+  const [mainAds,  setMainAds]  = useState<MallAdItem[]>(STATIC_MALL_ADS.map(src => ({ src })))
+  const [fixedAds, setFixedAds] = useState<MallAdItem[]>([{ src: STATIC_MALL_FIXED }])
 
   const loadMallAds = useCallback(() => {
-    const subs  = getAllSubmissions().filter(s => s.status === 'approved')
-    const mains = subs.filter(s => s.position === 'mall_ads_main')
-    const fixed = subs.find(s => s.position === 'mall_ads_fixed')
+    const subs   = getAllSubmissions().filter(s => s.status === 'approved')
+    const mains  = subs.filter(s => s.position === 'mall_ads_main')
+    const fixeds = subs.filter(s => s.position === 'mall_ads_fixed')
+
+    // Phần 7 (main)
     Promise.all(mains.map(async s => ({ src: await resolveImageAsync(s.image) || resolveImage(s.image), link: s.link })))
-      .then(main => setMainAds(main.length > 0 ? [...main, ...STATIC_MALL_ADS.map(src => ({ src }))] : STATIC_MALL_ADS.map(src => ({ src }))))
-    if (fixed) {
-      resolveImageAsync(fixed.image).then(url => {
-        setFixedSrc(url || resolveImage(fixed.image))
-        setFixedLink(fixed.link)
+      .then(main => {
+        const valid = main.filter(m => m.src)
+        setMainAds(valid.length > 0 ? valid : STATIC_MALL_ADS.map(src => ({ src })))
       })
-    }
+
+    // Phần 3 (fixed) — hỗ trợ nhiều ảnh như phần 7
+    Promise.all(fixeds.map(async s => ({ src: await resolveImageAsync(s.image) || resolveImage(s.image), link: s.link })))
+      .then(fixed => {
+        const valid = fixed.filter(f => f.src)
+        setFixedAds(valid.length > 0 ? valid : [{ src: STATIC_MALL_FIXED }])
+      })
   }, [])
 
   useEffect(() => {
@@ -249,11 +257,19 @@ const MallAdBanner: React.FC = () => {
     return () => window.removeEventListener('storage', loadMallAds)
   }, [loadMallAds])
 
+  // Auto-slide phần 7
   useEffect(() => {
-    if (mainAds.length === 0) return
+    if (mainAds.length <= 1) return
     const id = setInterval(() => setCur(c => (c + 1) % mainAds.length), MALL_AD_AUTO_MS)
     return () => clearInterval(id)
   }, [mainAds.length])
+
+  // Auto-slide phần 3
+  useEffect(() => {
+    if (fixedAds.length <= 1) return
+    const id = setInterval(() => setFixedCur(c => (c + 1) % fixedAds.length), MALL_AD_AUTO_MS + 500)
+    return () => clearInterval(id)
+  }, [fixedAds.length])
 
   const wrapLink = (content: React.ReactNode, link?: string, key?: string | number) =>
     link ? (
@@ -284,11 +300,20 @@ const MallAdBanner: React.FC = () => {
         </div>
       </div>
 
-      {/* Phải 3 phần - hình cố định (mall_ads_fixed) */}
+      {/* Phải 3 phần - banner center phần 3 (mall_ads_fixed) — hỗ trợ nhiều ảnh */}
       <div style={{ position: 'relative', flex: 3, height: '100%', overflow: 'hidden', borderRadius: 14, background: '#0f0f0f' }}>
-        <img src={fixedSrc} alt="Quảng cáo cố định" className="banner-img"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-        {fixedLink && wrapLink(null, fixedLink)}
+        {fixedAds.map((ad, i) => (
+          <img key={ad.src + i} src={ad.src} alt={`Banner phần 3 - ${i + 1}`} className="banner-img"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: i === fixedCur ? 1 : 0, transition: 'opacity 0.6s ease' }} />
+        ))}
+        {fixedAds[fixedCur]?.link && wrapLink(null, fixedAds[fixedCur].link)}
+        {fixedAds.length > 1 && (
+          <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 5, zIndex: 2 }}>
+            {fixedAds.map((_, i) => (
+              <div key={i} onClick={() => setFixedCur(i)} style={{ width: i === fixedCur ? 16 : 6, height: 6, borderRadius: 3, background: `rgba(255,255,255,${i === fixedCur ? 0.95 : 0.4})`, cursor: 'pointer', transition: 'all 0.3s' }} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -306,132 +331,46 @@ const MALL_MOCK = [
   { name: 'CeraVe',         promo: 'Mua 1 được 6',      img: 'https://images.unsplash.com/photo-1631730486784-74757276baa5?w=200&h=200&fit=crop' },
 ]
 
-// 5 slides cho carousel panel trái (240×320px)
-const MallCarouselSlides: React.FC<{ slide: number }> = ({ slide }) => {
-  const slides = [
-    // Slide 0 – BuyZo Mall intro (tím logo)
-    <div key={0} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#3b0764 0%,#6d28d9 45%,#4f46e5 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', gap: 10, position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: -40, right: -40, width: 140, height: 140, borderRadius: '50%', background: 'rgba(167,139,250,0.15)' }} />
-      <div style={{ position: 'absolute', bottom: -30, left: -30, width: 110, height: 110, borderRadius: '50%', background: 'rgba(99,102,241,0.2)' }} />
-      <div style={{ position: 'absolute', top: 16, right: 16, width: 8, height: 8, borderRadius: '50%', background: '#a78bfa' }} />
-      <div style={{ position: 'absolute', top: 28, right: 30, width: 5, height: 5, borderRadius: '50%', background: '#7c3aed' }} />
-      {/* Logo-style text */}
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0, marginBottom: 4 }}>
-          <div style={{ background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(167,139,250,0.6)', borderRadius: 8, padding: '4px 14px 4px 10px' }}>
-            <span style={{ fontSize: 28, fontWeight: 900, color: '#e9d5ff', letterSpacing: -1, fontStyle: 'italic' }}>Buy</span>
-            <span style={{ fontSize: 28, fontWeight: 900, color: '#fbbf24', letterSpacing: -1, fontStyle: 'italic' }}>Z</span>
-          </div>
-          <div style={{ fontSize: 32, marginLeft: -4 }}>🛒</div>
-        </div>
-        <div style={{ textAlign: 'center', color: '#fbbf24', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>CHÍNH HÃNG • UY TÍN</div>
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-        <div style={{ color: '#e9d5ff', fontWeight: 900, fontSize: 16, lineHeight: 1.3, textTransform: 'uppercase', letterSpacing: 0.5 }}>Mua sắm<br />thả ga</div>
-        <div style={{ color: '#fbbf24', fontWeight: 900, fontSize: 13, marginTop: 4 }}>Không lo hàng giả</div>
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 6, justifyContent: 'center', width: '100%' }}>
-        {['✅ Chính hãng', '🔄 Đổi trả 30 ngày'].map(t => (
-          <div key={t} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(167,139,250,0.4)', borderRadius: 6, padding: '5px 4px', textAlign: 'center', fontSize: 9.5, color: '#e9d5ff', fontWeight: 700, lineHeight: 1.3 }}>{t}</div>
-        ))}
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, background: 'linear-gradient(135deg,#fbbf24,#f59e0b)', borderRadius: 20, padding: '6px 20px', color: '#1e0a3c', fontWeight: 900, fontSize: 12, letterSpacing: 0.5 }}>
-        🏆 BUYZO MALL
-      </div>
-    </div>,
 
-    // Slide 1 – LOreal Paris
-    <div key={1} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#1a0533 0%,#4a044e 50%,#86198f 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', gap: 10, position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: -30, left: -30, width: 120, height: 120, borderRadius: '50%', background: 'rgba(192,38,211,0.2)' }} />
-      <div style={{ position: 'absolute', bottom: -20, right: -20, width: 100, height: 100, borderRadius: '50%', background: 'rgba(168,85,247,0.15)' }} />
-      <div style={{ position: 'relative', zIndex: 1, fontSize: 44 }}>💄</div>
-      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-        <div style={{ color: '#fdf4ff', fontWeight: 900, fontSize: 15, letterSpacing: 1, textTransform: 'uppercase' }}>L&apos;Oréal</div>
-        <div style={{ color: '#e879f9', fontWeight: 700, fontSize: 11, letterSpacing: 2 }}>PARIS</div>
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(233,30,99,0.5)', borderRadius: 8, padding: '8px 16px', textAlign: 'center' }}>
-        <div style={{ color: '#fdf4ff', fontSize: 10, fontWeight: 600 }}>Bộ sưu tập mới nhất</div>
-        <div style={{ color: '#f0abfc', fontWeight: 900, fontSize: 20, marginTop: 2 }}>ƯU ĐÃI 50%</div>
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 4 }}>
-        {['Son môi', 'Kem dưỡng', 'Mascara'].map(t => (
-          <div key={t} style={{ background: 'rgba(192,38,211,0.3)', borderRadius: 4, padding: '3px 6px', fontSize: 9, color: '#f5d0fe', fontWeight: 600 }}>{t}</div>
-        ))}
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, color: '#fbbf24', fontSize: 11, fontWeight: 700 }}>⭐ Chính hãng tại BuyZo Mall</div>
-    </div>,
-
-    // Slide 2 – Samsung
-    <div key={2} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#0c1445 0%,#1e3a8a 50%,#1d4ed8 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', gap: 10, position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: -20, right: -20, width: 130, height: 130, borderRadius: '50%', background: 'rgba(59,130,246,0.2)' }} />
-      <div style={{ position: 'absolute', bottom: 20, left: -40, width: 100, height: 100, borderRadius: '50%', background: 'rgba(99,102,241,0.15)' }} />
-      <div style={{ position: 'relative', zIndex: 1, fontSize: 44 }}>📱</div>
-      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-        <div style={{ color: '#93c5fd', fontWeight: 900, fontSize: 18, letterSpacing: 2, textTransform: 'uppercase' }}>SAMSUNG</div>
-        <div style={{ color: '#dbeafe', fontSize: 10, fontWeight: 600, letterSpacing: 1 }}>Galaxy Series 2026</div>
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(147,197,253,0.4)', borderRadius: 10, padding: '10px 16px', textAlign: 'center', width: '100%' }}>
-        <div style={{ color: '#bfdbfe', fontSize: 10, fontWeight: 600 }}>Flash deal hôm nay</div>
-        <div style={{ color: '#fbbf24', fontWeight: 900, fontSize: 24, lineHeight: 1.1 }}>GIẢM<br />30%</div>
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, color: '#93c5fd', fontSize: 10.5, fontWeight: 700 }}>🚚 Miễn phí vận chuyển</div>
-    </div>,
-
-    // Slide 3 – Cocoon Vietnam
-    <div key={3} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#052e16 0%,#166534 50%,#15803d 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', gap: 10, position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: -20, left: -20, width: 110, height: 110, borderRadius: '50%', background: 'rgba(134,239,172,0.15)' }} />
-      <div style={{ position: 'absolute', bottom: -30, right: -30, width: 130, height: 130, borderRadius: '50%', background: 'rgba(74,222,128,0.1)' }} />
-      <div style={{ position: 'relative', zIndex: 1, fontSize: 44 }}>🌿</div>
-      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-        <div style={{ color: '#bbf7d0', fontWeight: 900, fontSize: 17, letterSpacing: 1 }}>COCOON</div>
-        <div style={{ color: '#86efac', fontSize: 10, fontWeight: 600, letterSpacing: 1 }}>VIETNAM</div>
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(134,239,172,0.35)', borderRadius: 8, padding: '8px 14px', textAlign: 'center' }}>
-        <div style={{ color: '#d1fae5', fontSize: 10, fontWeight: 600 }}>Thiên nhiên thuần Việt</div>
-        <div style={{ color: '#fbbf24', fontWeight: 900, fontSize: 16, marginTop: 3 }}>MUA 1 TẶNG 1</div>
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 4 }}>
-        {['🌾 Tự nhiên', '🐰 Cruelty-free'].map(t => (
-          <div key={t} style={{ background: 'rgba(22,163,74,0.35)', borderRadius: 4, padding: '3px 6px', fontSize: 9, color: '#bbf7d0', fontWeight: 700 }}>{t}</div>
-        ))}
-      </div>
-    </div>,
-
-    // Slide 4 – Coolmate
-    <div key={4} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#0f0f0f 0%,#1c1c1c 50%,#27272a 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', gap: 10, position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg,#7c3aed,#4f46e5,#7c3aed)' }} />
-      <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(124,58,237,0.15)' }} />
-      <div style={{ position: 'relative', zIndex: 1, fontSize: 44 }}>👕</div>
-      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-        <div style={{ color: '#ffffff', fontWeight: 900, fontSize: 20, letterSpacing: 2, textTransform: 'uppercase' }}>COOLMATE</div>
-        <div style={{ color: '#a1a1aa', fontSize: 10, fontWeight: 500, letterSpacing: 1 }}>Thời trang nam cao cấp</div>
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, background: 'rgba(124,58,237,0.25)', border: '1px solid rgba(124,58,237,0.5)', borderRadius: 8, padding: '8px 16px', textAlign: 'center', width: '100%' }}>
-        <div style={{ color: '#c4b5fd', fontSize: 10, fontWeight: 600 }}>Deal độc quyền BuyZo</div>
-        <div style={{ color: '#a78bfa', fontWeight: 900, fontSize: 18, marginTop: 2 }}>MUA 1 TẶNG 1</div>
-      </div>
-      <div style={{ position: 'relative', zIndex: 1, color: '#71717a', fontSize: 10, fontWeight: 600 }}>Free ship đơn từ 299k 🚚</div>
-    </div>,
-  ]
-  return <>{slides[slide]}</>
-}
+const STATIC_MALL_BANNER_ADS: MallAdItem[] = [
+  { src: '/img/banner_admin/mall_banner_1.png' },
+  { src: '/img/banner_admin/mall_banner_2.png' },
+  { src: '/img/banner_admin/mall_banner_3.png' },
+]
 
 const BuyZoMallSection: React.FC = () => {
   const [apiItems, setApiItems] = useState<any[]>([])
-  const [slide, setSlide] = useState(0)
-  const TOTAL_SLIDES = 5
-  const SLIDE_MS = 3500
+
+  // Panel trái — Banner Mall (Hình 4): admin upload hoặc fallback ảnh mẫu
+  const [mallBannerAds, setMallBannerAds] = useState<MallAdItem[]>(STATIC_MALL_BANNER_ADS)
+  const [mallBannerCur, setMallBannerCur] = useState(0)
+
+  const loadMallBannerAds = useCallback(() => {
+    const subs = getAllSubmissions().filter(s => s.status === 'approved' && s.position === 'mall_banner')
+    Promise.all(subs.map(async s => ({ src: await resolveImageAsync(s.image) || resolveImage(s.image), link: s.link })))
+      .then(ads => {
+        const valid = ads.filter(a => a.src)
+        setMallBannerAds(valid.length > 0 ? valid : STATIC_MALL_BANNER_ADS)
+      })
+  }, [])
+
+  useEffect(() => {
+    loadMallBannerAds()
+    window.addEventListener('storage', loadMallBannerAds)
+    return () => window.removeEventListener('storage', loadMallBannerAds)
+  }, [loadMallBannerAds])
+
+  useEffect(() => {
+    if (mallBannerAds.length <= 1) return
+    const id = setInterval(() => setMallBannerCur(c => (c + 1) % mallBannerAds.length), 4000)
+    return () => clearInterval(id)
+  }, [mallBannerAds.length])
 
   useEffect(() => {
     fetch('/api/v1/shop/public/mall/products?limit=8')
       .then(r => r.ok ? r.json() : { products: [] })
       .then(d => { if ((d.products ?? []).length > 0) setApiItems(d.products.slice(0, 8)) })
       .catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    const id = setInterval(() => setSlide(s => (s + 1) % TOTAL_SLIDES), SLIDE_MS)
-    return () => clearInterval(id)
   }, [])
 
   const cells = MALL_MOCK.map((m, i) => {
@@ -466,18 +405,28 @@ const BuyZoMallSection: React.FC = () => {
 
       {/* ── Body ── */}
       <div style={{ display: 'flex' }}>
-        {/* Left carousel panel */}
+        {/* Left panel — Banner Mall (Hình 4) */}
         <div style={{ width: 240, flexShrink: 0, position: 'relative', borderRight: BORDER }}>
-          {/* Slide area */}
-          <div style={{ width: 240, height: '100%', minHeight: 320, position: 'relative', overflow: 'hidden' }}>
-            <MallCarouselSlides slide={slide} />
-          </div>
-          {/* Dot indicators */}
-          <div style={{ position: 'absolute', bottom: 10, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 5, zIndex: 10 }}>
-            {Array.from({ length: TOTAL_SLIDES }).map((_, i) => (
-              <div key={i} onClick={() => setSlide(i)} style={{ cursor: 'pointer', width: i === slide ? 16 : 6, height: 6, borderRadius: 3, background: i === slide ? '#fff' : 'rgba(255,255,255,0.45)', transition: 'all 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+          <div style={{ width: 240, height: '100%', minHeight: 320, position: 'relative', overflow: 'hidden', background: '#0f0f0f' }}>
+            {mallBannerAds.map((ad, i) => (
+              <img key={ad.src + i} src={ad.src} alt={`Banner Mall ${i + 1}`}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+                  opacity: i === mallBannerCur ? 1 : 0, transition: 'opacity 0.6s ease' }} />
             ))}
+            {mallBannerAds[mallBannerCur]?.link && (
+              <a href={mallBannerAds[mallBannerCur].link} target="_blank" rel="noopener noreferrer"
+                style={{ position: 'absolute', inset: 0, zIndex: 1 }} />
+            )}
           </div>
+          {mallBannerAds.length > 1 && (
+            <div style={{ position: 'absolute', bottom: 10, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 5, zIndex: 2 }}>
+              {mallBannerAds.map((_, i) => (
+                <div key={i} onClick={() => setMallBannerCur(i)}
+                  style={{ cursor: 'pointer', width: i === mallBannerCur ? 16 : 6, height: 6, borderRadius: 3,
+                    background: i === mallBannerCur ? '#fff' : 'rgba(255,255,255,0.45)', transition: 'all 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Right 2×4 grid */}
@@ -510,6 +459,7 @@ const BuyZoMallSection: React.FC = () => {
           })}
         </div>
       </div>
+
     </div>
   )
 }

@@ -123,8 +123,9 @@ const BannerAdminPage: React.FC = () => {
   const [creating, setCreating] = useState(false)
   const POSITION_OPTIONS: { key: BannerPositionKey; label: string; desc: string; spec: string }[] = [
     { key: 'home_slider',    label: '🖼️ Hero Slider (Hình 1)',      desc: 'Slider chính trên đầu trang chủ',        spec: '1280×160px — tỉ lệ 8:1 ngang dài' },
-    { key: 'mall_ads_main',  label: '📢 Quảng Cáo Center (Hình 2)', desc: 'Khu QUẢNG CÁO 7 phần bên trái',         spec: '1536×1024px — tỉ lệ 3:2' },
-    { key: 'mall_ads_fixed', label: '🏬 BuyZo Mall Fixed (Hình 3)', desc: 'Ảnh cố định bên phải khu Mall',          spec: '400×400px — tỉ lệ 1:1 vuông' },
+    { key: 'mall_ads_main',  label: '📢 Banner Center — Phần 7 (Hình 2)', desc: 'Khu quảng cáo lớn bên trái (7 phần)',    spec: '865×400px — tỉ lệ 2:1 ngang' },
+    { key: 'mall_ads_fixed', label: '🏬 Banner Center — Phần 3 (Hình 3)', desc: 'Ảnh cố định bên phải khu Mall (3 phần)', spec: '371×400px — tỉ lệ vuông đứng' },
+    { key: 'mall_banner',    label: '🏪 Banner Mall (Hình 4)',            desc: 'Banner dọc trong panel trái BuyZo Mall', spec: '480×640px — tỉ lệ 3:4 đứng' },
   ]
   const DURATION_OPTIONS = [
     { label: '1 ngày',   ms: 1  * 24 * 60 * 60 * 1000 },
@@ -157,14 +158,16 @@ const BannerAdminPage: React.FC = () => {
     setEditNewPath('')
     const resolved = imageMap[sub.image] ?? resolveImage(sub.image)
     setEditForm({ title: sub.title, image_url: resolved, link: sub.link ?? '' })
-    if (!resolved && isIDBRef(sub.image)) {
-      resolveImageAsync(sub.image).then(url => patchEdit({ image_url: url }))
+    if (!resolved) {
+      resolveImageAsync(sub.image).then(url => { if (url) patchEdit({ image_url: url }) })
     }
     setShowEdit(true)
   }
   const handleEditImagePick = (file: File) => {
-    setEditNewPath(`/img/banner_admin/${file.name}`)   // path tĩnh để lưu
-    readAsDataURL(file).then(dataUrl => patchEdit({ image_url: dataUrl })) // data URL chỉ để preview
+    readAsDataURL(file).then(dataUrl => {
+      patchEdit({ image_url: dataUrl })
+      setEditNewPath(dataUrl)  // lưu data URL để idbSave sau
+    })
     setEditImageChanged(true)
   }
   const handleEditSave = async () => {
@@ -173,9 +176,10 @@ const BannerAdminPage: React.FC = () => {
     if (!editForm.image_url.trim()) { toast.error('Vui lòng chọn ảnh'); return }
     try {
       let imageRef = editTarget.image
-      if (editImageChanged) {
+      if (editImageChanged && editNewPath) {
         if (isIDBRef(editTarget.image)) await idbDelete(editTarget.image).catch(() => {})
-        imageRef = editNewPath   // lưu path tĩnh
+        const { idbSave } = await import('../../utils/imageDB')
+        imageRef = await idbSave(editNewPath)  // lưu vào IDB, giống handleCreate
       }
       updateBannerSub(editTarget.id, { title: editForm.title, image: imageRef, link: editForm.link || undefined })
       toast.success('✅ Đã cập nhật banner!')
@@ -211,7 +215,7 @@ const BannerAdminPage: React.FC = () => {
       setCreateImages(prev => [
         ...prev,
         ...arr.map((f, i) => ({
-          url:     `/img/banner_admin/${f.name}`,
+          url:     previews[i],   // data URL thật — dùng làm cả lưu lẫn preview
           preview: previews[i],
           title:   f.name.replace(/\.[^.]+$/, ''),
         })),
@@ -219,18 +223,26 @@ const BannerAdminPage: React.FC = () => {
     })
   }
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (createImages.length === 0) { toast.error('Vui lòng chọn ít nhất 1 ảnh'); return }
     const invalid = createImages.find(img => !img.title.trim())
     if (invalid) { toast.error('Vui lòng nhập tiêu đề cho tất cả ảnh'); return }
-    for (const img of createImages) {
-      adminCreateBanner({
-        position: createShared.position,
-        title: img.title,
-        image: img.url,   // '/img/banner_admin/filename.png' — lưu link, gọi ảnh theo URL
-        link: createShared.link || undefined,
-        displayDurationMs: createShared.durationMs,
-      })
+    setCreating(true)
+    try {
+      for (const img of createImages) {
+        // Lưu ảnh vào IDB (không giới hạn quota như localStorage)
+        const { idbSave } = await import('../../utils/imageDB')
+        const imageRef = await idbSave(img.url)
+        adminCreateBanner({
+          position: createShared.position,
+          title: img.title,
+          image: imageRef,  // 'idb:img_xxx' — resolve được qua resolveImageAsync
+          link: createShared.link || undefined,
+          displayDurationMs: createShared.durationMs,
+        })
+      }
+    } finally {
+      setCreating(false)
     }
     toast.success(`✅ Đã đăng ${createImages.length} banner lên trang chủ!`)
     setShowCreate(false)
@@ -527,8 +539,8 @@ const BannerAdminPage: React.FC = () => {
       <div key={sub.id} className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', marginBottom: 0 }}>
         {/* Ảnh full-width */}
         {image ? (
-          <div style={{ background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <img src={image} alt="preview" style={{ width: '100%', height: 'auto', display: 'block' }} />
+          <div style={{ background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 200, overflow: 'hidden' }}>
+            <img src={image} alt="preview" style={{ width: '100%', height: 'auto', maxHeight: 200, objectFit: 'cover', display: 'block' }} />
           </div>
         ) : (
           <div style={{ height: 100, background: 'rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.gray, fontSize: 13 }}>Không có ảnh</div>
@@ -825,10 +837,11 @@ const BannerAdminPage: React.FC = () => {
         const pendingBanner = (pos: string) => auctionFiltered.filter(({ kind, sub }) => kind === 'banner' && (sub as BannerSubmission).position === pos)
         const pendingFlash  = auctionFiltered.filter(({ kind }) => kind === 'flash')
         const sections: { icon: string; label: string; items: AuctionSub[] }[] = [
-          { icon: '🖼️', label: 'Banner đầu Trang chủ',          items: pendingBanner('home_slider')  },
-          { icon: '📢', label: 'Banner Quảng Cáo (Center)',      items: pendingBanner('mall_ads_main') },
-          { icon: '🏬', label: 'Banner BuyZo Mall (khu cố định)', items: pendingBanner('mall_ads_fixed') },
-          { icon: '⚡', label: 'Flash Sale',                     items: pendingFlash                   },
+          { icon: '🖼️', label: 'Banner đầu Trang chủ',          items: pendingBanner('home_slider')   },
+          { icon: '📢', label: 'Banner Quảng Cáo (Center)',      items: pendingBanner('mall_ads_main')  },
+          { icon: '🏬', label: 'Banner Center (cố định)',         items: pendingBanner('mall_ads_fixed') },
+          { icon: '🏪', label: 'Banner Mall (Hình 4)',            items: pendingBanner('mall_banner')    },
+          { icon: '⚡', label: 'Flash Sale',                     items: pendingFlash                    },
         ]
         return (
           <>

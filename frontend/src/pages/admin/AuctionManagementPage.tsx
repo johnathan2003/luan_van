@@ -204,19 +204,27 @@ const AuctionManagementPage: React.FC = () => {
   const [auctionDesc, setAuctionDesc] = useState('')
   const [imgSpecKey, setImgSpecKey] = useState<string | null>(null)
   const [customPreviews, setCustomPreviews] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem('admin_position_previews') || '{}') } catch { return {} }
+    // Đọc riêng từng key thay vì 1 JSON chung → tránh vượt quota 5MB
+    const result: Record<string, string> = {}
+    try {
+      // Backward compat: đọc JSON cũ nếu có
+      const old = localStorage.getItem('admin_position_previews')
+      if (old) { Object.assign(result, JSON.parse(old)) }
+    } catch {}
+    BANNER_POSITIONS.forEach(p => {
+      try {
+        const v = localStorage.getItem(`admin_preview_${p.key}`)
+        if (v) result[p.key] = v
+      } catch {}
+    })
+    return result
   })
   const [tick, setTick] = useState(0)
 
   const handlePreviewUpload = (posKey: string, file: File) => {
-    const reader = new FileReader()
-    reader.onload = e => {
-      const url = e.target?.result as string
-      const next = { ...customPreviews, [posKey]: url }
-      setCustomPreviews(next)
-      localStorage.setItem('admin_position_previews', JSON.stringify(next))
-    }
-    reader.readAsDataURL(file)
+    const path = `/img/banner_admin/${file.name}`
+    setCustomPreviews(prev => ({ ...prev, [posKey]: path }))
+    try { localStorage.setItem(`admin_preview_${posKey}`, path) } catch {}
   }
 
   // Banner state
@@ -337,8 +345,8 @@ const AuctionManagementPage: React.FC = () => {
                         </label>
                         {customPreviews[p.key] && (
                           <button onClick={() => {
-                            const next = { ...customPreviews }; delete next[p.key]
-                            setCustomPreviews(next); localStorage.setItem('admin_position_previews', JSON.stringify(next))
+                            setCustomPreviews(prev => { const next = { ...prev }; delete next[p.key]; return next })
+                            try { localStorage.removeItem(`admin_preview_${p.key}`) } catch {}
                           }} style={{ fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                             ✕ Xoá ảnh tuỳ chỉnh
                           </button>
@@ -451,8 +459,8 @@ const AuctionManagementPage: React.FC = () => {
                     </label>
                     {customPreviews[sl.key] && (
                       <button onClick={() => {
-                        const next = { ...customPreviews }; delete next[sl.key]
-                        setCustomPreviews(next); localStorage.setItem('admin_position_previews', JSON.stringify(next))
+                        setCustomPreviews(prev => { const next = { ...prev }; delete next[sl.key]; return next })
+                        try { localStorage.removeItem(`admin_preview_${sl.key}`) } catch {}
                       }} style={{ fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         ✕ Xoá ảnh
                       </button>

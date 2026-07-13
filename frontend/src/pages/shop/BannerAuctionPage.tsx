@@ -109,7 +109,17 @@ const BannerAuctionPage: React.FC = () => {
   const [bannerHistory, setBannerHistory] = useState<BannerAuctionSession[]>([])
   const [selectedBannerPos, setSelectedBannerPos] = useState<BannerPositionKey>('home_slider')
   const [adminPreviews] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem('admin_position_previews') || '{}') } catch { return {} }
+    const result: Record<string, string> = {}
+    // Đọc riêng từng key (admin lưu admin_preview_<key>)
+    ;[...BANNER_POSITIONS.map(p => p.key), ...TOP_SLOTS.map(s => s.key)].forEach(key => {
+      try { const v = localStorage.getItem(`admin_preview_${key}`); if (v) result[key] = v } catch {}
+    })
+    // Backward compat: JSON cũ nếu có
+    try {
+      const old = JSON.parse(localStorage.getItem('admin_position_previews') || '{}')
+      Object.keys(old).forEach(k => { if (!result[k]) result[k] = old[k] })
+    } catch {}
+    return result
   })
   const getPreview = (key: string, fallback?: string) => adminPreviews[key] || fallback || ''
   const [bidAmounts, setBidAmounts] = useState<Record<string, string>>({})
@@ -600,7 +610,7 @@ const BannerAuctionPage: React.FC = () => {
 
                     {preview && (
                       <div style={{ marginBottom: 16, borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}` }}>
-                        <img src={preview} alt={pos.label} style={{ width: '100%', maxHeight: 160, objectFit: 'cover', display: 'block' }} />
+                        <img src={preview} alt={pos.label} style={{ width: '100%', maxHeight: pos.key === 'home_slider' ? 200 : pos.key === 'mall_ads_main' ? 420 : 300, objectFit: 'contain', display: 'block', background: '#f3f4f6' }} />
                       </div>
                     )}
 

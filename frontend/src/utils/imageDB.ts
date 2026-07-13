@@ -64,6 +64,11 @@ export async function idbDelete(ref: string): Promise<void> {
 export async function resolveImageAsync(imageOrRef: string): Promise<string> {
   if (!imageOrRef) return ''
   if (imageOrRef.startsWith(IDB_PREFIX))  return idbGet(imageOrRef)
-  if (imageOrRef.startsWith('ref:'))       return localStorage.getItem(imageOrRef.slice(4)) ?? ''
+  if (imageOrRef.startsWith('ref:')) {
+    const val = localStorage.getItem(imageOrRef.slice(4)) ?? ''
+    // Handle legacy double-wrap: ref: chứa idb: bên trong (bug cũ của adminCreateBanner)
+    if (val.startsWith(IDB_PREFIX)) return idbGet(val)
+    return val
+  }
   return imageOrRef // raw data URL hoặc https:// URL
 }

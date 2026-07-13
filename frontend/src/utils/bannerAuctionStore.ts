@@ -33,7 +33,7 @@ function writeJSON(key: string, value: unknown) {
 }
 
 // ── Định nghĩa vị trí đấu giá ────────────────────────────────────────────────
-export type BannerPositionKey = 'home_slider' | 'mall_ads_main' | 'mall_ads_fixed'
+export type BannerPositionKey = 'home_slider' | 'mall_ads_main' | 'mall_ads_fixed' | 'mall_banner'
 
 export interface BannerPositionDef {
   key: BannerPositionKey
@@ -56,14 +56,21 @@ export const BANNER_POSITIONS: BannerPositionDef[] = [
     label: 'Banner Quảng Cáo (Center)',
     description: 'Banner chạy lớn (7 phần) trong khu quảng cáo trung tâm trên Trang chủ.',
     basePrice: 1_200_000,
-    previewImage: encodeURI('/banner_thueQC/ChatGPT Image Jun 19, 2026, 01_09_11 PM.png'),
+    previewImage: '/img/banner_admin/mall_main_1.png',
   },
   {
     key: 'mall_ads_fixed',
     label: 'Banner BuyZo Mall (khu cố định)',
     description: 'Banner cố định (3 phần) bên cạnh khu quảng cáo chạy của BuyZo Mall.',
     basePrice: 800_000,
-    previewImage: '/banner/4.png',
+    previewImage: '/img/banner_admin/mall_fixed_1.png',
+  },
+  {
+    key: 'mall_banner',
+    label: 'Banner Mall (Hình 4)',
+    description: 'Banner ngang toàn khu Mall — hiển thị giữa khu quảng cáo và danh sách sản phẩm Mall.',
+    basePrice: 600_000,
+    previewImage: '/img/banner_admin/mall_banner_1.png',
   },
 ]
 
@@ -133,6 +140,7 @@ export const BANNER_IMAGE_SPECS: Record<BannerPositionKey, ImageSpec> = {
   home_slider:    { ratioLabel: '8:1 (ngang rất dài)', ratio: 1280/160, tolerance: 0.2, recommendedW: 1280, recommendedH: 160, maxKB: 2048 },
   mall_ads_main:  { ratioLabel: '3:2 (ngang)',     ratio: 1536/1024, tolerance: 0.25, recommendedW: 1536, recommendedH: 1024, maxKB: 4096 },
   mall_ads_fixed: { ratioLabel: '1:1 (vuông)',     ratio: 1,        tolerance: 0.1, recommendedW: 400,  recommendedH: 400, maxKB: 2048 },
+  mall_banner:    { ratioLabel: '3:4 (đứng)',       ratio: 240/320, tolerance: 0.2, recommendedW: 480,  recommendedH: 640, maxKB: 2048 },
 }
 
 // ── BannerSubmission ──────────────────────────────────────────────────────────
@@ -515,8 +523,10 @@ export function adminCreateBanner(opts: {
     displayDurationMs: opts.displayDurationMs ?? 7 * 24 * 60 * 60 * 1000,
   }
   data.history.unshift(fakeHistory)
-  // Lưu ảnh vào key riêng để tránh làm store blob quá lớn
-  const imageRef = saveImage(opts.image)
+  // Nếu image đã là ref (idb: / ref:) thì giữ nguyên, không bọc thêm
+  const imageRef = (opts.image.startsWith('idb:') || opts.image.startsWith('ref:'))
+    ? opts.image
+    : saveImage(opts.image)
   const sub: BannerSubmission = {
     id: 'admin_sub_' + Date.now(),
     historyId: fakeHistId,
@@ -562,7 +572,10 @@ export function updateSubmission(id: string, patch: Partial<Pick<BannerSubmissio
   if (idx === -1) return false
   if (patch.image) {
     removeImage(data.submissions[idx].image) // xóa ảnh cũ
-    patch.image = saveImage(patch.image)     // lưu ảnh mới vào key riêng
+    // Nếu image đã là ref (idb: / ref:) thì giữ nguyên, không bọc thêm
+    patch.image = (patch.image.startsWith('idb:') || patch.image.startsWith('ref:'))
+      ? patch.image
+      : saveImage(patch.image)
   }
   data.submissions[idx] = { ...data.submissions[idx], ...patch }
   saveStore(data)
