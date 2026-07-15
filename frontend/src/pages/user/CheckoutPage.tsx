@@ -4,9 +4,10 @@ import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../utils/formatters'
 import { voucherService } from '../../services/voucherService'
 import { getXu, spendXu, grantPostPurchaseGifts, type PostPurchaseGift } from '../../utils/eventsStore'
+import { addNotificationFor } from '../../utils/notificationStore'
 import { variantStore, bundleStore } from '../../utils/productBundleStore'
 import { orderService } from '../../services/orderService'
-import { useAppDispatch } from '../../store/hooks'
+import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { clearCart } from '../../store/slices/cartSlice'
 
 // ─── Voucher auto-apply helpers ────────────────────────────────────────────────
@@ -139,11 +140,27 @@ const CheckoutPage: React.FC = () => {
   const { user }  = useAuth()
 
   // Nhận cart items từ CartPage qua navigate state
-  const cartItems = (location.state as any)?.cartItems as Array<{
+  const stateCartItems = (location.state as any)?.cartItems as Array<{
     cart_id: number; product_id: number; product_name?: string
     product_image?: string; price: number; quantity: number
     shop_id?: number; shop_name?: string
   }> | undefined
+
+  // Fallback: đọc từ Redux store nếu không có navigate state
+  // (xảy ra khi user bấm "Mua ngay" trên ProductDetailPage hoặc từ CartSummary)
+  const reduxCartItems = useAppSelector(s => s.cart.cart.items)
+  const cartItems = (stateCartItems && stateCartItems.length > 0)
+    ? stateCartItems
+    : reduxCartItems.map(i => ({
+        cart_id: i.cart_id,
+        product_id: i.product_id,
+        product_name: i.product_name,
+        product_image: i.product_image,
+        price: Number(i.price),
+        quantity: i.quantity,
+        shop_id: i.shop_id,
+        shop_name: i.shop_name,
+      }))
 
   // Map sang OrderItem format
   const ORDER_ITEMS: OrderItem[] = (cartItems || []).map(i => ({
@@ -388,6 +405,27 @@ const CheckoutPage: React.FC = () => {
         setXuBalance(getXu())
       }
       setAppliedXu(xuToApply)
+
+      // Thông báo cho shop: có đơn hàng mới
+      const uniqueShops = [...new Map(ORDER_ITEMS.map(i => [i.shopId, i])).values()]
+      uniqueShops.forEach(item => {
+        addNotificationFor('', 'shop', item.shopId, {
+          title: '🛒 Bạn có đơn hàng mới!',
+          message: `Khách hàng vừa đặt đơn hàng #${realOrderId}. Hãy xác nhận và chuẩn bị hàng.`,
+          type: 'new_order',
+          related_entity_type: 'order',
+          related_entity_id: Number(realOrderId) || 0,
+          action_url: '/shop/orders',
+        })
+      })
+
+      // Thông báo cho shipper: có đơn hàng chờ lấy
+      addNotificationFor('', 'shipper', 0, {
+        title: '📦 Có đơn hàng mới cần lấy!',
+        message: `Đơn hàng #${realOrderId} đã được xác nhận. Vào danh sách đơn để nhận giao.`,
+        type: 'new_shipment',
+        action_url: '/shipper/deliveries',
+      })
 
       // Quà tặng sự kiện
       const shopNames = [...new Set(ORDER_ITEMS.map(i => i.shopName))]
@@ -1166,7 +1204,11 @@ const CheckoutPage: React.FC = () => {
                 <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>Tổng thanh toán</span>
                 <span style={{ fontWeight: 800, fontSize: 20, color: 'var(--primary, #7C3AED)' }}>{formatCurrency(grandTotal)}</span>
               </div>
-              {(saved > 0 || voucherDiscount > 0 || xuToApply > 0) && <p style={{ fontSize: 12, color: '#16A34A', margin: '6px 0 0', textAlign: 'right' }}>Tiết kiệm {formatCurrency(saved + voucherDiscount + xuToApply)} so với giá gốc</p>}
+              {(saved > 0 || voucherDiscount > 0 || xuToApply > 0) && (
+                <p style={{ fontSize: 12, color: '#16A34A', margin: '6px 0 0', textAlign: 'right' }}>
+                  Tiết kiệm {formatCurrency(saved + voucherDiscount + xuToApply)} so với giá gốc
+                </p>
+              )}
               <div style={{ marginTop: 16, padding: '10px 12px', background: 'var(--bg-highlight, #F0FDF4)', borderRadius: 8, border: '1px solid #BBF7D0' }}>
                 <p style={{ fontSize: 12, color: '#15803D', margin: 0, fontWeight: 500, lineHeight: 1.6 }}>
                   🔒 Thông tin đơn hàng và thanh toán của bạn được bảo mật tuyệt đối

@@ -339,7 +339,24 @@ const ProductDetailPage: React.FC = () => {
   }, [product])
 
   const handleAddToCart = async () => { if (!isAuthenticated) { navigate('/login'); return }; await add(product!.product_id, qty); setAddedMsg(true); setTimeout(() => setAddedMsg(false), 2000) }
-  const handleBuyNow = async () => { if (!isAuthenticated) { navigate('/login'); return }; await add(product!.product_id, qty); navigate('/checkout') }
+  const handleBuyNow = async () => {
+    if (!isAuthenticated) { navigate('/login'); return }
+    await add(product!.product_id, qty)
+    navigate('/checkout', {
+      state: {
+        cartItems: [{
+          cart_id: 0,
+          product_id: product!.product_id,
+          product_name: product!.product_name,
+          product_image: (product as any).image_urls?.[0] ?? (product as any).image_url ?? '',
+          price: Number(product!.price),
+          quantity: qty,
+          shop_id: (product as any).shop_id ?? 0,
+          shop_name: (product as any).shop_name ?? 'Shop',
+        }]
+      }
+    })
+  }
 
   if (loading) return <Loading />
   if (!product) return (

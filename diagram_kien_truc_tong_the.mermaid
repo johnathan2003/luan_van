@@ -1,0 +1,59 @@
+graph TB
+
+    DB[("🗄️ PostgreSQL\nCơ sở dữ liệu")]
+
+    subgraph BE["⚙️ Backend — FastAPI / Python"]
+        direction TB
+        ROUTER["🔀 API Router\n/api/v1/auth · /products · /orders\n/vouchers · /banners · /disputes · /users"]
+        SERVICE["🔧 Service Layer\nXử lý logic nghiệp vụ"]
+        REPO["📦 Repository\nSQLAlchemy ORM · Alembic Migration"]
+    end
+
+    subgraph FE["🖥️ Frontend — React TypeScript / Vite (port 3000)"]
+        direction TB
+        REACT["⚛️ Giao diện React\nĐịnh tuyến theo vai trò\n/  ·  /shop  ·  /admin  ·  /shipper  ·  /employee"]
+        REDUX["⚡ Redux Toolkit\nauthSlice · cartSlice"]
+        AXIOS["🔄 Axios + Interceptor\nGửi Bearer Token · Tự làm mới khi nhận lỗi 401"]
+        JWT["🔐 JWT Token\nAccess Token · Refresh Token\nlưu trong localStorage"]
+        LSTORE["💾 localStorage\neventsStore · bannerAuctionStore\nproductApprovalStore · notificationStore\ndisputeStore · rejectionStore"]
+    end
+
+    %% Database ↔ Repository
+    DB -->|"trả về dữ liệu"| REPO
+    REPO -->|"truy vấn"| DB
+
+    %% Backend internal flow
+    REPO -->|"trả kết quả"| SERVICE
+    SERVICE -->|"gọi truy vấn"| REPO
+    SERVICE -->|"trả phản hồi"| ROUTER
+    ROUTER -->|"gọi xử lý"| SERVICE
+
+    %% Frontend ↔ Backend
+    ROUTER -->|"JSON response"| AXIOS
+    AXIOS -->|"HTTP request + Bearer Token"| ROUTER
+
+    %% Frontend internal
+    REACT <-->|"dispatch / cập nhật state"| REDUX
+    REDUX -->|"gọi API"| AXIOS
+    AXIOS -->|"cập nhật state"| REDUX
+    AXIOS <-->|"lưu / đọc token"| JWT
+    REACT <-->|"đọc / ghi dữ liệu cục bộ"| LSTORE
+
+    %% Actors
+    U(["👤 Người dùng\nxem sản phẩm · giỏ hàng · đặt hàng\nvoucher · xu · sự kiện · khiếu nại"])
+    SH(["🏪 Chủ shop\nsản phẩm · đơn hàng · nhân viên\nđấu giá banner · flash sale · voucher"])
+    AD(["👨‍💼 Admin / Superadmin\nquản lý người dùng · duyệt sản phẩm\nbanner · đơn hàng · khiếu nại · báo cáo · cấu hình"])
+    SP(["🛵 Shipper\nđơn giao hàng · thu nhập\nsự cố · rút tiền"])
+    EM(["👷 Nhân viên\nsản phẩm · đơn hàng"])
+
+    U -->|"truy cập website"| REACT
+    SH -->|"truy cập website"| REACT
+    AD -->|"truy cập website"| REACT
+    SP -->|"truy cập website"| REACT
+    EM -->|"truy cập website"| REACT
+
+    REACT -->|"trả về giao diện"| U
+    REACT -->|"trả về giao diện"| SH
+    REACT -->|"trả về giao diện"| AD
+    REACT -->|"trả về giao diện"| SP
+    REACT -->|"trả về giao diện"| EM

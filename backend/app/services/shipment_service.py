@@ -140,3 +140,40 @@ def get_shipper_deliveries(db: Session, shipper_id: int, page: int = 1, limit: i
         query = query.filter(Shipment.status == s_status)
     query = query.order_by(Shipment.created_at.desc())
     return paginate(query, page, limit)
+
+
+def get_pending_shipments(db: Session, page: int = 1, limit: int = 20):
+    """Lấy danh sách đơn chưa có shipper — để shipper tự nhận."""
+    query = (
+        db.query(Shipment)
+        .filter(Shipment.shipper_id == None, Shipment.status == "pending")  # noqa: E711
+        .order_by(Shipment.created_at.desc())
+    )
+    return paginate(query, page, limit)
+
+
+def claim_shipment(db: Session, shipment_id: int, shipper_id: int) -> Shipment:
+    """Shipper tự nhận đơn chưa được assign."""
+    shipment = db.query(Shipment).filter(
+        Shipment.shipment_id == shipment_id,
+        Shipment.shipper_id == None,  # noqa: E711
+        Shipment.status == "pending",
+    ).first()
+    if not shipment:
+        raise HTTPException(status_code=400, detail="Đơn không còn khả dụng hoặc đã có shipper nhận")
+
+    shipper = db.query(Shipper).filter(Shipper.shipper_id == shipper_id).first()
+    if not shipper:
+        raise HTTPException(status_code=404, detail="Shipper not found")
+
+    shipment.shipper_id = shipper_id
+    shipment.status = "assigned"
+    shipper.status = "on_delivery"
+
+    order = db.query(Order).filter(Order.order_id == shipment.order_id).first()
+    if order:
+        order.shipper_id = shipper_id
+
+    db.commit()
+    db.refresh(shipment)
+    return shipment

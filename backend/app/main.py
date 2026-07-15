@@ -17,6 +17,7 @@ from app.routes import (
     auth, users, products, carts, orders,
     payments, shipments, shops, admin, notifications, vouchers, chat, employee,
 )
+from app.routes.warehouses import router as warehouses_router
 from app.websocket.connection_manager import sio, init_main_loop
 
 # Superadmin module — nằm ngoài app package, không ghi log
@@ -117,6 +118,7 @@ app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["
 app.include_router(vouchers.router,      prefix="/api/v1/vouchers",      tags=["Vouchers"])
 app.include_router(chat.router,          prefix="/api/v1/chat",           tags=["Chat"])
 app.include_router(employee.router,      prefix="/api/v1/employee",       tags=["Employee"])
+app.include_router(warehouses_router,                                      tags=["Warehouses"])
 
 # Superadmin — chỉ mount nếu module tồn tại
 if super_router:

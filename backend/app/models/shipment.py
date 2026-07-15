@@ -4,12 +4,49 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 
+class Warehouse(Base):
+    """Kho hàng theo tỉnh/thành — dùng cho shipper liên tỉnh."""
+    __tablename__ = "warehouses"
+
+    warehouse_id   = Column(Integer, primary_key=True, autoincrement=True)
+    name           = Column(String(200), nullable=False)
+    province       = Column(String(100), nullable=False)   # tỉnh/thành
+    address        = Column(String(500))
+    lat            = Column(Numeric(10, 6))
+    lng            = Column(Numeric(10, 6))
+    is_active      = Column(Boolean, default=True)
+    created_at     = Column(DateTime, server_default=func.now())
+
+    managers       = relationship("WarehouseManager", back_populates="warehouse")
+    outgoing       = relationship("Shipment", foreign_keys="[Shipment.src_warehouse_id]", back_populates="src_warehouse")
+    incoming       = relationship("Shipment", foreign_keys="[Shipment.dest_warehouse_id]", back_populates="dest_warehouse")
+
+
+class WarehouseManager(Base):
+    """Người quản lý kho — thấy được tất cả đơn hàng."""
+    __tablename__ = "warehouse_managers"
+
+    manager_id   = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
+    created_at   = Column(DateTime, server_default=func.now())
+
+    user      = relationship("User", foreign_keys=[manager_id])
+    warehouse = relationship("Warehouse", back_populates="managers")
+
+
 class Shipper(Base):
     __tablename__ = "shippers"
 
-    shipper_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
-    vehicle_type = Column(String(50))
+    shipper_id    = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
+    vehicle_type  = Column(String(50))
     license_plate = Column(String(20))
+    # Loại shipper: free=tự do, zone=khu vực, inter_province=liên tỉnh (xe tải)
+    shipper_type  = Column(String(50), server_default='free', nullable=True)
+    # Khu vực phụ trách (cho zone shipper)
+    zone_province = Column(String(100))
+    # Kho gắn với (cho inter_province shipper)
+    home_warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
+
     current_location = Column(JSON)
     status = Column(Enum("available", "on_delivery", "offline"), default="offline", index=True)
     rating = Column(String(5), default="0.00")
@@ -19,51 +56,58 @@ class Shipper(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    user = relationship("User", back_populates="shipper", foreign_keys=[shipper_id])
-    shipments = relationship("Shipment", back_populates="shipper")
+    user          = relationship("User", back_populates="shipper", foreign_keys=[shipper_id])
+    shipments     = relationship("Shipment", back_populates="shipper")
+    home_warehouse = relationship("Warehouse", foreign_keys=[home_warehouse_id])
 
 
 class ShipperRegistration(Base):
     __tablename__ = "shipper_registrations"
 
-    reg_id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, unique=True)
-    vehicle_type = Column(String(50))
-    license_plate = Column(String(20))
-    license_url = Column(String(500))
+    reg_id           = Column(Integer, primary_key=True, autoincrement=True)
+    user_id          = Column(Integer, ForeignKey("users.user_id"), nullable=False, unique=True)
+    vehicle_type     = Column(String(50))
+    license_plate    = Column(String(20))
+    shipper_type     = Column(String(50), server_default='free', nullable=True)
+    zone_province    = Column(String(100))
+    home_warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
+    license_url      = Column(String(500))
     registration_url = Column(String(500))
-    id_card_url = Column(String(500))
-    status = Column(Enum("pending", "approved", "rejected"), default="pending", index=True)
+    id_card_url      = Column(String(500))
+    status           = Column(Enum("pending", "approved", "rejected"), default="pending", index=True)
     rejection_reason = Column(String(500))
-    reviewed_by = Column(Integer, ForeignKey("users.user_id"))
-    reviewed_at = Column(DateTime)
-    created_at = Column(DateTime, server_default=func.now())
+    reviewed_by      = Column(Integer, ForeignKey("users.user_id"))
+    reviewed_at      = Column(DateTime)
+    created_at       = Column(DateTime, server_default=func.now())
 
-    # Relationships
-    user = relationship("User", foreign_keys=[user_id])
-    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    user      = relationship("User", foreign_keys=[user_id])
+    reviewer  = relationship("User", foreign_keys=[reviewed_by])
+    home_warehouse = relationship("Warehouse", foreign_keys=[home_warehouse_id])
 
 
 class Shipment(Base):
     __tablename__ = "shipments"
 
-    shipment_id = Column(Integer, primary_key=True, autoincrement=True)
-    order_id = Column(Integer, ForeignKey("orders.order_id"), nullable=False)
-    shipper_id = Column(Integer, ForeignKey("shippers.shipper_id"))
-    pickup_location = Column(String(500))
+    shipment_id       = Column(Integer, primary_key=True, autoincrement=True)
+    order_id          = Column(Integer, ForeignKey("orders.order_id"), nullable=False)
+    shipper_id        = Column(Integer, ForeignKey("shippers.shipper_id"))
+
+    # Loại vận chuyển — server_default để không include vào INSERT khi chưa migrate
+    shipment_type = Column(String(50), server_default='local', nullable=True)
+    # Kho liên quan (liên tỉnh)
+    src_warehouse_id  = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
+    dest_warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
+
+    pickup_location   = Column(String(500))
     delivery_location = Column(String(500))
-    status = Column(
-        Enum("pending", "assigned", "picked_up", "in_transit", "delivered", "failed"),
-        default="pending",
-        index=True,
-    )
-    pickup_time = Column(DateTime)
-    delivery_time = Column(DateTime)
+    status = Column(String(50), default="pending", index=True)
+    pickup_time    = Column(DateTime)
+    delivery_time  = Column(DateTime)
     current_location = Column(JSON)
-    route = Column(JSON)
+    route          = Column(JSON)
     failure_reason = Column(String(500))
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at     = Column(DateTime, server_default=func.now())
+    updated_at     = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
         Index("idx_shipment_shipper", "shipper_id"),
@@ -71,8 +115,10 @@ class Shipment(Base):
     )
 
     # Relationships
-    order = relationship("Order", back_populates="shipment")
-    shipper = relationship("Shipper", back_populates="shipments")
+    order         = relationship("Order", back_populates="shipment")
+    shipper       = relationship("Shipper", back_populates="shipments")
+    src_warehouse  = relationship("Warehouse", foreign_keys=[src_warehouse_id], back_populates="outgoing")
+    dest_warehouse = relationship("Warehouse", foreign_keys=[dest_warehouse_id], back_populates="incoming")
 
 
 class ShipperBonus(Base):

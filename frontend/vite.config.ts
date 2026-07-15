@@ -9,23 +9,21 @@ export default defineConfig({
       '@':     resolve(__dirname, './src'),
       '@super': resolve(__dirname, '../super/frontend'),
     },
-    // Ưu tiên .tsx trước .jsx (tránh Windows load nhầm file cũ)
     extensions: ['.tsx', '.ts', '.jsx', '.js', '.json'],
+  },
+  build: {
+    rollupOptions: {
+      onwarn(warning, warn) {
+        if (warning.code === 'UNRESOLVED_IMPORT') return
+        warn(warning)
+      },
+    },
   },
   server: {
     port: 3000,
     proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/uploads': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      // /api/super/* — superadmin API, đã được bao phủ bởi proxy /api phía trên
+      '/api': { target: 'http://localhost:8000', changeOrigin: true },
+      '/uploads': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
 })
-
-

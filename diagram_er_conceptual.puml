@@ -1,0 +1,253 @@
+@startuml
+skinparam shadowing false
+skinparam linetype ortho
+skinparam entityBackgroundColor White
+skinparam entityBorderColor #333333
+skinparam entityFontSize 13
+skinparam entityFontStyle bold
+skinparam ArrowColor #555555
+skinparam ArrowFontSize 11
+
+title Mô hình mức ý niệm — Hệ thống BuyZo E-commerce
+
+' ══════════════════════════════════════════════════
+' THỰC THỂ
+' ══════════════════════════════════════════════════
+
+entity "NGUOI_DUNG" as USER {
+  * user_id : INT <<PK>>
+  --
+  email : VARCHAR
+  ho_ten : VARCHAR
+  so_dien_thoai : VARCHAR
+  dia_chi : TEXT
+  trang_thai : ENUM
+  ngay_tao : DATETIME
+}
+
+entity "VAI_TRO" as ROLE {
+  * role_id : INT <<PK>>
+  --
+  ten_vai_tro : VARCHAR
+  mo_ta : TEXT
+}
+
+entity "CUA_HANG" as SHOP {
+  * shop_id : INT <<PK>>
+  --
+  ten_cua_hang : VARCHAR
+  dia_chi : TEXT
+  so_dien_thoai : VARCHAR
+  danh_gia : DECIMAL
+  trang_thai_duyet : ENUM
+  la_mall : BOOLEAN
+}
+
+entity "NHAN_VIEN_SHOP" as SHOP_EMP {
+  * employee_id : INT <<PK>>
+  --
+  ten_nhan_vien : VARCHAR
+  chuc_vu : VARCHAR
+  trang_thai : ENUM
+}
+
+entity "DANH_MUC" as CATEGORY {
+  * category_id : INT <<PK>>
+  --
+  ten_danh_muc : VARCHAR
+  mo_ta : TEXT
+}
+
+entity "SAN_PHAM" as PRODUCT {
+  * product_id : INT <<PK>>
+  --
+  ten_san_pham : VARCHAR
+  mo_ta : TEXT
+  gia : DECIMAL
+  so_luong_ton : INT
+  trang_thai : ENUM
+  danh_gia_tb : DECIMAL
+}
+
+entity "BIEN_THE_SAN_PHAM" as VARIANT {
+  * variant_id : INT <<PK>>
+  --
+  ten_bien_the : VARCHAR
+  sku : VARCHAR
+  gia : DECIMAL
+  so_luong : INT
+}
+
+entity "GIO_HANG" as CART {
+  * cart_id : INT <<PK>>
+  --
+  so_luong : INT
+  ngay_them : DATETIME
+}
+
+entity "DON_HANG" as ORDER {
+  * order_id : INT <<PK>>
+  --
+  ma_don_hang : VARCHAR
+  tong_tien : DECIMAL
+  phi_ship : DECIMAL
+  tien_sau_giam : DECIMAL
+  trang_thai : ENUM
+  phuong_thuc_tt : ENUM
+  dia_chi_giao : TEXT
+  ten_nguoi_nhan : VARCHAR
+  so_dien_thoai_nhan : VARCHAR
+}
+
+entity "CHI_TIET_DON_HANG" as ORDER_ITEM {
+  * order_item_id : INT <<PK>>
+  --
+  so_luong : INT
+  gia_tai_thoi_diem : DECIMAL
+  ten_sp_snapshot : VARCHAR
+}
+
+entity "THANH_TOAN" as PAYMENT {
+  * payment_id : INT <<PK>>
+  --
+  so_tien : DECIMAL
+  phuong_thuc : ENUM
+  trang_thai : ENUM
+  ma_giao_dich : VARCHAR
+}
+
+entity "PHIEU_GIAM_GIA" as VOUCHER {
+  * voucher_id : INT <<PK>>
+  --
+  ma_voucher : VARCHAR
+  loai_giam : ENUM
+  gia_tri_giam : DECIMAL
+  gia_tri_don_toi_thieu : DECIMAL
+  so_lan_su_dung_toi_da : INT
+  han_su_dung : DATETIME
+  trang_thai : ENUM
+}
+
+entity "DANH_GIA_SP" as REVIEW {
+  * review_id : INT <<PK>>
+  --
+  so_sao : INT
+  tieu_de : VARCHAR
+  noi_dung : TEXT
+  da_xac_thuc : BOOLEAN
+  ngay_danh_gia : DATETIME
+}
+
+entity "NGUOI_GIAO_HANG" as SHIPPER {
+  * shipper_id : INT <<PK>>
+  --
+  loai_phuong_tien : VARCHAR
+  bien_so : VARCHAR
+  trang_thai : ENUM
+  danh_gia : DECIMAL
+  tong_don_da_giao : INT
+}
+
+entity "VAN_CHUYEN" as SHIPMENT {
+  * shipment_id : INT <<PK>>
+  --
+  dia_chi_lay_hang : VARCHAR
+  dia_chi_giao_hang : VARCHAR
+  trang_thai : ENUM
+  thoi_gian_lay : DATETIME
+  thoi_gian_giao : DATETIME
+}
+
+entity "KHIEU_NAI" as DISPUTE {
+  * dispute_id : INT <<PK>>
+  --
+  ben_khieu_nai : ENUM
+  ly_do : TEXT
+  trang_thai : ENUM
+  so_tien_hoan : DECIMAL
+  ngay_tao : DATETIME
+}
+
+entity "THONG_BAO" as NOTIF {
+  * notification_id : INT <<PK>>
+  --
+  tieu_de : VARCHAR
+  noi_dung : TEXT
+  loai : VARCHAR
+  da_doc : BOOLEAN
+  ngay_gui : DATETIME
+}
+
+' ══════════════════════════════════════════════════
+' MỐI QUAN HỆ
+' ══════════════════════════════════════════════════
+
+' User — Role (N:M)
+USER }o--o{ ROLE : "có vai trò"
+
+' User — Shop (1:1)
+USER ||--o| SHOP : "sở hữu"
+
+' User — ShopEmployee (1:N)
+USER ||--o{ SHOP_EMP : "là nhân viên"
+SHOP ||--o{ SHOP_EMP : "thuê"
+
+' Shop — Product (1:N)
+SHOP ||--o{ PRODUCT : "bán"
+
+' Product — Category (N:1)
+PRODUCT }o--|| CATEGORY : "thuộc danh mục"
+
+' Product — Variant (1:N)
+PRODUCT ||--o{ VARIANT : "có biến thể"
+
+' User — Cart — Product (N:M)
+USER ||--o{ CART : "thêm vào"
+CART }o--|| PRODUCT : "chứa"
+
+' User — Order (1:N)
+USER ||--o{ ORDER : "đặt hàng"
+
+' Shop — Order (1:N)
+SHOP ||--o{ ORDER : "nhận đơn"
+
+' Order — OrderItem (1:N)
+ORDER ||--|{ ORDER_ITEM : "gồm"
+
+' OrderItem — Product (N:1)
+ORDER_ITEM }o--|| PRODUCT : "là sản phẩm"
+
+' Order — Payment (1:1)
+ORDER ||--o| PAYMENT : "thanh toán"
+
+' Order — Voucher (N:1)
+ORDER }o--o| VOUCHER : "áp dụng"
+
+' User — Voucher (N:M thu thập)
+USER }o--o{ VOUCHER : "thu thập"
+
+' Order — Shipment (1:1)
+ORDER ||--o| SHIPMENT : "vận chuyển"
+
+' Shipment — Shipper (N:1)
+SHIPMENT }o--o| SHIPPER : "được giao bởi"
+
+' Shipper — User (1:1)
+SHIPPER ||--|| USER : "là tài khoản"
+
+' Order — Dispute (1:N)
+ORDER ||--o{ DISPUTE : "bị khiếu nại"
+
+' User — Dispute (1:N)
+USER ||--o{ DISPUTE : "gửi khiếu nại"
+
+' User — Review (1:N)
+USER ||--o{ REVIEW : "viết đánh giá"
+
+' Product — Review (1:N)
+PRODUCT ||--o{ REVIEW : "được đánh giá"
+
+' User — Notification (1:N)
+USER ||--o{ NOTIF : "nhận thông báo"
+
+@enduml

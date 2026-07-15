@@ -82,6 +82,12 @@ import IncidentsPage       from './pages/shipper/IncidentsPage'
 import BenefitsPage        from './pages/shipper/BenefitsPage'
 import TrackingPage        from './pages/shipper/TrackingPage'
 
+// ── 🏭 Warehouse Manager pages ───────────────────────────────────────────────
+import WarehouseManagerLayout   from './pages/warehouse/WarehouseManagerLayout'
+import WarehouseOverviewPage    from './pages/warehouse/WarehouseOverviewPage'
+import AllShipmentsPage         from './pages/warehouse/AllShipmentsPage'
+import IncomingShipmentsPage    from './pages/warehouse/IncomingShipmentsPage'
+
 // ── Helper: bọc page trong layout ─────────────────────────────────────────────
 const inPublic   = (el: React.ReactNode) => <PublicLayout>{el}</PublicLayout>
 const inUser     = (el: React.ReactNode, sub?: string) => <UserLayout subtitle={sub}>{el}</UserLayout>
@@ -181,6 +187,15 @@ const Router: React.FC = () => (
       <Route path="/shipper/incidents"             element={inShipper(<IncidentsPage />)} />
       <Route path="/shipper/benefits"              element={inShipper(<BenefitsPage />)} />
       <Route path="/shipper/tracking/:shipmentId"  element={inShipper(<TrackingPage />)} />
+    </Route>
+
+    {/* ── 🏭 Warehouse Manager ──────────────────────────────────────────── */}
+    <Route element={<ProtectedRoute requiredRole="warehouse_manager" />}>
+      <Route path="/warehouse" element={<WarehouseManagerLayout />}>
+        <Route index element={<WarehouseOverviewPage />} />
+        <Route path="shipments" element={<AllShipmentsPage />} />
+        <Route path="incoming"  element={<IncomingShipmentsPage />} />
+      </Route>
     </Route>
 
     {/* ── ⚡ Superadmin — tách biệt, layout riêng ───────────────────────── */}
