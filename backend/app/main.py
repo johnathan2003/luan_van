@@ -17,15 +17,17 @@ from app.routes import (
     auth, users, products, carts, orders,
     payments, shipments, shops, admin, notifications, vouchers, chat, employee,
 )
+from app.routes.warehouses import router as warehouses_router
 from app.websocket.connection_manager import sio, init_main_loop
 
 # Superadmin module — nằm ngoài app package, không ghi log
 # Docker: super/backend/ được mount tại /app/super/ → import as package 'super'
 try:
     from super.router import super_router  # noqa: E402
-except ImportError:
+except Exception:  # noqa: BLE001
     super_router = None
-    logger.warning("super module không tìm thấy — /super/* endpoints bị tắt")
+    # logger chưa được khởi tạo ở đây — dùng print để tránh NameError
+    print("[WARNING] super module không tìm thấy — /api/super/* endpoints bị tắt")
 
 
 def setup_logging():
@@ -116,6 +118,7 @@ app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["
 app.include_router(vouchers.router,      prefix="/api/v1/vouchers",      tags=["Vouchers"])
 app.include_router(chat.router,          prefix="/api/v1/chat",           tags=["Chat"])
 app.include_router(employee.router,      prefix="/api/v1/employee",       tags=["Employee"])
+app.include_router(warehouses_router,                                      tags=["Warehouses"])
 
 # Superadmin — chỉ mount nếu module tồn tại
 if super_router:

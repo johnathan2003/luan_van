@@ -7,7 +7,7 @@ import { formatDate, formatOrderId } from '../../utils/formatters'
 
 type Tab = 'sent' | 'received'
 
-// Trang "Khieu nai cua toi" - dung chung cho user (nguoi mua) va shop, loc theo current_role
+// Trang "Khiếu nại của tôi" - dung chung cho user (nguoi mua) va shop, loc theo current_role
 // 2 tab: Da gui (toi la nguoi khieu nai) va Bi khieu nai (toi la doi tuong bi khieu nai toi)
 // Giao dien dang danh sach (table) giong style OrderManagement - bam vao dong de xem chi tiet trong modal
 const MyDisputesPage: React.FC = () => {

@@ -5,7 +5,7 @@ import { DISPUTE_STATUS_LABELS, DISPUTE_STATUS_COLORS, DISPUTE_TARGET_LABELS } f
 import { formatDate, formatOrderId } from '../../utils/formatters'
 import { addNotificationFor, type NotificationRecipientType } from '../../utils/notificationStore'
 
-// Sau khi admin xu ly 1 khieu nai, suy ra "3 ben lien quan" toi don hang do
+// Sau khi admin xu ly 1 khiếu nại, suy ra "3 ben lien quan" toi đơn hàng do
 // (nguoi mua / shop / shipper) de gui thong bao, du dispute chi co 2 ben truc tiep
 // (nguoi gui khieu nai + doi tuong bi khieu nai). Ben thu 3 (khong xuat hien truc tiep
 // trong dispute) duoc thong bao voi id mac dinh — chi de demo hien thi, khong can khop
@@ -13,17 +13,18 @@ import { addNotificationFor, type NotificationRecipientType } from '../../utils/
 const ALL_PARTY_TYPES: NotificationRecipientType[] = ['user', 'shop', 'shipper']
 function notifyDisputeParties(d: Dispute, decision: DisputeStatus, note: string) {
   const statusLabel = DISPUTE_STATUS_LABELS[decision]
-  const parties: { type: NotificationRecipientType; id: number; title: string }[] = [
-    { type: d.complainant_type, id: d.complainant_id, title: `Khiếu nại #${d.dispute_id} của bạn đã được xử lý` },
-    { type: d.target_type as NotificationRecipientType, id: d.target_id ?? 0, title: `Khiếu nại #${d.dispute_id} liên quan đến bạn đã có kết luận` },
+  const parties: { type: NotificationRecipientType; id: number; email: string; title: string }[] = [
+    { type: d.complainant_type, id: d.complainant_id, email: d.complainant_email ?? '', title: `Khiếu nại #${d.dispute_id} của bạn đã được xử lý` },
+    { type: d.target_type as NotificationRecipientType, id: d.target_id ?? 0, email: d.target_email ?? '', title: `Khiếu nại #${d.dispute_id} liên quan đến bạn đã có kết luận` },
   ]
   const usedTypes = new Set<NotificationRecipientType>([d.complainant_type, d.target_type as NotificationRecipientType])
   const thirdType = ALL_PARTY_TYPES.find(t => !usedTypes.has(t))
   if (thirdType) {
-    parties.push({ type: thirdType, id: 0, title: `Đơn hàng ${formatOrderId(d.order_id)} có cập nhật khiếu nại` })
+    // Bên thứ 3 (không trực tiếp trong dispute) — broadcast cho toàn role (email='')
+    parties.push({ type: thirdType, id: 0, email: '', title: `Đơn hàng ${formatOrderId(d.order_id)} có cập nhật khiếu nại` })
   }
   parties.forEach(p => {
-    addNotificationFor(p.type, p.id, {
+    addNotificationFor(p.email, p.type, p.id, {
       title: p.title,
       message: `Trạng thái: ${statusLabel}. ${note}`,
       type: 'dispute',
@@ -81,7 +82,7 @@ const DisputeResolutionPage: React.FC = () => {
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: C.navy }}>⚖️ Giải quyết khiếu nại</h1>
         <p style={{ fontSize: 13, color: C.gray, marginTop: 2 }}>
-          Xem xét và xử lý khiếu nại giữa người mua, shop và shipper — bao gồm hàng giả, hư hỏng/giao gian dối, đổi trả gian lận, "bom" hàng, hiềm khích shop–shipper.
+          Xem xét và xử lý khiếu nại giữa người mua, shop và shipper — bao gồm hàng giả, hư hỏng/giao gián dối, đổi trả gián lận, "bom" hàng, hiềm khích shop–shipper.
         </p>
       </div>
 
@@ -206,7 +207,7 @@ const DisputeResolutionPage: React.FC = () => {
               style={{ width: '100%', padding: '10px 12px', border: `1px solid ${C.light}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button onClick={() => setSelected(null)} style={{ flex: 1, padding: '10px', background: C.tint, color: C.gray, border: 'none', borderRadius: 9, fontWeight: 600, cursor: 'pointer' }}>Hủy</button>
-              <button onClick={handleConfirm} style={{ flex: 2, padding: '10px', background: C.blue, color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, cursor: 'pointer' }}>✅ Xác nhận</button>
+              <button onClick={handleConfirm} style={{ flex: 2, padding: '10px', background: C.blue, color: 'white', border: 'none', borderRadius: 9, fontWeight: 600, cursor: 'pointer' }}>Xác nhận xử lý</button>
             </div>
           </div>
         </div>

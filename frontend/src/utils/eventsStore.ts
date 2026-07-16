@@ -1,5 +1,13 @@
 // Hệ thống "Sự kiện": tích xu, điểm danh, vòng quay, nhiệm vụ, dò số
 // Toàn bộ lưu localStorage — demo/test, chưa có backend thực
+// FIX: mỗi tài khoản (email) có vùng localStorage riêng biệt, tránh rò rỉ dữ liệu giữa các tài khoản
+
+// ── Scoping theo email ────────────────────────────────────────────────────
+let _email = ''
+/** Gọi khi user đăng nhập/đăng xuất để scope data theo đúng tài khoản */
+export function setEventsEmail(email: string) { _email = email }
+/** Tạo key có gắn email để tránh xung đột giữa các tài khoản */
+const ek = (base: string) => _email ? `${base}_${_email}` : base
 
 // ── Helpers chung ──────────────────────────────────────────────────────────
 function todayStr(): string {
@@ -19,7 +27,7 @@ function writeJSON(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
 }
 
-// đếm ngược thời gian tới 0h ngày mai (hiển thị "còn bao lâu")
+// đếm ngược thời gián tới 0h ngày mai (hiển thị "còn bao lâu")
 export function msUntilMidnight(): number {
   const now = new Date()
   const tomorrow = new Date(now)
@@ -31,19 +39,19 @@ export function msUntilMidnight(): number {
 const KEY_XU = 'buyzo_xu_v1'
 
 export function getXu(): number {
-  return readJSON<number>(KEY_XU, 0)
+  return readJSON<number>(ek(KEY_XU), 0)
 }
 
 export function addXu(amount: number): number {
   const next = getXu() + amount
-  writeJSON(KEY_XU, next)
+  writeJSON(ek(KEY_XU), next)
   return next
 }
 
 // tru xu khi dung de thanh toan (1 xu = 1 dong) — khong cho am
 export function spendXu(amount: number): number {
   const next = Math.max(0, getXu() - amount)
-  writeJSON(KEY_XU, next)
+  writeJSON(ek(KEY_XU), next)
   return next
 }
 
@@ -58,7 +66,7 @@ export interface EventVoucher {
 const KEY_VOUCHERS = 'buyzo_event_vouchers_v1'
 
 export function getEventVouchers(): EventVoucher[] {
-  return readJSON<EventVoucher[]>(KEY_VOUCHERS, [])
+  return readJSON<EventVoucher[]>(ek(KEY_VOUCHERS), [])
 }
 
 export function addEventVoucher(label: string): EventVoucher {
@@ -70,7 +78,7 @@ export function addEventVoucher(label: string): EventVoucher {
   }
   const all = getEventVouchers()
   all.unshift(v)
-  writeJSON(KEY_VOUCHERS, all)
+  writeJSON(ek(KEY_VOUCHERS), all)
   return v
 }
 
@@ -126,7 +134,7 @@ const KEY_CHECKIN = 'buyzo_checkin_v1'
 export const CHECKIN_REWARDS = [10, 10, 15, 15, 20, 20, 50]
 
 function getCheckinState(): CheckinState {
-  return readJSON<CheckinState>(KEY_CHECKIN, { lastDate: null, streak: 0, history: [] })
+  return readJSON<CheckinState>(ek(KEY_CHECKIN), { lastDate: null, streak: 0, history: [] })
 }
 
 export function getCheckinInfo() {
@@ -157,7 +165,7 @@ export function doCheckin(): { reward: number; streak: number } | null {
     streak,
     history: [...state.history, today].slice(-30),
   }
-  writeJSON(KEY_CHECKIN, next)
+  writeJSON(ek(KEY_CHECKIN), next)
   addXu(reward)
   return { reward, streak }
 }
@@ -186,7 +194,7 @@ interface MissionDayData {
 const KEY_MISSIONS = 'buyzo_missions_v1'
 
 function getMissionDay(): MissionDayData {
-  const data = readJSON<MissionDayData>(KEY_MISSIONS, { date: todayStr(), progress: {}, claimed: {} })
+  const data = readJSON<MissionDayData>(ek(KEY_MISSIONS), { date: todayStr(), progress: {}, claimed: {} })
   if (data.date !== todayStr()) {
     return { date: todayStr(), progress: {}, claimed: {} }
   }
@@ -194,7 +202,7 @@ function getMissionDay(): MissionDayData {
 }
 
 function saveMissionDay(data: MissionDayData) {
-  writeJSON(KEY_MISSIONS, data)
+  writeJSON(ek(KEY_MISSIONS), data)
 }
 
 // gọi khi user thực sự xem sản phẩm / shop (tích lũy tiến độ thật)
@@ -252,7 +260,7 @@ interface SpinState { lastSpinDate: string | null }
 const KEY_SPIN = 'buyzo_spin_v1'
 
 export function canSpinToday(): boolean {
-  const state = readJSON<SpinState>(KEY_SPIN, { lastSpinDate: null })
+  const state = readJSON<SpinState>(ek(KEY_SPIN), { lastSpinDate: null })
   return state.lastSpinDate !== todayStr()
 }
 
@@ -260,7 +268,7 @@ export function doSpin(): { index: number; reward: SpinReward } | null {
   if (!canSpinToday()) return null
   const index = Math.floor(Math.random() * SPIN_REWARDS.length)
   const reward = SPIN_REWARDS[index]
-  writeJSON(KEY_SPIN, { lastSpinDate: todayStr() })
+  writeJSON(ek(KEY_SPIN), { lastSpinDate: todayStr() })
   if (reward.type === 'xu' && reward.amount) addXu(reward.amount)
   if (reward.type === 'voucher') addEventVoucher(reward.label)
   return { index, reward }
@@ -295,11 +303,11 @@ export function getOfficialNumberToday(): string {
 const KEY_TICKET = 'buyzo_lottery_ticket_v1'
 
 export function getUserTicketToday(): string {
-  const data = readJSON<{ date: string; ticket: string }>(KEY_TICKET, { date: '', ticket: '' })
+  const data = readJSON<{ date: string; ticket: string }>(ek(KEY_TICKET), { date: '', ticket: '' })
   if (data.date === todayStr() && data.ticket) return data.ticket
   // sinh ticket ngau nhien, giu nguyen trong ngay tru khi nguoi dung tu doi
   const ticket = genDigits('user-' + todayStr() + '-' + Math.random())
-  writeJSON(KEY_TICKET, { date: todayStr(), ticket })
+  writeJSON(ek(KEY_TICKET), { date: todayStr(), ticket })
   return ticket
 }
 
@@ -307,7 +315,7 @@ export function getUserTicketToday(): string {
 // truoc khi ho bam "do so" — sau khi da do thi so se bi khoa lai cho ngay hom do)
 export function rerollUserTicket(): string {
   const ticket = genDigits('user-' + todayStr() + '-' + Math.random() + '-' + Date.now())
-  writeJSON(KEY_TICKET, { date: todayStr(), ticket })
+  writeJSON(ek(KEY_TICKET), { date: todayStr(), ticket })
   return ticket
 }
 
@@ -322,12 +330,12 @@ interface LotteryState { lastPlayDate: string | null; lastResult?: LotteryResult
 const KEY_LOTTERY = 'buyzo_lottery_v1'
 
 export function canPlayLotteryToday(): boolean {
-  const state = readJSON<LotteryState>(KEY_LOTTERY, { lastPlayDate: null })
+  const state = readJSON<LotteryState>(ek(KEY_LOTTERY), { lastPlayDate: null })
   return state.lastPlayDate !== todayStr()
 }
 
 export function getLastLotteryResult(): LotteryResult | undefined {
-  const state = readJSON<LotteryState>(KEY_LOTTERY, { lastPlayDate: null })
+  const state = readJSON<LotteryState>(ek(KEY_LOTTERY), { lastPlayDate: null })
   return state.lastPlayDate === todayStr() ? state.lastResult : undefined
 }
 
@@ -347,15 +355,13 @@ export function playLottery(): LotteryResult | null {
   for (let i = 0; i < 6; i++) {
     if (ticket[i] === official[i]) matches++
   }
-  const r = rewardForMatches(matches)
-  if (r.xu > 0) addXu(r.xu)
-  if (r.voucher) addEventVoucher(r.voucher)
-
-  const rewardLabel = r.xu > 0
-    ? `Trúng ${matches}/6 số — nhận ${r.xu} xu${r.voucher ? ' + ' + r.voucher : ''}`
-    : `Trúng ${matches}/6 số — chưa đủ điều kiện nhận thưởng`
-
+  const { xu, voucher } = rewardForMatches(matches)
+  const rewardLabel = xu > 0
+    ? (voucher ? `+${xu} xu & ${voucher}` : `+${xu} xu`)
+    : 'Chưa trúng lần này, chúc may mắn hơn vào ngày mai!'
   const result: LotteryResult = { ticket, official, matches, rewardLabel }
-  writeJSON(KEY_LOTTERY, { lastPlayDate: todayStr(), lastResult: result })
+  writeJSON(ek(KEY_LOTTERY), { lastPlayDate: todayStr(), lastResult: result })
+  if (xu > 0) addXu(xu)
+  if (voucher) addEventVoucher(voucher)
   return result
 }

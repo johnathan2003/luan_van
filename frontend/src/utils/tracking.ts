@@ -47,7 +47,7 @@ export function buildTrackingTimeline(order: Order): TrackingEvent[] {
   const city = CITIES[order.order_id % CITIES.length]
 
   let currentIdx = STATUS_TO_FULL_INDEX[order.order_status] ?? 0
-  if (order.order_status === 'shipping') {
+  if ((order.order_status as string) === 'shipping') {
     // gia lap dang o mot trong 3 chang giua hanh trinh van chuyen
     currentIdx = 3 + (order.order_id % 3)
   }

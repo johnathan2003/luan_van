@@ -42,7 +42,7 @@ const EmployeeLayout: React.FC<{ children: React.ReactNode; shopName?: string }>
       </header>
 
       {/* Content */}
-      <main style={{ flex: 1, padding: 24 }}>
+      <main style={{ flex: 1, padding: '24px 32px', minWidth: 0 }}>
         {children}
       </main>
     </div>

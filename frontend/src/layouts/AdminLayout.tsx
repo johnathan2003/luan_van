@@ -63,12 +63,14 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { icon: '🖼️', label: 'Banner QC',        path: '/admin/banners' },
       { icon: '🏆', label: 'Đấu giá QC',      path: '/admin/auction' },
+      { icon: '📷', label: 'Thư viện ảnh',    path: '/admin/images' },
       { icon: '📣', label: 'Thông báo HT',     path: '/admin/notifications' },
     ],
   },
   {
     group: 'Vận hành',
     items: [
+      { icon: '🛵', label: 'Quản lý Shipper',  path: '/admin/shippers' },
       { icon: '🚚', label: 'Cấu hình VC',      path: '/admin/shipping-config' },
       { icon: '🧑‍💼', label: 'Nhân viên HT',  path: '/admin/system-employees' },
     ],
@@ -167,7 +169,7 @@ const AdminLayout: React.FC<Props> = ({ children }) => {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-page)' }}>
       <Navbar />
-      <div className="container" style={{ display: 'flex', gap: 24, paddingTop: 24, paddingBottom: 48, flex: 1, alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: 24, flex: 1, width: '100%', maxWidth: 1400, margin: '0 auto', padding: '24px 32px 48px', alignItems: 'flex-start' }}>
         <AdminSidebar />
         <main style={{ flex: 1, minWidth: 0 }}>
           {children}

@@ -19,7 +19,10 @@ function readJSON<T>(key: string, fallback: T): T {
   try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback } catch { return fallback }
 }
 function writeJSON(key: string, value: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch (e) {
+    console.error('[flashSaleAuctionStore] localStorage write failed (quota?):', e)
+    throw e
+  }
 }
 
 export type FlashSlotKey = 'flash_slot_1' | 'flash_slot_2' | 'flash_slot_3' | 'flash_slot_4'
@@ -47,9 +50,20 @@ export interface FlashBid {
 export interface FlashAuctionSession {
   id: string; slot: FlashSlotKey; startedAt: string; endsAt: string; bids: FlashBid[]
   status: 'active' | 'ended'; winner?: FlashBid
+  scheduledStartAt?: string  // chờ đến thời điểm này mới mở đặt giá
+  description?: string       // mô tả admin
   confirmation?: 'pending' | 'deposit_paid' | 'declined' | 'expired' | 'paid'
   depositDeadline?: string; depositAmount?: number
   paymentDeadline?: string; displayDurationMs?: number
+}
+
+export function isAuctionLive(session: FlashAuctionSession): boolean {
+  if (!session.scheduledStartAt) return true
+  return Date.now() >= new Date(session.scheduledStartAt).getTime()
+}
+export function msUntilStart(session: FlashAuctionSession): number {
+  if (!session.scheduledStartAt) return 0
+  return Math.max(0, new Date(session.scheduledStartAt).getTime() - Date.now())
 }
 
 export interface AuctionAdminSettings {
@@ -85,7 +99,7 @@ const KEY = 'buyzo_flash_auction_v1'
 
 const FAKE_SHOP_NAMES = [
   'TechWorld Store', 'FashionVN', 'BookStore360', 'Mẹ và Bé Xinh', 'Nhà Sạch Plus',
-  'Đồ Gia Dụng An Phát', 'Giày Sneaker House', 'Mỹ Phẩm Hàn Việt', 'Thế Giới Phụ Kiện',
+  'Đồ Giá Dụng Ẩn Phát', 'Giày Sneaker House', 'Mỹ Phẩm Hàn Việt', 'Thế Giới Phụ Kiện',
 ]
 const FAKE_PRODUCTS = ['Tai nghe Bluetooth', 'Kem dưỡng da Hàn', 'Giày thể thao', 'Bình giữ nhiệt', 'Đèn LED', 'Nồi chiên không dầu']
 
@@ -93,12 +107,20 @@ function defaultSettings(basePrice: number): AuctionAdminSettings {
   return { basePrice, biddingDurationMs: AUCTION_DURATION_MS, displayDurationMs: 6 * 60 * 60 * 1000, locked: false }
 }
 
-function newSession(slot: FlashSlotKey, settings: AuctionAdminSettings): FlashAuctionSession {
+function newSession(
+  slot: FlashSlotKey,
+  settings: AuctionAdminSettings,
+  opts?: { startDelayMinutes?: number; description?: string }
+): FlashAuctionSession {
   const now = Date.now()
+  const delayMs = (opts?.startDelayMinutes ?? 0) * 60000
+  const scheduledStartAt = delayMs > 0 ? new Date(now + delayMs).toISOString() : undefined
   return {
     id: slot + '-' + now, slot,
     startedAt: new Date(now).toISOString(),
-    endsAt: new Date(now + settings.biddingDurationMs).toISOString(),
+    endsAt: new Date(now + delayMs + settings.biddingDurationMs).toISOString(),
+    scheduledStartAt,
+    description: opts?.description || undefined,
     bids: [], status: 'active',
   }
 }
@@ -137,7 +159,7 @@ function rollIfExpired(data: StoreData, slot: FlashSlotKey): FlashAuctionSession
     if (winner && !hasFlashWinNotified(ended.id)) {
       markFlashWinNotified(ended.id)
       const slotLabel = FLASH_SLOTS.find(s => s.key === slot)?.label ?? slot
-      addNotificationFor('shop', 0, {
+      addNotificationFor('', 'shop', 0, {
         title: '⚡ Bạn đã thắng đấu giá Flash Sale!',
         message: `Shop "${winner.shopName}" thắng "${slotLabel}" với ${winner.amount.toLocaleString('vi-VN')}đ. Đặt cọc trong 30 phút để giữ vị trí.`,
         type: 'auction_win',
@@ -184,16 +206,6 @@ export function getShopCooldownRemaining(slot: FlashSlotKey, shopName: string): 
 }
 
 export function placeBid(slot: FlashSlotKey, shopName: string, productName: string, amount: number, productImage?: string): PlaceBidResult {
-  // Kiểm tra shop đã chuẩn bị mẫu flash sale chưa
-  try {
-    const KEY_DRAFT = 'buyzo_banner_draft_v1'
-    const raw = localStorage.getItem(KEY_DRAFT)
-    const drafts = raw ? JSON.parse(raw) : {}
-    const draft = drafts?.flash?.[slot]
-    if (!draft || draft.shopName !== shopName) {
-      return { ok: false, error: '⚠️ Bạn chưa chuẩn bị mẫu sản phẩm cho slot này. Vào tab ⚙️ Chuẩn bị để upload trước khi đặt giá.' }
-    }
-  } catch {}
   const data = getStore(); const session = rollIfExpired(data, slot)
   if (!session) return { ok: false, error: 'Vị trí này đang bị Admin tạm khoá, chưa thể đặt giá.' }
   const basePrice = data.settings[slot]?.basePrice ?? FLASH_SLOTS.find(d => d.key === slot)!.basePrice
@@ -262,7 +274,7 @@ export function payDeposit(historyId: string): boolean {
   // 🔔 Thông báo cọc thành công
   if (h.winner) {
     const slotLabel = FLASH_SLOTS.find(s => s.key === h.slot)?.label ?? h.slot
-    addNotificationFor('shop', 0, {
+    addNotificationFor('', 'shop', 0, {
       title: '✅ Đặt cọc Flash Sale thành công!',
       message: `Đã xác nhận cọc ${(h.depositAmount ?? 0).toLocaleString('vi-VN')}đ cho "${slotLabel}". Sản phẩm của bạn sẽ được admin duyệt sớm.`,
       type: 'deposit_paid',
@@ -280,7 +292,7 @@ export function payWin(historyId: string): boolean {
 
 export function submitFlashProduct(historyId: string, payload: { productName: string; price: number; productImage: string }): FlashSubmission | null {
   const data = getStore(); const h = data.history.find(x => x.id === historyId)
-  if (!h || h.confirmation !== 'paid' || !h.winner) return null
+  if (!h || !['deposit_paid', 'paid'].includes(h.confirmation ?? '') || !h.winner) return null
   if (!payload.productName.trim() || !payload.price || payload.price <= 0 || !payload.productImage) return null
   const existingIdx = data.submissions.findIndex(s => s.historyId === historyId)
   if (existingIdx !== -1 && data.submissions[existingIdx].status !== 'rejected') return null
@@ -315,7 +327,13 @@ export function rejectFlashSubmission(id: string, reason?: string): boolean {
 }
 export function cancelFlashSubmissionExpired(id: string): boolean {
   const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false
-  data.submissions[idx] = { ...data.submissions[idx], status: 'cancelled', rejectReason: 'Hết thời gian thanh toán phần còn lại' }
+  data.submissions[idx] = { ...data.submissions[idx], status: 'cancelled', rejectReason: 'Hết thời gián thanh toán phần còn lại' }
+  saveStore(data); return true
+}
+export function expireFlashDisplaySubmission(id: string): boolean {
+  const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false
+  if (data.submissions[idx].status !== 'approved') return false
+  data.submissions[idx] = { ...data.submissions[idx], status: 'cancelled', rejectReason: 'Hết thời gian hiển thị' }
   saveStore(data); return true
 }
 
@@ -342,7 +360,10 @@ export function lockSlot(slot: FlashSlotKey): void {
   delete (data.sessions as any)[slot]; saveStore(data)
 }
 
-export function openAuction(slot: FlashSlotKey): FlashAuctionSession {
+export function openAuction(
+  slot: FlashSlotKey,
+  opts?: { startDelayMinutes?: number; description?: string }
+): FlashAuctionSession {
   const data = getStore(); const session = data.sessions[slot]
   if (session && session.status === 'active') {
     const winner = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)) : undefined
@@ -351,14 +372,29 @@ export function openAuction(slot: FlashSlotKey): FlashAuctionSession {
       confirmation: winner ? 'pending' : undefined,
       depositDeadline: winner ? new Date(Date.now() + DEPOSIT_WINDOW_MS).toISOString() : undefined,
       depositAmount: winner ? Math.ceil(winner.amount * DEPOSIT_RATE) : undefined,
-      paymentDeadline: winner ? new Date(Date.now() + PAYMENT_WINDOW_MS).toISOString() : undefined,
+       paymentDeadline: winner ? new Date(Date.now() + PAYMENT_WINDOW_MS).toISOString() : undefined,
       displayDurationMs: data.settings[slot].displayDurationMs,
     }
     data.history.unshift(ended); data.history = data.history.slice(0, 30)
   }
   data.settings[slot] = { ...data.settings[slot], locked: false }
-  const fresh = newSession(slot, data.settings[slot])
-  data.sessions[slot] = fresh; saveStore(data); return fresh
+  const fresh = newSession(slot, data.settings[slot], opts)
+  data.sessions[slot] = fresh; saveStore(data)
+
+  // 📢 Broadcast thông báo đến tất cả shop
+  const slotLabel = FLASH_SLOTS.find(s => s.key === slot)?.label ?? slot
+  const delayMin = opts?.startDelayMinutes ?? 0
+  const startTimeStr = delayMin > 0
+    ? `sau ${delayMin} phút (${new Date(Date.now() + delayMin * 60000).toLocaleTimeString('vi-VN')})`
+    : 'ngay bây giờ'
+  addNotificationFor('', 'shop', 0, {
+    title: '⚡ Phiên đấu giá Flash Sale mới!',
+    message: `"${slotLabel}" mở đấu giá ${startTimeStr}.${opts?.description ? '\n📋 ' + opts.description : ''}\nVào trang Đấu giá để tham gia!`,
+    type: 'auction_open',
+    action_url: '/shop/auction',
+  })
+
+  return fresh
 }
 
 export function isLocked(slot: FlashSlotKey): boolean { return !!getStore().settings[slot]?.locked }

@@ -79,7 +79,7 @@ const ProductListPage: React.FC = () => {
                 Không tìm thấy shop nào với từ khóa "<strong>{searchQuery}</strong>"
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                 {shops.map((s: any) => (
                   <Link key={s.shop_id} to={`/shop/${s.shop_id}`} style={{ textDecoration: 'none' }}>
                     <div style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border-subtle)', borderRadius: 14, padding: '20px 20px 16px', display: 'flex', gap: 14, alignItems: 'center', transition: 'box-shadow 0.2s, border-color 0.2s' }}

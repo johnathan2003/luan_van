@@ -95,3 +95,11 @@ def require_shipper(current_user: User = Depends(get_current_user)) -> User:
     if "shipper" not in user_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Shipper access required")
     return current_user
+
+
+def require_warehouse_manager(current_user: User = Depends(get_current_user)) -> User:
+    """Quản lý kho — thấy được tất cả đơn, quản lý kho trung chuyển."""
+    user_roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
+    if "warehouse_manager" not in user_roles and "admin" not in user_roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Warehouse manager access required")
+    return current_user

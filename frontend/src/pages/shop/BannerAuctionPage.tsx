@@ -6,6 +6,7 @@ import {
   BANNER_IMAGE_SPECS, ImageSpec,
   formatCountdown, getAllActiveSessions, getHistory, getMinNextBid,
   getShopCooldownRemaining, msUntilEnd,
+  isAuctionLive, msUntilStart,
   placeBid, sweepExpiredWins, getPendingWinsForShop, payDeposit, payWin,
   submitBanner, getSubmissionByHistoryId, getAllSubmissions as getAllBannerSubmissions,
 } from '../../utils/bannerAuctionStore'
@@ -15,15 +16,42 @@ import {
   getAllActiveSessions as getAllFlashSessions, getHistory as getFlashHistory,
   getMinNextBid as getFlashMinNextBid, getShopCooldownRemaining as getFlashCooldown,
   msUntilEnd as flashMsUntilEnd,
+  isAuctionLive as isFlashLive, msUntilStart as flashMsUntilStart,
   placeBid as placeFlashBid, sweepExpiredWins as sweepFlash,
   getPendingWinsForShop as getFlashPendingWins,
   payDeposit as payFlashDeposit, payWin as payFlashWin,
   submitFlashProduct, getFlashSubmissionByHistoryId, getAllFlashSubmissions,
 } from '../../utils/flashSaleAuctionStore'
 import {
-  getBannerDraft, saveBannerDraft,
+  getBannerDraft, saveBannerDraft, saveBannerDraftSafe,
   getFlashDraft, saveFlashDraft,
+  FLASH_PRODUCT_MAX, FlashProductItem,
+  getFlashProductList, saveFlashProduct, clearFlashProduct,
 } from '../../utils/bannerDraftStore'
+import { shopService } from '../../services/shopService'
+import { getImageUrl } from '../../utils/helpers'
+import {
+  PoolSession as FlashPoolSession, PoolSettings as FlashPoolSettings,
+  computeAllocation as computeFlashAlloc,
+  getActiveSession as getFlashPoolSession,
+  getSettings as getFlashPoolSettings,
+  placeBid as placeFlashPoolBid,
+  isAuctionLive as isFlashPoolLive,
+  msUntilEnd as flashPoolMsEnd,
+  msUntilStart as flashPoolMsStart,
+} from '../../utils/flashSalePoolStore'
+import {
+  TOP_SLOTS, TopSlotKey, TopAuctionSession,
+  AuctionAdminSettings as TopAdminSettings,
+  getAllActiveSessions as getAllTopSessions,
+  getHistory as getTopHistory,
+  getAdminSettings as getTopAdminSettings,
+  getMinNextBid as getTopMinNextBid,
+  placeBid as placeTopBid,
+  isAuctionLive as isTopLive,
+  msUntilEnd as msUntilTopEnd,
+  msUntilStart as msUntilTopStart,
+} from '../../utils/topSlotAuctionStore'
 
 // ── Helpers validate ảnh ──────────────────────────────────────────────────────
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -80,6 +108,20 @@ const BannerAuctionPage: React.FC = () => {
   const [bannerSessions, setBannerSessions] = useState<Partial<Record<BannerPositionKey, BannerAuctionSession>>>({})
   const [bannerHistory, setBannerHistory] = useState<BannerAuctionSession[]>([])
   const [selectedBannerPos, setSelectedBannerPos] = useState<BannerPositionKey>('home_slider')
+  const [adminPreviews] = useState<Record<string, string>>(() => {
+    const result: Record<string, string> = {}
+    // Đọc riêng từng key (admin lưu admin_preview_<key>)
+    ;[...BANNER_POSITIONS.map(p => p.key), ...TOP_SLOTS.map(s => s.key)].forEach(key => {
+      try { const v = localStorage.getItem(`admin_preview_${key}`); if (v) result[key] = v } catch {}
+    })
+    // Backward compat: JSON cũ nếu có
+    try {
+      const old = JSON.parse(localStorage.getItem('admin_position_previews') || '{}')
+      Object.keys(old).forEach(k => { if (!result[k]) result[k] = old[k] })
+    } catch {}
+    return result
+  })
+  const getPreview = (key: string, fallback?: string) => adminPreviews[key] || fallback || ''
   const [bidAmounts, setBidAmounts] = useState<Record<string, string>>({})
   const [countdown, setCountdown] = useState<Record<string, string>>({})
 
@@ -101,14 +143,30 @@ const BannerAuctionPage: React.FC = () => {
   const [flashForm, setFlashForm] = useState<{ productName: string; price: string; image: string }>({ productName: '', price: '', image: '' })
   const [flashImgError, setFlashImgError] = useState('')
 
+  // ── State: Flash Sale pool ────────────────────────────────────────────────
+  const [flashPoolSession, setFlashPoolSession] = useState<FlashPoolSession | null>(null)
+  const [flashPoolSettings, setFlashPoolSettings] = useState<FlashPoolSettings>(() => getFlashPoolSettings())
+  const [flashPoolBidAmount, setFlashPoolBidAmount] = useState('')
+  const [flashPoolSlots, setFlashPoolSlots] = useState(1)
+
+  // ── State: Vị trí Top (10 named slots) ───────────────────────────────────
+  const [topSessions, setTopSessions] = useState<Partial<Record<TopSlotKey, TopAuctionSession>>>({})
+  const [topHistory, setTopHistory] = useState<TopAuctionSession[]>([])
+  const [topAdminSettings, setTopAdminSettings] = useState<Record<TopSlotKey, TopAdminSettings>>({} as any)
+  const [selectedTopSlot, setSelectedTopSlot] = useState<TopSlotKey>('top_1')
+  const [topBidAmounts, setTopBidAmounts] = useState<Record<string, string>>({})
+
+  const [poolTick, setPoolTick] = useState(0)
+
   // ── State: tab ────────────────────────────────────────────────────────────
-  const [tab, setTab] = useState<'banner' | 'flash' | 'mytx' | 'prepare'>('banner')
+  const [tab, setTab] = useState<'banner' | 'flash' | 'top' | 'mytx' | 'prepare'>('banner')
 
   // ── State: banner position dropdown ───────────────────────────────────────
   const [bannerDropOpen, setBannerDropOpen] = useState(false)
   const bannerDropRef = useRef<HTMLDivElement>(null)
 
   // ── State: chuẩn bị mẫu ───────────────────────────────────────────────────
+  const [prepTab, setPrepTab] = useState<'banner' | 'flash' | 'top'>('banner')
   const [prepBannerPos, setPrepBannerPos] = useState<BannerPositionKey>('home_slider')
   const [prepFlashSlot, setPrepFlashSlot] = useState<FlashSlotKey>('flash_slot_1')
   const [prepBannerForms, setPrepBannerForms] = useState<Record<string, { title: string; link: string; image: string }>>({})
@@ -119,6 +177,38 @@ const BannerAuctionPage: React.FC = () => {
   const [flashDraftsExist, setFlashDraftsExist] = useState<Record<string, boolean>>({})
   const [prepBannerSaved, setPrepBannerSaved] = useState<Record<string, boolean>>({})
   const [prepFlashSaved, setPrepFlashSaved] = useState<Record<string, boolean>>({})
+  // ── State: sản phẩm shop thật (từ API) dùng cho picker Flash Sale ────────
+  const [shopProducts, setShopProducts] = useState<{ id: number; name: string; price: number; image: string }[]>([])
+  useEffect(() => {
+    shopService.getProducts().then((res: any) => {
+      const raw: any[] = res?.data?.products || []
+      const filtered = raw
+        .filter((p: any) => p.status === 'active' || p.status === 'approved')
+        .map((p: any) => ({
+          id: p.product_id,
+          name: p.product_name,
+          price: Number(p.price) || 0,
+          image: getImageUrl(p.image_urls?.[0]),
+        }))
+      setShopProducts(filtered)
+    }).catch(() => { /* giữ rỗng nếu API lỗi */ })
+  }, [])
+
+  // ── State: danh sách 20 sản phẩm Flash Sale chuẩn bị ─────────────────────
+  const [pickerOpenIdx, setPickerOpenIdx] = useState<number | null>(null)
+  const [flashProductForms, setFlashProductForms] = useState<(Partial<{ productName: string; price: string; productImage: string }> | null)[]>(
+    () => Array(FLASH_PRODUCT_MAX).fill(null)
+  )
+  const [flashProductPreviews, setFlashProductPreviews] = useState<(string | null)[]>(
+    () => Array(FLASH_PRODUCT_MAX).fill(null)
+  )
+  const [flashProductSaved, setFlashProductSaved] = useState<boolean[]>(
+    () => Array(FLASH_PRODUCT_MAX).fill(false)
+  )
+
+  // Preview tạm (objectURL) — chỉ để hiển thị, không lưu localStorage
+  const [bannerPreview, setBannerPreview] = useState<Record<string, string>>({})
+  const [flashPreview, setFlashPreview] = useState<Record<string, string>>({})
 
   // ── State: payment countdown (ms còn lại đến paymentDeadline) ────────────
   const [payCountdowns, setPayCountdowns] = useState<Record<string, number>>({})
@@ -167,6 +257,11 @@ const BannerAuctionPage: React.FC = () => {
     const bEx: Record<string, boolean> = {}
     BANNER_POSITIONS.forEach(p => { bEx[p.key] = !!getBannerDraft(p.key, SHOP_NAME) })
     setBannerDraftsExist(bEx)
+
+    // Load flash product list
+    const fpList = getFlashProductList(SHOP_NAME)
+    setFlashProductForms(fpList.map(item => item ? { productName: item.productName, price: String(item.price), productImage: item.productImage } : null))
+    setFlashProductSaved(fpList.map(item => !!item))
     // Chỉ khởi tạo saved=true cho draft đã có sẵn (lần đầu load), không override khi user đang edit
     setPrepBannerSaved(prev => {
       const next = { ...prev }
@@ -195,10 +290,18 @@ const BannerAuctionPage: React.FC = () => {
     setFlashHistory(getFlashHistory())
     setPendingFlashWins(getFlashPendingWins(SHOP_NAME))
   }
+  const refreshPools = () => {
+    setFlashPoolSession(getFlashPoolSession())
+    setFlashPoolSettings(getFlashPoolSettings())
+    setTopSessions({ ...getAllTopSessions() })
+    setTopHistory(getTopHistory())
+    setTopAdminSettings({ ...getTopAdminSettings() })
+    setPoolTick(t => t + 1)
+  }
 
   useEffect(() => {
-    refresh(); refreshFlash(); checkDrafts()
-    const pollId = setInterval(() => { refresh(); refreshFlash() }, 2000)
+    refresh(); refreshFlash(); refreshPools(); checkDrafts()
+    const pollId = setInterval(() => { refresh(); refreshFlash(); refreshPools() }, 2000)
     return () => clearInterval(pollId)
   }, [])
 
@@ -349,14 +452,20 @@ const BannerAuctionPage: React.FC = () => {
                       <span>💰 Số tiền cọc: <b style={{ color: C.orange }}>{depositAmt.toLocaleString('vi-VN')}đ</b> <span style={{ color: C.gray, fontSize: 12 }}>(20% giá thắng)</span></span>
                       <span>⏱ Hạn đặt cọc: <b>{depositDeadline?.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</b> hôm nay</span>
                       <span style={{ color: '#DC2626' }}>⚠️ Không đặt cọc trong {minLeft} phút → <b>kết quả thắng bị huỷ tự động</b></span>
-                      <span>✅ Sau khi đặt cọc thành công, bạn cần thanh toán đủ 100% để đăng banner.</span>
+                      <span>✅ Sau khi đặt cọc: mẫu banner sẽ tự gửi Admin duyệt. Thanh toán đủ 100% để banner đi vào hoạt động.</span>
                     </div>
                   </div>
 
                   <div style={{ display: 'flex', gap: 10 }}>
                     <button style={{ ...btnStyle(C.orange), fontSize: 14, padding: '10px 24px' }}
                       onClick={() => {
-                        const ok = kind === 'banner' ? payDeposit(w.id) : payFlashDeposit(w.id)
+                        let ok: boolean
+                        if (kind === 'banner') {
+                          const bDraft = getBannerDraft((w as BannerAuctionSession).position, SHOP_NAME)
+                          ok = payDeposit(w.id, bDraft ? { title: bDraft.title, link: bDraft.link, image: bDraft.image } : undefined)
+                        } else {
+                          ok = payFlashDeposit(w.id)
+                        }
                         if (ok) {
                           refresh(); refreshFlash()
                           toast.success(`💰 Đặt cọc ${depositAmt.toLocaleString('vi-VN')}đ thành công! Vào tab Giao dịch để thanh toán phần còn lại.`)
@@ -444,8 +553,8 @@ const BannerAuctionPage: React.FC = () => {
 
       {/* ── Tabs ─────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {([['banner', '🖼️ Banner'], ['flash', '⚡ Flash Sale'], ['mytx', '📒 Giao dịch của tôi'], ['prepare', '⚙️ Chuẩn bị']] as const).map(([t, label]) => (
-          <button key={t} onClick={() => setTab(t)} style={{ ...btnStyle(tab === t ? C.primary : 'transparent', tab === t ? 'white' : C.gray), border: `1px solid ${tab === t ? C.primary : C.border}`, position: 'relative' }}>
+        {([['banner', '🖼️ Banner'], ['flash', '⚡ Flash Sale'], ['top', '🏆 Vị trí Top'], ['mytx', '📒 Giao dịch của tôi'], ['prepare', '⚙️ Chuẩn bị']] as const).map(([t, label]) => (
+          <button key={t} onClick={() => setTab(t)} style={{ ...btnStyle(tab === t ? (t === 'top' ? C.purple : C.primary) : 'transparent', tab === t ? 'white' : C.gray), border: `1px solid ${tab === t ? (t === 'top' ? C.purple : C.primary) : C.border}`, position: 'relative' }}>
             {t === 'prepare' && (Object.values(bannerDraftsExist).some(Boolean) || Object.values(flashDraftsExist).some(Boolean)) && (
               <span style={{ position: 'absolute', top: -4, right: -4, width: 8, height: 8, borderRadius: '50%', background: C.primary, border: '2px solid var(--bg-card)' }} />
             )}
@@ -454,253 +563,414 @@ const BannerAuctionPage: React.FC = () => {
         ))}
       </div>
 
-      {/* ── Banner tab ────────────────────────────────────────────────────── */}
+      {/* ── Banner tab — hiển thị cả 3 vị trí ──────────────────────────── */}
       {tab === 'banner' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
-          {/* ── Cột trái: chọn vị trí + đấu giá ── */}
-          <div>
-            {/* Custom position dropdown */}
-            {(() => {
-              const selected = BANNER_POSITIONS.find(p => p.key === selectedBannerPos)!
-              return (
-                <div ref={bannerDropRef} style={{ position: 'relative', marginBottom: 16 }}>
-                  <div onClick={() => setBannerDropOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', border: `1.5px solid ${bannerDropOpen ? C.primary : C.border}`, borderRadius: 10, background: 'var(--bg-card)', cursor: 'pointer', userSelect: 'none' }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{selected.label}</div>
-                      <div style={{ fontSize: 12, color: C.gray, marginTop: 2 }}>{selected.description.slice(0, 60)}…</div>
-                    </div>
-                    <span style={{ fontSize: 18, color: C.gray, marginLeft: 10, display: 'inline-block', transform: bannerDropOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>⌄</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {BANNER_POSITIONS.map(pos => {
+            const session  = bannerSessions[pos.key]
+            const minBid   = getMinNextBid(pos.key)
+            const cooldown = getShopCooldownRemaining(pos.key, SHOP_NAME)
+            const preview  = getPreview(pos.key, pos.previewImage)
+
+            return (
+              <div key={pos.key} style={cardStyle}>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>{pos.label}</h3>
+                    <p style={{ color: C.gray, fontSize: 12, margin: '4px 0 0' }}>{pos.description}</p>
                   </div>
-                  {bannerDropOpen && (
-                    <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, background: 'var(--bg-card)', border: `1.5px solid ${C.border}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 50, overflow: 'hidden' }}>
-                      {BANNER_POSITIONS.map((p, i) => {
-                        const isSel = p.key === selectedBannerPos
-                        return (
-                          <div key={p.key} onClick={() => { setSelectedBannerPos(p.key); setBannerDropOpen(false) }}
-                            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', background: isSel ? C.primaryLight : 'transparent', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}
-                            onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-highlight)' }}
-                            onMouseLeave={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = isSel ? C.primaryLight : 'transparent' }}
-                          >
-                            {p.previewImage && <img src={p.previewImage} alt="" style={{ width: 56, height: 36, objectFit: 'cover', borderRadius: 6, border: `1px solid ${C.border}`, flexShrink: 0 }} />}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontWeight: 700, fontSize: 13, color: isSel ? C.primary : 'var(--text-primary)' }}>{p.label}</div>
-                              <div style={{ fontSize: 11, color: C.gray, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.description}</div>
-                            </div>
-                            {isSel && <span style={{ color: C.primary, fontSize: 16, flexShrink: 0 }}>✓</span>}
-                          </div>
-                        )
-                      })}
+                  {session && (
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      {isAuctionLive(session) ? (
+                        <>
+                          <div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {countdown[pos.key] || '–'}</div>
+                          <div style={{ fontSize: 11, color: C.gray }}>còn lại</div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: '#D97706' }}>⏳ {formatCountdown(msUntilStart(session))}</div>
+                          <div style={{ fontSize: 11, color: C.gray }}>đến khi bắt đầu</div>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
-              )
-            })()}
 
-            {currentBannerSession ? (
+                {session ? (
+                  <>
+                    {!isAuctionLive(session) && (
+                      <div style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid #FCD34D', borderRadius: 10, padding: '16px 18px', marginBottom: 16 }}>
+                        <p style={{ margin: '0 0 6px', fontWeight: 700, color: '#92400E' }}>⏰ Phiên đấu giá sắp khai mạc!</p>
+                        {session.description && <p style={{ margin: '0 0 6px', fontSize: 13, color: '#78350F', whiteSpace: 'pre-line' }}>📋 {session.description}</p>}
+                        <p style={{ margin: 0, fontSize: 12, color: '#92400E' }}>Khai mạc lúc: <b>{session.scheduledStartAt ? new Date(session.scheduledStartAt).toLocaleString('vi-VN') : '–'}</b></p>
+                        <p style={{ margin: '6px 0 0', fontSize: 12, color: '#B45309' }}>Bạn có thể xem thông tin phiên nhưng chưa thể đặt giá.</p>
+                      </div>
+                    )}
+
+                    {preview && (
+                      <div style={{ marginBottom: 16, borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}` }}>
+                        <img src={preview} alt={pos.label} style={{ width: '100%', maxHeight: pos.key === 'home_slider' ? 200 : pos.key === 'mall_ads_main' ? 420 : 300, objectFit: 'contain', display: 'block', background: '#f3f4f6' }} />
+                      </div>
+                    )}
+
+                    <div style={{ marginBottom: 16 }}>
+                      <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Bảng đấu giá ({session.bids.length} lượt)</p>
+                      <div style={{ maxHeight: 200, overflowY: 'auto', borderRadius: 8, border: `1px solid ${C.border}` }}>
+                        {session.bids.slice(0, 20).map((bid, i) => (
+                          <div key={bid.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 14px', borderBottom: `1px solid ${C.border}`, background: i === 0 ? C.primaryLight : 'transparent' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {bid.bannerImage && <img src={bid.bannerImage} alt="" style={{ width: 36, height: 24, objectFit: 'cover', borderRadius: 4, border: `1px solid ${C.border}` }} />}
+                              <span style={{ fontSize: 13, fontWeight: i === 0 ? 700 : 400 }}>
+                                {i === 0 && '👑 '}{bid.shopName}
+                                {bid.shopName === SHOP_NAME && <span style={{ ...badgeStyle(C.primary, C.primaryLight), marginLeft: 6 }}>Bạn</span>}
+                              </span>
+                            </div>
+                            <span style={{ fontWeight: 700, color: i === 0 ? C.primary : 'inherit' }}>{bid.amount.toLocaleString('vi-VN')}đ</span>
+                          </div>
+                        ))}
+                        {session.bids.length === 0 && <p style={{ padding: 14, color: C.gray, fontSize: 13 }}>Chưa có ai đặt giá — hãy là người đầu tiên!</p>}
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {[0, 50_000, 100_000, 200_000, 500_000].map(extra => {
+                        const val = minBid + extra
+                        return (
+                          <button key={extra} onClick={() => setBidAmounts(p => ({ ...p, [pos.key]: String(val) }))}
+                            style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${C.border}`, background: bidAmounts[pos.key] === String(val) ? C.primary : 'transparent', color: bidAmounts[pos.key] === String(val) ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
+                            {extra === 0 ? 'Tối thiểu' : `+${(extra / 1000).toFixed(0)}k`} ({val.toLocaleString('vi-VN')}đ)
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input type="text"
+                        placeholder={`Tối thiểu ${minBid.toLocaleString('vi-VN')}đ`}
+                        value={bidAmounts[pos.key] || ''}
+                        onChange={e => { const raw = e.target.value.replace(/[^\d]/g, ''); setBidAmounts(p => ({ ...p, [pos.key]: raw ? Number(raw).toLocaleString('vi-VN') : '' })) }}
+                        style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }}
+                      />
+                      <button
+                        style={btnStyle(!isAuctionLive(session) || cooldown > 0 ? '#9CA3AF' : C.primary)}
+                        disabled={!isAuctionLive(session) || cooldown > 0}
+                        onClick={() => {
+                          const amount = parseInt((bidAmounts[pos.key] || '').replace(/[^\d]/g, ''))
+                          if (!amount) { toast.error('Vui lòng nhập số tiền đặt giá'); return }
+                          const result = placeBid(pos.key, SHOP_NAME, amount)
+                          if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
+                          toast.success('✅ Đặt giá thành công!'); setBidAmounts(p => ({ ...p, [pos.key]: '' })); refresh()
+                        }}>
+                        {!isAuctionLive(session) ? '⏳ Chưa bắt đầu' : cooldown > 0 ? `Chờ ${Math.ceil(cooldown / 1000)}s` : '🏹 Đặt giá'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p style={{ color: C.gray }}>🔒 Vị trí này đang bị Admin tạm khoá hoặc chưa mở phiên đấu giá.</p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Flash Sale Pool tab ───────────────────────────────────────────── */}
+      {tab === 'flash' && (() => {
+        const s = flashPoolSession
+        const live = s && isFlashPoolLive(s)
+        const msEnd = s ? flashPoolMsEnd(s) : 0
+        const msStart = s ? flashPoolMsStart(s) : 0
+        const basePrice = flashPoolSettings.basePrice
+        const maxSlots = s ? s.maxSlotsPerShop : flashPoolSettings.maxSlotsPerShop
+        const totalSlots = s ? s.totalSlots : flashPoolSettings.totalSlots
+        const allocation = s ? computeFlashAlloc(s.bids, s.totalSlots) : []
+        const myAlloc = allocation.find(a => a.shopName === SHOP_NAME)
+        const slotsFilled = s ? Math.min(s.bids.reduce((acc, b) => acc + b.slotsRequested, 0), s.totalSlots) : 0
+        const myExistingBid = s?.bids.find(b => b.shopName === SHOP_NAME)
+
+        const handleBid = () => {
+          const amount = parseInt(flashPoolBidAmount.replace(/[^\d]/g, ''))
+          if (!amount) { toast.error('Vui lòng nhập giá/slot'); return }
+          const r = placeFlashPoolBid(SHOP_NAME, amount, flashPoolSlots)
+          if (!r.ok) { toast.error(r.error || 'Không thể đặt giá'); return }
+          toast.success(`✅ Đặt giá thành công! ${flashPoolSlots} slot × ${amount.toLocaleString('vi-VN')}đ/slot`)
+          setFlashPoolBidAmount(''); refreshPools()
+        }
+
+        return (
+          <>
+            <div style={{ background: C.orangeLight, border: `1px solid ${C.orange}44`, borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 13 }}>
+              <b style={{ color: C.orange }}>⚡ Flash Sale Pool — {totalSlots} slot</b>
+              <span style={{ color: C.gray, marginLeft: 8 }}>Đặt giá/slot, xếp cao → thấp, top {totalSlots} slot được chọn. Tối đa {maxSlots} slot/shop.</span>
+            </div>
+
+            {s ? (
               <div style={cardStyle}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                {/* Header + countdown */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                   <div>
-                    <h3 style={{ margin: 0 }}>{bannerDef.label}</h3>
-                    <p style={{ color: C.gray, fontSize: 12, margin: '4px 0 0' }}>{bannerDef.description}</p>
+                    <h3 style={{ margin: 0, marginBottom: 4 }}>⚡ Flash Sale Trang chủ</h3>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {live
+                        ? <span style={{ background: C.orangeLight, color: C.orange, borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>🟢 Đang mở</span>
+                        : <span style={{ background: 'rgba(251,191,36,0.15)', color: '#92400E', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>⏳ Sắp bắt đầu</span>
+                      }
+                      <span style={{ background: C.orangeLight, color: C.orange, borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>{slotsFilled}/{totalSlots} slot đã đặt</span>
+                      {myAlloc && <span style={{ background: C.primaryLight, color: C.primary, borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>✅ Bạn: {myAlloc.slotsAssigned} slot (#{myAlloc.rank})</span>}
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {countdown[selectedBannerPos] || '–'}</div>
-                    <div style={{ fontSize: 11, color: C.gray }}>còn lại</div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    {live
+                      ? <><div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {fmtMmSs(msEnd)}</div><div style={{ fontSize: 11, color: C.gray }}>còn lại</div></>
+                      : <><div style={{ fontSize: 18, fontWeight: 700, color: '#D97706' }}>⏳ {fmtMmSs(msStart)}</div><div style={{ fontSize: 11, color: C.gray }}>đến khi bắt đầu</div></>
+                    }
                   </div>
                 </div>
 
-                {/* Preview ảnh vị trí */}
-                {bannerDef.previewImage && (
-                  <div style={{ marginBottom: 16, borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}` }}>
-                    <img src={bannerDef.previewImage} alt={bannerDef.label}
-                      style={{ width: '100%', maxHeight: 160, objectFit: 'cover', display: 'block' }} />
+                {(() => { try { return localStorage.getItem('admin_img_flash_pool') } catch { return '' } })() && (
+                  <img src={(() => { try { return localStorage.getItem('admin_img_flash_pool') || '' } catch { return '' } })()} alt="Flash Sale"
+                    style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 10, marginBottom: 14, display: 'block', border: `1px solid ${C.border}` }} />
+                )}
+                {!live && s.scheduledStartAt && (
+                  <div style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid #FCD34D', borderRadius: 10, padding: '12px 16px', marginBottom: 14 }}>
+                    <p style={{ margin: '0 0 4px', fontWeight: 700, color: '#92400E' }}>⏰ Phiên Flash Sale sắp khai mạc!</p>
+                    {s.description && <p style={{ margin: '0 0 4px', fontSize: 13, color: '#78350F' }}>📋 {s.description}</p>}
+                    <p style={{ margin: 0, fontSize: 12, color: '#92400E' }}>Khai mạc lúc: <b>{new Date(s.scheduledStartAt).toLocaleString('vi-VN')}</b></p>
                   </div>
                 )}
 
-                {/* Top bids */}
-                <div style={{ marginBottom: 16 }}>
-                  <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Bảng đấu giá ({currentBannerSession.bids.length} lượt)</p>
-                  <div style={{ maxHeight: 200, overflowY: 'auto', borderRadius: 8, border: `1px solid ${C.border}` }}>
-                    {currentBannerSession.bids.slice(0, 20).map((bid, i) => (
-                      <div key={bid.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 14px', borderBottom: `1px solid ${C.border}`, background: i === 0 ? C.primaryLight : 'transparent' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          {bid.bannerImage && <img src={bid.bannerImage} alt="" style={{ width: 36, height: 24, objectFit: 'cover', borderRadius: 4, border: `1px solid ${C.border}` }} />}
-                          <span style={{ fontSize: 13, fontWeight: i === 0 ? 700 : 400 }}>
-                            {i === 0 && '👑 '}{bid.shopName}
-                            {bid.shopName === SHOP_NAME && <span style={{ ...badgeStyle(C.primary, C.primaryLight), marginLeft: 6 }}>Bạn</span>}
+                {/* Bid form */}
+                {live && (
+                  <div style={{ background: 'rgba(234,88,12,0.04)', border: `1px solid ${C.orange}33`, borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: C.orange, marginBottom: 10 }}>
+                      {myExistingBid ? `📝 Cập nhật giá (đang đặt ${myExistingBid.amountPerSlot.toLocaleString('vi-VN')}đ/slot × ${myExistingBid.slotsRequested} slot)` : '💰 Đặt giá Flash Sale'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, width: '100%' }}>
+                        {[0, 50_000, 100_000, 200_000, 500_000].map(extra => {
+                          const val = basePrice + extra
+                          const formatted = val.toLocaleString('vi-VN')
+                          return (
+                            <button key={extra} onClick={() => setFlashPoolBidAmount(formatted)}
+                              style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${flashPoolBidAmount === formatted ? C.orange : C.border}`, background: flashPoolBidAmount === formatted ? C.orange : 'transparent', color: flashPoolBidAmount === formatted ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
+                              {extra === 0 ? 'Tối thiểu' : `+${(extra/1000).toFixed(0)}k`} ({val.toLocaleString('vi-VN')}đ)
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <label style={{ fontSize: 12, color: C.gray, flex: 1, minWidth: 160 }}>
+                        Giá/slot (đ) — tối thiểu {basePrice.toLocaleString('vi-VN')}đ
+                        <input type="text" value={flashPoolBidAmount}
+                          onChange={e => { const raw = e.target.value.replace(/[^\d]/g, ''); setFlashPoolBidAmount(raw ? Number(raw).toLocaleString('vi-VN') : '') }}
+                          placeholder={basePrice.toLocaleString('vi-VN')}
+                          style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }} />
+                      </label>
+                      <label style={{ fontSize: 12, color: C.gray }}>
+                        Số slot muốn đặt
+                        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                          {Array.from({ length: maxSlots }, (_, i) => i + 1).map(n => (
+                            <button key={n} onClick={() => setFlashPoolSlots(n)}
+                              style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${flashPoolSlots === n ? C.orange : C.border}`, background: flashPoolSlots === n ? C.orange : 'transparent', color: flashPoolSlots === n ? 'white' : C.gray, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                      </label>
+                      <button style={{ ...btnStyle(C.orange), padding: '9px 20px' }} onClick={handleBid}>
+                        ⚡ {myExistingBid ? 'Cập nhật giá' : 'Đặt giá'}
+                      </button>
+                    </div>
+                    {flashPoolBidAmount && (
+                      <div style={{ marginTop: 8, fontSize: 12, color: C.orange }}>
+                        Tổng ước tính: <b>{((parseInt(flashPoolBidAmount) || 0) * flashPoolSlots).toLocaleString('vi-VN')}đ</b> cho {flashPoolSlots} slot
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Leaderboard */}
+                <div>
+                  <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: C.orange }}>📊 Bảng xếp hạng — {s.bids.length} shop đặt giá</p>
+                  <div style={{ maxHeight: 280, overflowY: 'auto', borderRadius: 8, border: `1px solid ${C.border}` }}>
+                    {allocation.length === 0
+                      ? <p style={{ padding: 14, color: C.gray, fontSize: 13, textAlign: 'center' }}>Chưa có ai đặt giá — hãy là người đầu tiên!</p>
+                      : allocation.map(a => (
+                        <div key={a.rank} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 14px', borderBottom: `1px solid ${C.border}`, background: a.shopName === SHOP_NAME ? C.orangeLight : a.rank === 1 ? 'rgba(234,88,12,0.04)' : 'transparent' }}>
+                          <span style={{ fontSize: 13 }}>
+                            {a.rank === 1 && '👑 '}
+                            <b style={{ color: C.orange }}>#{a.rank}</b> {a.shopName}
+                            {a.shopName === SHOP_NAME && <span style={{ background: C.orangeLight, color: C.orange, borderRadius: 999, padding: '1px 8px', fontSize: 11, fontWeight: 700, marginLeft: 6 }}>Bạn</span>}
+                          </span>
+                          <span style={{ fontSize: 12, color: C.gray, textAlign: 'right' }}>
+                            {a.amountPerSlot.toLocaleString('vi-VN')}đ/slot × {a.slotsAssigned} slot
+                            <br />
+                            <span style={{ color: C.orange, fontWeight: 700 }}>Slot {a.slotNumbers.slice(0, 3).map(n => `#${n}`).join(', ')}{a.slotNumbers.length > 3 ? '...' : ''}</span>
                           </span>
                         </div>
-                        <span style={{ fontWeight: 700, color: i === 0 ? C.primary : 'inherit' }}>{bid.amount.toLocaleString('vi-VN')}đ</span>
+                      ))
+                    }
+                    {s.bids.reduce((acc, b) => acc + b.slotsRequested, 0) < s.totalSlots && (
+                      <div style={{ padding: '8px 14px', fontSize: 12, color: C.gray, textAlign: 'center' }}>
+                        Còn <b style={{ color: C.orange }}>{s.totalSlots - Math.min(s.bids.reduce((acc, b) => acc + b.slotsRequested, 0), s.totalSlots)}</b> slot trống
                       </div>
-                    ))}
-                    {currentBannerSession.bids.length === 0 && <p style={{ padding: 14, color: C.gray, fontSize: 13 }}>Chưa có ai đặt giá — hãy là người đầu tiên!</p>}
+                    )}
                   </div>
-                </div>
-
-                {/* Bid form */}
-                <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {[0, 50_000, 100_000, 200_000, 500_000].map(extra => {
-                    const val = minBannerBid + extra
-                    return (
-                      <button key={extra} onClick={() => setBidAmounts(p => ({ ...p, [selectedBannerPos]: String(val) }))}
-                        style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${C.border}`, background: bidAmounts[selectedBannerPos] === String(val) ? C.primary : 'transparent', color: bidAmounts[selectedBannerPos] === String(val) ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
-                        {extra === 0 ? 'Tối thiểu' : `+${(extra / 1000).toFixed(0)}k`} ({val.toLocaleString('vi-VN')}đ)
-                      </button>
-                    )
-                  })}
-                </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <input
-                    type="number" min={minBannerBid} step={50000}
-                    placeholder={`Tối thiểu ${minBannerBid.toLocaleString('vi-VN')}đ`}
-                    value={bidAmounts[selectedBannerPos] || ''}
-                    onChange={e => setBidAmounts(p => ({ ...p, [selectedBannerPos]: e.target.value }))}
-                    style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }}
-                  />
-                  <button style={btnStyle(bannerCooldown > 0 ? '#9CA3AF' : C.primary)} disabled={bannerCooldown > 0} onClick={handlePlaceBannerBid}>
-                    {bannerCooldown > 0 ? `Chờ ${Math.ceil(bannerCooldown / 1000)}s` : '🏹 Đặt giá'}
-                  </button>
                 </div>
               </div>
             ) : (
               <div style={cardStyle}>
-                <p style={{ color: C.gray }}>🔒 Vị trí này đang bị Admin tạm khoá hoặc chưa mở phiên đấu giá.</p>
+                <p style={{ color: C.gray }}>🔒 Admin chưa mở phiên đấu giá Flash Sale. Vui lòng quay lại sau.</p>
               </div>
             )}
-          </div>
+          </>
+        )
+      })()}
 
-          {/* ── Cột phải: lịch sử phiên ── */}
-          <div>
-            <h3 style={{ marginBottom: 12, fontSize: 14, fontWeight: 700 }}>📋 Lịch sử phiên banner</h3>
-            {bannerHistory.length === 0
-              ? <div style={{ ...cardStyle, padding: '12px 16px' }}><p style={{ color: C.gray, fontSize: 13 }}>Chưa có lịch sử.</p></div>
-              : bannerHistory.slice(0, 10).map(h => {
-                  const sub = getSubmissionByHistoryId(h.id)
-                  return (
-                    <div key={h.id} style={{ ...cardStyle, padding: '12px 14px', marginBottom: 10 }}>
-                      {/* Banner image nếu có */}
-                      {sub?.image && (
-                        <img src={sub.image} alt="banner" style={{ width: '100%', height: 72, objectFit: 'cover', borderRadius: 6, marginBottom: 8, border: `1px solid ${C.border}` }} />
-                      )}
-                      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-                        {BANNER_POSITIONS.find(p => p.key === h.position)?.label}
-                      </div>
-                      <div style={{ fontSize: 11, color: C.gray, marginBottom: 6 }}>
-                        {new Date(h.startedAt).toLocaleDateString('vi-VN')}
-                      </div>
-                      <span style={badgeStyle(
-                        h.confirmation === 'paid' ? C.primary : h.confirmation === 'expired' || h.confirmation === 'declined' ? '#DC2626' : C.orange,
-                        h.confirmation === 'paid' ? C.primaryLight : h.confirmation === 'expired' || h.confirmation === 'declined' ? 'rgba(220,38,38,0.1)' : C.orangeLight,
-                      )}>
-                        {h.winner ? `${h.winner.shopName} — ${h.winner.amount.toLocaleString('vi-VN')}đ` : 'Không có người thắng'}
-                      </span>
-                      {sub && sub.status !== 'rejected' && (
-                        <div style={{ marginTop: 6 }}>
-                          <span style={badgeStyle(sub.status === 'approved' ? C.primary : C.orange, sub.status === 'approved' ? C.primaryLight : C.orangeLight)}>
-                            {sub.status === 'approved' ? '✅ Đã duyệt' : '⏳ Chờ duyệt'}
-                          </span>
-                        </div>
-                      )}
-                      {sub && sub.status === 'rejected' && (
-                        <div style={{ marginTop: 6 }}>
-                          <button
-                            onClick={() => setRejectedModal({ kind: 'banner', sub })}
-                            style={{ background: 'rgba(220,38,38,0.1)', color: '#DC2626', border: '1px solid rgba(220,38,38,0.25)', borderRadius: 8, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                            ❌ Bị từ chối — Xem chi tiết
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })
-            }
-          </div>
-        </div>
-      )}
+      {/* ── Vị trí Top tab (10 named positions) ──────────────────────────── */}
+      {tab === 'top' && (() => {
+        const slotDef = TOP_SLOTS.find(s => s.key === selectedTopSlot) ?? TOP_SLOTS[0]
+        const session = topSessions[selectedTopSlot] ?? null
+        const settings = topAdminSettings[selectedTopSlot]
+        const basePrice = settings?.basePrice ?? slotDef.basePrice
+        const live = session ? isTopLive(session) : false
+        const msEnd = session ? msUntilTopEnd(session) : 0
+        const msStart = session ? msUntilTopStart(session) : 0
+        const myBid = session?.bids.find(b => b.shopName === SHOP_NAME)
+        const minNext = getTopMinNextBid(selectedTopSlot)
+        const bidVal = topBidAmounts[selectedTopSlot] ?? ''
+        const openSlots = TOP_SLOTS.filter(s => !!topSessions[s.key])
 
-      {/* ── Flash tab ─────────────────────────────────────────────────────── */}
-      {tab === 'flash' && (
-        <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-            {FLASH_SLOTS.map(s => (
-              <button key={s.key} onClick={() => setSelectedFlashSlot(s.key)}
-                style={{ ...btnStyle(selectedFlashSlot === s.key ? C.orange : 'transparent', selectedFlashSlot === s.key ? 'white' : C.gray), border: `1px solid ${selectedFlashSlot === s.key ? C.orange : C.border}`, fontSize: 12 }}>
-                {s.label}
-              </button>
-            ))}
-          </div>
+        const handleBid = () => {
+          const amount = parseInt(bidVal.replace(/[^\d]/g, ''))
+          if (!amount) { toast.error('Vui lòng nhập giá đấu'); return }
+          const r = placeTopBid(selectedTopSlot, SHOP_NAME, '(sản phẩm sẽ xác nhận sau)', amount)
+          if (!r.ok) { toast.error(r.error || 'Không thể đặt giá'); return }
+          toast.success(`✅ Đặt giá thành công! ${amount.toLocaleString('vi-VN')}đ cho ${slotDef.label}`)
+          setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: '' }))
+          refreshPools()
+        }
 
-          {currentFlashSession ? (
+        return (
+          <>
+            <div style={{ background: C.purpleLight, border: `1px solid ${C.purple}44`, borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 13 }}>
+              <b style={{ color: C.purple }}>🏆 Vị trí Top Trang chủ — 10 vị trí ưu tiên</b>
+              <span style={{ color: C.gray, marginLeft: 8 }}>Chọn vị trí và đặt giá. Shop trả giá cao nhất thắng vị trí đó.</span>
+            </div>
+
+            {/* Slot grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: 16 }}>
+              {TOP_SLOTS.map(sl => {
+                const isOpen = !!topSessions[sl.key]
+                const isSel = sl.key === selectedTopSlot
+                return (
+                  <button key={sl.key} onClick={() => setSelectedTopSlot(sl.key)}
+                    style={{ padding: '10px 8px', borderRadius: 10, border: `2px solid ${isSel ? C.purple : isOpen ? C.purple + '55' : C.border}`, background: isSel ? C.purple : isOpen ? C.purpleLight : C.cardBg, color: isSel ? 'white' : isOpen ? C.purple : C.gray, fontWeight: isSel ? 700 : 400, fontSize: 12, cursor: 'pointer', textAlign: 'center' }}>
+                    <div style={{ fontSize: 14, marginBottom: 2 }}>{sl.label}</div>
+                    <div style={{ fontSize: 10, opacity: 0.8 }}>{isOpen ? '🟢 Đang mở' : '⏸ Chưa mở'}</div>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Selected slot detail */}
             <div style={cardStyle}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                 <div>
-                  <h3 style={{ margin: 0 }}>{flashSlotDef.label}</h3>
-                  <p style={{ color: C.gray, fontSize: 12, margin: '4px 0 0' }}>{flashSlotDef.description}</p>
+                  <h3 style={{ margin: '0 0 4px' }}>🏆 {slotDef.label}</h3>
+                  <p style={{ margin: 0, fontSize: 12, color: C.gray }}>{slotDef.description}</p>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {countdown[selectedFlashSlot] || '–'}</div>
-                  <div style={{ fontSize: 11, color: C.gray }}>còn lại</div>
-                </div>
+                {session && (
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    {live
+                      ? <><div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {fmtMmSs(msEnd)}</div><div style={{ fontSize: 11, color: C.gray }}>còn lại</div></>
+                      : <><div style={{ fontSize: 18, fontWeight: 700, color: '#D97706' }}>⏳ {fmtMmSs(msStart)}</div><div style={{ fontSize: 11, color: C.gray }}>đến khi bắt đầu</div></>
+                    }
+                  </div>
+                )}
               </div>
 
-              <div style={{ marginBottom: 16 }}>
-                <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Bảng đấu giá ({currentFlashSession.bids.length} lượt)</p>
-                <div style={{ maxHeight: 200, overflowY: 'auto', borderRadius: 8, border: `1px solid ${C.border}` }}>
-                  {currentFlashSession.bids.slice(0, 20).map((bid, i) => (
-                    <div key={bid.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 14px', borderBottom: `1px solid ${C.border}`, background: i === 0 ? C.orangeLight : 'transparent' }}>
-                      <span style={{ fontSize: 13, fontWeight: i === 0 ? 700 : 400 }}>
-                        {i === 0 && '👑 '}{bid.shopName}
-                        {bid.shopName === SHOP_NAME && <span style={{ ...badgeStyle(C.orange, C.orangeLight), marginLeft: 6 }}>Bạn</span>}
-                        <span style={{ color: C.gray, marginLeft: 8, fontSize: 12 }}>{bid.productName}</span>
-                      </span>
-                      <span style={{ fontWeight: 700, color: i === 0 ? C.orange : 'inherit' }}>{bid.amount.toLocaleString('vi-VN')}đ</span>
+              {adminPreviews[selectedTopSlot] && (
+                <img src={adminPreviews[selectedTopSlot]} alt={slotDef.label}
+                  style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 10, marginBottom: 14, display: 'block', border: `1px solid ${C.border}` }} />
+              )}
+              {session ? (
+                <>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                    {live
+                      ? <span style={{ background: C.purpleLight, color: C.purple, borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>🟢 Đang mở</span>
+                      : <span style={{ background: 'rgba(251,191,36,0.15)', color: '#92400E', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>⏳ Sắp bắt đầu</span>
+                    }
+                    <span style={{ background: C.purpleLight, color: C.purple, borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>{session.bids.length} shop đặt giá</span>
+                    {myBid && <span style={{ background: C.primaryLight, color: C.primary, borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>✅ Bạn đang đặt {myBid.amount.toLocaleString('vi-VN')}đ</span>}
+                  </div>
+
+                  {!live && session.scheduledStartAt && (
+                    <div style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid #FCD34D', borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
+                      <p style={{ margin: 0, fontWeight: 700, color: '#92400E' }}>⏰ Khai mạc lúc: {new Date(session.scheduledStartAt).toLocaleString('vi-VN')}</p>
+                      {session.description && <p style={{ margin: '4px 0 0', fontSize: 12, color: '#78350F' }}>📋 {session.description}</p>}
                     </div>
-                  ))}
-                  {currentFlashSession.bids.length === 0 && <p style={{ padding: 14, color: C.gray, fontSize: 13 }}>Chưa có ai đặt giá — hãy là người đầu tiên!</p>}
-                </div>
-              </div>
+                  )}
 
-              <div style={{ marginBottom: 8 }}>
-                <input
-                  placeholder="Tên sản phẩm Flash Sale"
-                  value={flashBidProducts[selectedFlashSlot] || ''}
-                  onChange={e => setFlashBidProducts(p => ({ ...p, [selectedFlashSlot]: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
-                />
-              </div>
-              <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {[0, 50_000, 100_000, 200_000, 500_000].map(extra => {
-                  const val = minFlashBid + extra
-                  return (
-                    <button key={extra} onClick={() => setFlashBidAmounts(p => ({ ...p, [selectedFlashSlot]: String(val) }))}
-                      style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${C.border}`, background: flashBidAmounts[selectedFlashSlot] === String(val) ? C.orange : 'transparent', color: flashBidAmounts[selectedFlashSlot] === String(val) ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
-                      {extra === 0 ? 'Tối thiểu' : `+${(extra / 1000).toFixed(0)}k`} ({val.toLocaleString('vi-VN')}đ)
-                    </button>
-                  )
-                })}
-              </div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <input
-                  type="number" min={minFlashBid} step={50000}
-                  placeholder={`Tối thiểu ${minFlashBid.toLocaleString('vi-VN')}đ`}
-                  value={flashBidAmounts[selectedFlashSlot] || ''}
-                  onChange={e => setFlashBidAmounts(p => ({ ...p, [selectedFlashSlot]: e.target.value }))}
-                  style={{ flex: 1, minWidth: 160, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }}
-                />
-                <button style={btnStyle(flashCooldown > 0 ? '#9CA3AF' : C.orange)} disabled={flashCooldown > 0} onClick={handlePlaceFlashBid}>
-                  {flashCooldown > 0 ? `Chờ ${Math.ceil(flashCooldown / 1000)}s` : '⚡ Đặt giá'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div style={cardStyle}>
-              <p style={{ color: C.gray }}>🔒 Vị trí này đang bị Admin tạm khoá hoặc chưa mở phiên đấu giá.</p>
-            </div>
-          )}
-        </>
-      )}
+                  {live && (
+                    <div style={{ background: 'rgba(124,58,237,0.04)', border: `1px solid ${C.purple}33`, borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: C.purple, marginBottom: 10 }}>
+                        {myBid ? `📝 Cập nhật giá (đang: ${myBid.amount.toLocaleString('vi-VN')}đ)` : '💰 Đặt giá'}
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                        <label style={{ fontSize: 12, color: C.gray, flex: 1, minWidth: 180 }}>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, width: '100%' }}>
+                          {[0, 50_000, 100_000, 200_000, 500_000].map(extra => {
+                            const val = minNext + extra
+                            const formatted = val.toLocaleString('vi-VN')
+                            return (
+                              <button key={extra} onClick={() => setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: formatted }))}
+                                style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${bidVal === formatted ? C.purple : C.border}`, background: bidVal === formatted ? C.purple : 'transparent', color: bidVal === formatted ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
+                                {extra === 0 ? 'Tối thiểu' : `+${(extra/1000).toFixed(0)}k`} ({val.toLocaleString('vi-VN')}đ)
+                              </button>
+                            )
+                          })}
+                        </div>
+                          Giá đặt (đ) — tối thiểu {minNext.toLocaleString('vi-VN')}đ
+                          <input type="text" value={bidVal}
+                            onChange={e => { const raw = e.target.value.replace(/[^\d]/g, ''); setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: raw ? Number(raw).toLocaleString('vi-VN') : '' })) }}
+                            placeholder={minNext.toLocaleString('vi-VN')}
+                            style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }} />
+                        </label>
+                        <button style={{ ...btnStyle(C.purple), padding: '9px 20px' }} onClick={handleBid}>
+                          🏆 {myBid ? 'Cập nhật giá' : 'Đặt giá'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-      {/* ── Tab: Giao dịch của tôi ───────────────────────────────────────── */}
+                  {/* Bids list */}
+                  <div>
+                    <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: C.purple }}>📊 Danh sách đặt giá</p>
+                    <div style={{ maxHeight: 240, overflowY: 'auto', borderRadius: 8, border: `1px solid ${C.border}` }}>
+                      {session.bids.length === 0
+                        ? <p style={{ padding: 14, color: C.gray, fontSize: 13, textAlign: 'center' }}>Chưa có ai đặt giá — hãy là người đầu tiên!</p>
+                        : [...session.bids].sort((a, b) => b.amount - a.amount).map((bid, i) => (
+                          <div key={bid.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 14px', borderBottom: `1px solid ${C.border}`, background: bid.shopName === SHOP_NAME ? C.purpleLight : i === 0 ? 'rgba(124,58,237,0.04)' : 'transparent' }}>
+                            <span style={{ fontSize: 13 }}>
+                              {i === 0 && '👑 '}
+                              <b style={{ color: C.purple }}>#{i + 1}</b> {bid.shopName}
+                              {bid.shopName === SHOP_NAME && <span style={{ background: C.purpleLight, color: C.purple, borderRadius: 999, padding: '1px 8px', fontSize: 11, fontWeight: 700, marginLeft: 6 }}>Bạn</span>}
+                            </span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: i === 0 ? C.purple : undefined }}>{bid.amount.toLocaleString('vi-VN')}đ</span>
+                          </div>
+                        ))
+                      }
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p style={{ color: C.gray, fontSize: 13 }}>🔒 Admin chưa mở phiên đấu giá cho vị trí này. Vui lòng quay lại sau.</p>
+              )}
+            </div>
+          </>
+        )
+      })()}
+
       {tab === 'mytx' && (() => {
         // Gom tất cả phiên banner + flash mà shop có tham gia đặt giá
         type TxRow = {
@@ -756,12 +1026,12 @@ const BannerAuctionPage: React.FC = () => {
         return (
           <div>
             {rows.length === 0
-              ? <div style={cardStyle}><p style={{ color: C.gray }}>Bạn chưa tham gia phiên đấu giá nào.</p></div>
+              ? <div style={cardStyle}><p style={{ color: C.gray }}>Bạn chưa tham giá phiên đấu giá nào.</p></div>
               : <>
                   {/* Summary */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
                     {[
-                      { label: 'Tổng phiên tham gia', value: rows.length, color: C.blue, bg: C.blueLight },
+                      { label: 'Tổng phiên tham giá', value: rows.length, color: C.blue, bg: C.blueLight },
                       { label: 'Số phiên thắng', value: rows.filter(r => r.isWinner).length, color: C.primary, bg: C.primaryLight },
                       { label: 'Tổng đã đặt giá', value: rows.reduce((s, r) => s + r.myBids, 0) + ' lượt', color: C.purple, bg: C.purpleLight },
                       { label: 'Tổng tiền thắng (đ)', value: rows.filter(r => r.isWinner && r.confirmation === 'paid').reduce((s, r) => s + (r.amount || 0), 0).toLocaleString('vi-VN'), color: C.orange, bg: C.orangeLight },
@@ -871,209 +1141,381 @@ const BannerAuctionPage: React.FC = () => {
       {/* ── Tab: Chuẩn bị mẫu ───────────────────────────────────────────── */}
       {tab === 'prepare' && (
         <div>
-          <p style={{ color: C.gray, fontSize: 13, marginBottom: 20 }}>
-            Chuẩn bị mẫu banner / sản phẩm <b>trước khi đặt giá</b>. Khi bạn đặt cọc thành công, mẫu sẽ tự động gửi Admin duyệt.
+          <p style={{ color: C.gray, fontSize: 13, marginBottom: 16 }}>
+            Chuẩn bị mẫu <b>trước khi đặt giá</b>. Khi đặt cọc thành công, mẫu sẽ tự động gửi Admin duyệt.
           </p>
 
-          {/* ── Banner mẫu ──────────────────────────── */}
-          <div style={cardStyle}>
-            <h3 style={{ marginBottom: 12, fontSize: 15, margin: '0 0 12px' }}>🖼️ Mẫu Banner quảng cáo</h3>
+          {/* Sub-tabs */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+            {([
+              ['banner', '🖼️ Banner'],
+              ['flash',  '⚡ Flash Sale'],
+              ['top',    '🏆 Vị trí Top'],
+            ] as const).map(([t, label]) => (
+              <button key={t} onClick={() => setPrepTab(t)}
+                style={{ ...btnStyle(prepTab === t ? C.primary : 'transparent', prepTab === t ? 'white' : C.gray), border: `1px solid ${prepTab === t ? C.primary : C.border}`, fontSize: 13 }}>
+                {label}
+              </button>
+            ))}
+          </div>
 
-            {/* Chọn vị trí */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-              {BANNER_POSITIONS.map(p => (
-                <button key={p.key} onClick={() => setPrepBannerPos(p.key)}
-                  style={{ ...btnStyle(prepBannerPos === p.key ? C.primary : 'transparent', prepBannerPos === p.key ? 'white' : C.gray), border: `1px solid ${prepBannerPos === p.key ? C.primary : C.border}`, fontSize: 12 }}>
-                  {bannerDraftsExist[p.key] ? '✅ ' : ''}{p.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Form theo vị trí đang chọn */}
-            {(() => {
-              const posKey = prepBannerPos
-              const spec = BANNER_IMAGE_SPECS[posKey]
-              const form = prepBannerForms[posKey] ?? { title: '', link: '', image: '' }
-              const imgErr = prepBannerImgErr[posKey] ?? ''
-              const draft = getBannerDraft(posKey, SHOP_NAME)
-              return (
-                <div>
-                  <p style={{ fontSize: 12, color: C.blue, background: C.blueLight, padding: '8px 12px', borderRadius: 8, marginBottom: 12 }}>
-                    📐 Tỉ lệ <b>{spec.ratioLabel}</b> — {spec.recommendedW}×{spec.recommendedH}px — tối đa {spec.maxKB.toLocaleString()}KB
-                  </p>
-                  {draft && (
-                    <div style={{ background: C.primaryLight, border: `1px solid ${C.primary}`, borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 12 }}>
-                      ✅ Mẫu hiện tại: <b>{draft.title}</b> — cập nhật {new Date(draft.updatedAt).toLocaleString('vi-VN')}
-                      {draft.image && <img src={draft.image} alt="draft" style={{ display: 'block', marginTop: 8, maxWidth: '100%', maxHeight: 100, objectFit: 'cover', borderRadius: 6 }} />}
-                    </div>
-                  )}
-                  <input placeholder="Tiêu đề banner *" value={form.title}
-                    onChange={e => setPrepBannerForms(f => ({ ...f, [posKey]: { ...(f[posKey] ?? { title: '', link: '', image: '' }), title: e.target.value } }))}
-                    style={{ width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 10, boxSizing: 'border-box' }} />
-                  <input placeholder="Đường dẫn khi click (tuỳ chọn)" value={form.link}
-                    onChange={e => setPrepBannerForms(f => ({ ...f, [posKey]: { ...(f[posKey] ?? { title: '', link: '', image: '' }), link: e.target.value } }))}
-                    style={{ width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 10, boxSizing: 'border-box' }} />
-                  <div style={{ marginBottom: 14 }}>
-                    <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 6 }}>Ảnh banner{draft ? ' (để trống = giữ ảnh cũ)' : ' *'}</label>
-                    <input type="file" accept="image/*"
-                      onChange={async e => {
-                        const file = e.target.files?.[0]; if (!file) return
-                        const res = await validateImageFile(file, spec)
-                        if (!res.ok) { setPrepBannerImgErr(p => ({ ...p, [posKey]: res.error! })); return }
-                        setPrepBannerImgErr(p => ({ ...p, [posKey]: '' }))
-                        setPrepBannerForms(f => ({ ...f, [posKey]: { ...(f[posKey] ?? { title: '', link: '', image: '' }), image: res.dataUrl! } }))
-                      }} />
-                    {imgErr && <p style={{ color: '#DC2626', fontSize: 12, marginTop: 4 }}>{imgErr}</p>}
-                    {form.image && !imgErr && <img src={form.image} alt="preview" style={{ marginTop: 8, maxWidth: '100%', maxHeight: 120, borderRadius: 8, border: `1px solid ${C.border}` }} />}
+          {/* ── Banner mẫu — hiện cả 3 vị trí cùng lúc ──────────────────── */}
+          {prepTab === 'banner' && BANNER_POSITIONS.map(p => {
+            const posKey = p.key
+            const spec = BANNER_IMAGE_SPECS[posKey]
+            const form = prepBannerForms[posKey] ?? { title: '', link: '', image: '' }
+            const imgErr = prepBannerImgErr[posKey] ?? ''
+            const draft = getBannerDraft(posKey, SHOP_NAME)
+            return (
+              <div key={posKey} style={cardStyle}>
+                <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>
+                  🖼️ {p.label}
+                  {bannerDraftsExist[posKey] && <span style={{ marginLeft: 8, fontSize: 12, color: C.primary, fontWeight: 400 }}>✅ Đã có mẫu</span>}
+                </h3>
+                <p style={{ fontSize: 12, color: C.blue, background: C.blueLight, padding: '8px 12px', borderRadius: 8, marginBottom: 12 }}>
+                  📐 Tỉ lệ <b>{spec.ratioLabel}</b> — {spec.recommendedW}×{spec.recommendedH}px — tối đa {spec.maxKB.toLocaleString()}KB
+                </p>
+                {draft && (
+                  <div style={{ background: C.primaryLight, border: `1px solid ${C.primary}`, borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 12 }}>
+                    ✅ Mẫu hiện tại: <b>{draft.title}</b> — cập nhật {new Date(draft.updatedAt).toLocaleString('vi-VN')}
+                    {draft.image && <img src={draft.image} alt="draft" style={{ display: 'block', marginTop: 8, maxWidth: '100%', maxHeight: 100, objectFit: 'cover', borderRadius: 6 }} />}
                   </div>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                )}
+                {prepBannerSaved[posKey] ? (
+                  /* ── Đã lưu: ẩn form, chỉ hiện nút Chỉnh sửa ── */
+                  <button style={{ ...btnStyle('transparent', C.primary), border: `1px solid ${C.primary}` }}
+                    onClick={() => setPrepBannerSaved(prev => ({ ...prev, [posKey]: false }))}>
+                    ✏️ Chỉnh sửa
+                  </button>
+                ) : (
+                  /* ── Chưa lưu / đang chỉnh sửa: hiện toàn bộ form ── */
+                  <>
+                    <input placeholder="Tiêu đề banner *" value={form.title}
+                      onChange={e => {
+                        setPrepBannerForms(f => ({ ...f, [posKey]: { ...(f[posKey] ?? { title: '', link: '', image: '' }), title: e.target.value } }))
+                        setPrepBannerSaved(prev => ({ ...prev, [posKey]: false }))
+                      }}
+                      style={{ width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 10, boxSizing: 'border-box' }} />
+                    <div style={{ marginBottom: 10 }}>
+                      <input placeholder="Đường dẫn khi click (tuỳ chọn)" value={form.link}
+                        onChange={e => setPrepBannerForms(f => ({ ...f, [posKey]: { ...(f[posKey] ?? { title: '', link: '', image: '' }), link: e.target.value } }))}
+                        style={{ width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, boxSizing: 'border-box', marginBottom: 6 }} />
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button type="button"
+                          onClick={() => setPrepBannerForms(f => ({ ...f, [posKey]: { ...(f[posKey] ?? { title: '', link: '', image: '' }), link: `/shops/${encodeURIComponent(SHOP_NAME)}` } }))}
+                          style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.blue}`, background: C.blueLight, color: C.blue, cursor: 'pointer', fontWeight: 600 }}>
+                          🏪 Gắn link trang cửa hàng của tôi
+                        </button>
+                        {form.link && (
+                          <button type="button"
+                            onClick={() => setPrepBannerForms(f => ({ ...f, [posKey]: { ...(f[posKey] ?? { title: '', link: '', image: '' }), link: '' } }))}
+                            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.gray, cursor: 'pointer' }}>
+                            ✕ Xoá link
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 6 }}>
+                        Ảnh banner{draft ? '' : ' *'}
+                      </label>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                        <input type="file" accept="image/*" id={`banner-pick-${posKey}`} style={{ display: 'none' }}
+                          onChange={e => {
+                            const file = e.target.files?.[0]; if (!file) return
+                            const path = `/img/banner/${file.name}`
+                            const previewUrl = URL.createObjectURL(file)
+                            setPrepBannerImgErr(prev => ({ ...prev, [posKey]: '' }))
+                            setPrepBannerSaved(prev => ({ ...prev, [posKey]: false }))
+                            setPrepBannerForms(f => ({ ...f, [posKey]: { ...(f[posKey] ?? { title: '', link: '', image: '' }), image: path } }))
+                            setBannerPreview(prev => ({ ...prev, [posKey]: previewUrl }))
+                          }} />
+                        <button type="button"
+                          onClick={() => document.getElementById(`banner-pick-${posKey}`)?.click()}
+                          style={{ padding: '7px 14px', background: C.blueLight, color: C.blue, border: `1px solid ${C.blue}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                          📂 Chọn file từ /img/banner/
+                        </button>
+                        {form.image && <span style={{ fontSize: 12, color: C.gray }}>{form.image}</span>}
+                      </div>
+                      <p style={{ fontSize: 11, color: C.gray, marginBottom: 6 }}>
+                        💡 Trước khi chọn, hãy copy ảnh vào thư mục <code>public/img/banner/</code>
+                      </p>
+                      {imgErr && <p style={{ color: '#DC2626', fontSize: 12, marginTop: 4 }}>{imgErr}</p>}
+                      {(bannerPreview[posKey] || form.image || draft?.image) && (
+                        <img
+                          src={bannerPreview[posKey] || form.image || draft?.image}
+                          alt="preview"
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; setPrepBannerImgErr(prev => ({ ...prev, [posKey]: '⚠️ Không tìm thấy file trong public/img/banner/ — kiểm tra lại tên.' })) }}
+                          style={{ marginTop: 8, maxWidth: '100%', maxHeight: 140, borderRadius: 8, border: `1px solid ${C.border}`, display: 'block' }} />
+                      )}
+                    </div>
                     <button
-                      disabled={!!prepBannerSaved[posKey]}
-                      style={{ ...btnStyle(prepBannerSaved[posKey] ? '#9CA3AF' : C.primary), cursor: prepBannerSaved[posKey] ? 'not-allowed' : 'pointer', opacity: prepBannerSaved[posKey] ? 0.55 : 1 }}
+                      type="button"
                       onClick={() => {
                         if (!form.title.trim()) { toast.error('Vui lòng nhập tiêu đề banner'); return }
                         if (!form.image && !draft?.image) { toast.error('Vui lòng chọn ảnh banner'); return }
-                        if (imgErr) { toast.error(imgErr); return }
+                        if (imgErr && !imgErr.startsWith('⚠️')) { toast.error(imgErr); return }
                         saveBannerDraft({ position: posKey, shopName: SHOP_NAME, title: form.title.trim(), link: form.link.trim() || undefined, image: form.image || draft!.image, updatedAt: new Date().toISOString() })
-                        setPrepBannerSaved(p => ({ ...p, [posKey]: true }))
+                        setPrepBannerSaved(prev => ({ ...prev, [posKey]: true }))
                         checkDrafts()
-                        toast.success('✅ Đã lưu mẫu banner!')
-                      }}>
+                        toast.success(`✅ Đã lưu mẫu ${p.label}!`)
+                      }}
+                      style={btnStyle(C.primary)}>
                       💾 Lưu mẫu banner
                     </button>
-                    {prepBannerSaved[posKey] && (
-                      <button style={{ ...btnStyle('transparent', C.primary), border: `1px solid ${C.primary}` }}
-                        onClick={() => setPrepBannerSaved(p => ({ ...p, [posKey]: false }))}>
-                        ✏️ Chỉnh sửa
-                      </button>
-                    )}
+                  </>
+                )}
+              </div>
+            )
+          })}
+
+          {/* ── Flash Sale — danh sách 20 sản phẩm ──────────────────────── */}
+          {prepTab === 'flash' && (() => {
+            const maxSlots = flashPoolSettings.maxSlotsPerShop ?? 5
+            const savedCount = flashProductSaved.filter(Boolean).length
+            return (
+              <div>
+                {/* Info banner */}
+                <div style={{ background: C.orangeLight, border: `1px solid ${C.orange}44`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13 }}>
+                  <b style={{ color: C.orange }}>⚡ Danh sách sản phẩm Flash Sale — tối đa {FLASH_PRODUCT_MAX} sản phẩm</b>
+                  <div style={{ color: C.gray, marginTop: 4 }}>
+                    Admin đang cho phép tối đa <b style={{ color: C.orange }}>{maxSlots} slot/shop</b>. Khi thắng đấu giá, hệ thống sẽ lấy <b>{maxSlots} sản phẩm đầu tiên</b> trong danh sách này.
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 12 }}>
+                    ✅ Đã chuẩn bị: <b style={{ color: C.orange }}>{savedCount}/{FLASH_PRODUCT_MAX}</b> sản phẩm
+                    {savedCount >= maxSlots && <span style={{ color: C.primary, marginLeft: 8 }}>🎯 Đủ {maxSlots} slot!</span>}
+                    {savedCount > 0 && savedCount < maxSlots && <span style={{ color: '#D97706', marginLeft: 8 }}>⚠️ Cần thêm {maxSlots - savedCount} nữa để đủ slot</span>}
                   </div>
                 </div>
-              )
-            })()}
-          </div>
 
-          {/* ── Flash Sale mẫu ──────────────────────── */}
-          <div style={cardStyle}>
-            <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>⚡ Mẫu sản phẩm Flash Sale</h3>
+                {/* 20 product cards */}
+                {Array.from({ length: FLASH_PRODUCT_MAX }, (_, idx) => {
+                  const form = flashProductForms[idx] ?? {}
+                  const preview = flashProductPreviews[idx]
+                  const saved = flashProductSaved[idx]
+                  const isActive = idx < maxSlots
+                  return (
+                    <div key={idx} style={{ ...cardStyle, border: `1px solid ${isActive ? C.orange + '88' : C.border}`, marginBottom: 12 }}>
+                      {/* Header slot */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                        <span style={{ width: 28, height: 28, borderRadius: '50%', background: isActive ? C.orange : '#9CA3AF', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, flexShrink: 0 }}>
+                          {idx + 1}
+                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: isActive ? C.orange : C.gray }}>
+                          {isActive ? `Sản phẩm ưu tiên #${idx + 1}` : `Sản phẩm dự phòng #${idx + 1}`}
+                        </span>
+                        {saved && <span style={{ marginLeft: 'auto', fontSize: 11, color: C.primary, fontWeight: 600 }}>✅ Đã lưu</span>}
+                        {saved && (
+                          <button type="button"
+                            onClick={() => {
+                              clearFlashProduct(SHOP_NAME, idx)
+                              setFlashProductForms(prev => { const n = [...prev]; n[idx] = null; return n })
+                              setFlashProductPreviews(prev => { const n = [...prev]; n[idx] = null; return n })
+                              setFlashProductSaved(prev => { const n = [...prev]; n[idx] = false; return n })
+                              setPickerOpenIdx(null)
+                            }}
+                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(220,38,38,0.3)', background: 'rgba(220,38,38,0.06)', color: '#DC2626', cursor: 'pointer' }}>
+                            🗑 Xoá
+                          </button>
+                        )}
+                      </div>
 
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-              {FLASH_SLOTS.map(s => (
-                <button key={s.key} onClick={() => setPrepFlashSlot(s.key)}
-                  style={{ ...btnStyle(prepFlashSlot === s.key ? C.orange : 'transparent', prepFlashSlot === s.key ? 'white' : C.gray), border: `1px solid ${prepFlashSlot === s.key ? C.orange : C.border}`, fontSize: 12 }}>
-                  {flashDraftsExist[s.key] ? '✅ ' : ''}{s.label}
-                </button>
-              ))}
-            </div>
-
-            {(() => {
-              const slotKey = prepFlashSlot
-              const form = prepFlashForms[slotKey] ?? { productName: '', price: '', image: '' }
-              const imgErr = prepFlashImgErr[slotKey] ?? ''
-              const draft = getFlashDraft(slotKey, SHOP_NAME)
-              return (
-                <div>
-                  <p style={{ fontSize: 12, color: C.orange, background: C.orangeLight, padding: '8px 12px', borderRadius: 8, marginBottom: 12 }}>
-                    📐 Tỉ lệ <b>{FLASH_IMAGE_SPEC.ratioLabel}</b> — {FLASH_IMAGE_SPEC.recommendedW}×{FLASH_IMAGE_SPEC.recommendedH}px — tối đa {FLASH_IMAGE_SPEC.maxKB.toLocaleString()}KB
-                  </p>
-                  {draft && (
-                    <div style={{ background: C.orangeLight, border: `1px solid ${C.orange}`, borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 12 }}>
-                      ✅ Mẫu hiện tại: <b>{draft.productName}</b> — {draft.price.toLocaleString('vi-VN')}đ
-                      {draft.productImage && <img src={draft.productImage} alt="draft" style={{ display: 'block', marginTop: 8, maxWidth: 100, borderRadius: 6 }} />}
+                      {/* Sản phẩm đã chọn */}
+                      {form.productName ? (
+                        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                          <img src={form.productImage} alt={form.productName}
+                            onError={e => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/80' }}
+                            style={{ width: 80, height: 80, borderRadius: 10, objectFit: 'cover', border: `2px solid ${C.orange}44`, flexShrink: 0 }} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b', marginBottom: 4 }}>{form.productName}</div>
+                            <div style={{ fontSize: 13, color: C.orange, fontWeight: 600, marginBottom: 8 }}>
+                              {Number(form.price).toLocaleString('vi-VN')} đ
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              {!saved && (
+                                <button type="button"
+                                  style={{ ...btnStyle(C.orange), fontSize: 12, padding: '6px 16px' }}
+                                  onClick={() => {
+                                    const productName = (form.productName ?? '').trim()
+                                    const price = Number(String(form.price ?? '').replace(/[^\d]/g, ''))
+                                    const productImage = form.productImage ?? ''
+                                    if (!productName || !price || !productImage) { toast.error(`SP #${idx + 1}: Dữ liệu không hợp lệ`); return }
+                                    saveFlashProduct(SHOP_NAME, idx, { productName, price, productImage })
+                                    setFlashProductSaved(prev => { const n = [...prev]; n[idx] = true; return n })
+                                    toast.success(`✅ Đã lưu sản phẩm #${idx + 1}!`)
+                                  }}>
+                                  💾 Lưu vào slot
+                                </button>
+                              )}
+                              <button type="button"
+                                style={{ fontSize: 12, padding: '6px 12px', background: 'transparent', color: C.gray, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer' }}
+                                onClick={() => {
+                                  setFlashProductForms(prev => { const n = [...prev]; n[idx] = null; return n })
+                                  setFlashProductSaved(prev => { const n = [...prev]; n[idx] = false; return n })
+                                  setPickerOpenIdx(idx)
+                                }}>
+                                🔄 Đổi sản phẩm
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Chưa chọn sản phẩm → hiện nút + picker */
+                        <div>
+                          {pickerOpenIdx !== idx ? (
+                            <button type="button"
+                              onClick={() => setPickerOpenIdx(idx)}
+                              style={{ width: '100%', padding: '12px', border: `2px dashed ${C.orange}66`, borderRadius: 10, background: `${C.orange}08`, color: C.orange, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 18 }}>🛍</span> Chọn sản phẩm từ shop
+                            </button>
+                          ) : (
+                            /* Product picker grid */
+                            <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+                              <div style={{ background: '#f8fafc', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${C.border}` }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>🛍 Chọn sản phẩm đang bán ({shopProducts.length} sản phẩm)</span>
+                                <button type="button" onClick={() => setPickerOpenIdx(null)}
+                                  style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: C.gray }}>✕</button>
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10, padding: 12 }}>
+                                {shopProducts.length === 0 && (
+                                  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: 13 }}>
+                                    Chưa có sản phẩm đang bán. Hãy thêm sản phẩm tại trang <b>Sản phẩm</b> trước.
+                                  </div>
+                                )}
+                                {shopProducts.map(p => {
+                                  const alreadyUsed = flashProductForms.some((f, fi) => fi !== idx && f?.productName === p.name)
+                                  return (
+                                    <div key={p.id}
+                                      onClick={() => {
+                                        if (alreadyUsed) { toast.warning('Sản phẩm này đã được thêm vào slot khác!'); return }
+                                        setFlashProductForms(prev => { const n = [...prev]; n[idx] = { productName: p.name, price: String(p.price), productImage: p.image }; return n })
+                                        setFlashProductSaved(prev => { const n = [...prev]; n[idx] = false; return n })
+                                        setPickerOpenIdx(null)
+                                      }}
+                                      style={{ border: `1px solid ${alreadyUsed ? C.border : C.orange + '55'}`, borderRadius: 10, overflow: 'hidden', cursor: alreadyUsed ? 'not-allowed' : 'pointer', opacity: alreadyUsed ? 0.45 : 1, background: 'white', transition: 'box-shadow .15s' }}
+                                      onMouseEnter={e => { if (!alreadyUsed) (e.currentTarget as HTMLDivElement).style.boxShadow = `0 4px 12px ${C.orange}33` }}
+                                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}>
+                                      <img src={p.image} alt={p.name}
+                                        onError={e => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/160' }}
+                                        style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }} />
+                                      <div style={{ padding: '8px 10px' }}>
+                                        <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b', lineHeight: 1.3, marginBottom: 4, overflow: 'hidden', maxHeight: '2.6em' }}>{p.name}</div>
+                                        <div style={{ fontSize: 12, color: C.orange, fontWeight: 700 }}>{p.price.toLocaleString('vi-VN')} đ</div>
+                                        {alreadyUsed && <div style={{ fontSize: 10, color: C.gray, marginTop: 2 }}>Đã dùng</div>}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  <input placeholder="Tên sản phẩm Flash Sale *" value={form.productName}
-                    onChange={e => setPrepFlashForms(f => ({ ...f, [slotKey]: { ...(f[slotKey] ?? { productName: '', price: '', image: '' }), productName: e.target.value } }))}
-                    style={{ width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 10, boxSizing: 'border-box' }} />
-                  <input placeholder="Giá Flash Sale (đ) *" type="number" value={form.price}
-                    onChange={e => setPrepFlashForms(f => ({ ...f, [slotKey]: { ...(f[slotKey] ?? { productName: '', price: '', image: '' }), price: e.target.value } }))}
-                    style={{ width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 10, boxSizing: 'border-box' }} />
-                  <div style={{ marginBottom: 14 }}>
-                    <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 6 }}>Ảnh sản phẩm{draft ? ' (để trống = giữ ảnh cũ)' : ' *'}</label>
-                    <input type="file" accept="image/*"
-                      onChange={async e => {
-                        const file = e.target.files?.[0]; if (!file) return
-                        const res = await validateImageFile(file, FLASH_IMAGE_SPEC)
-                        if (!res.ok) { setPrepFlashImgErr(p => ({ ...p, [slotKey]: res.error! })); return }
-                        setPrepFlashImgErr(p => ({ ...p, [slotKey]: '' }))
-                        setPrepFlashForms(f => ({ ...f, [slotKey]: { ...(f[slotKey] ?? { productName: '', price: '', image: '' }), image: res.dataUrl! } }))
-                      }} />
-                    {imgErr && <p style={{ color: '#DC2626', fontSize: 12, marginTop: 4 }}>{imgErr}</p>}
-                    {form.image && !imgErr && <img src={form.image} alt="preview" style={{ marginTop: 8, maxWidth: 120, borderRadius: 8, border: `1px solid ${C.border}` }} />}
-                  </div>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <button
-                      disabled={!!prepFlashSaved[slotKey]}
-                      style={{ ...btnStyle(prepFlashSaved[slotKey] ? '#9CA3AF' : C.orange), cursor: prepFlashSaved[slotKey] ? 'not-allowed' : 'pointer', opacity: prepFlashSaved[slotKey] ? 0.55 : 1 }}
-                      onClick={() => {
-                        const priceNum = Number(form.price)
-                        if (!form.productName.trim()) { toast.error('Vui lòng nhập tên sản phẩm'); return }
-                        if (!priceNum || priceNum <= 0) { toast.error('Vui lòng nhập giá hợp lệ'); return }
-                        if (!form.image && !draft?.productImage) { toast.error('Vui lòng chọn ảnh sản phẩm'); return }
-                        if (imgErr) { toast.error(imgErr); return }
-                        saveFlashDraft({ slot: slotKey, shopName: SHOP_NAME, productName: form.productName.trim(), price: priceNum, productImage: form.image || draft!.productImage, updatedAt: new Date().toISOString() })
-                        setPrepFlashSaved(p => ({ ...p, [slotKey]: true }))
-                        checkDrafts()
-                        toast.success('✅ Đã lưu mẫu sản phẩm Flash Sale!')
-                      }}>
-                      💾 Lưu mẫu sản phẩm
-                    </button>
-                    {prepFlashSaved[slotKey] && (
-                      <button style={{ ...btnStyle('transparent', C.orange), border: `1px solid ${C.orange}` }}
-                        onClick={() => setPrepFlashSaved(p => ({ ...p, [slotKey]: false }))}>
-                        ✏️ Chỉnh sửa
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )
-            })()}
+                  )
+                })}
+              </div>
+            )
+          })()}
+
+          {/* ── Vị trí Top mẫu ──────────────────────── */}
+          {prepTab === 'top' && (
+            <div style={cardStyle}>
+              <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>🏆 Mẫu Vị trí Top</h3>
+              <p style={{ color: C.gray, fontSize: 13 }}>Tính năng chuẩn bị mẫu Vị trí Top sẽ được bổ sung sớm.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {rejectedModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) setRejectedModal(null) }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 28, maxWidth: 500, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <h3 style={{ margin: '0 0 4px', color: '#DC2626' }}>Nội dung bị từ chối</h3>
+            <p style={{ fontSize: 13, color: C.gray, marginBottom: 16 }}>Admin đã từ chối. Vui lòng chỉnh sửa và gửi lại.</p>
+            {rejectedModal.sub.rejectReason && (
+              <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13 }}>
+                <b>Lý do:</b> {rejectedModal.sub.rejectReason}
+              </div>
+            )}
+            {rejectedModal.kind === 'banner' && (
+              <div style={{ fontSize: 13 }}>
+                <div><b>Tiêu đề:</b> {(rejectedModal.sub as BannerSubmission).title}</div>
+                {(rejectedModal.sub as BannerSubmission).image && (
+                  <img src={(rejectedModal.sub as BannerSubmission).image} alt="banner" style={{ marginTop: 10, maxWidth: '100%', maxHeight: 120, objectFit: 'cover', borderRadius: 8 }} />
+                )}
+              </div>
+            )}
+            {rejectedModal.kind === 'flash' && (
+              <div style={{ fontSize: 13 }}>
+                <div><b>Sản phẩm:</b> {(rejectedModal.sub as FlashSubmission).productName}</div>
+                <div style={{ marginTop: 4 }}><b>Giá:</b> {(rejectedModal.sub as FlashSubmission).price.toLocaleString('vi-VN')}đ</div>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
+              <button style={btnStyle(C.primary)} onClick={() => { setRejectedModal(null); setTab('prepare') }}>Chỉnh sửa ngay</button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── Submit Modal ──────────────────────────────────────────────────── */}
       {submitTarget && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: C.cardBg, borderRadius: 16, padding: 28, width: 480, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) setSubmitTarget(null) }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 28, maxWidth: 500, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
             {submitTarget.kind === 'banner' ? (
               <>
-                <h3 style={{ marginBottom: 4 }}>📢 Đăng banner quảng cáo</h3>
-                <p style={{ color: C.gray, fontSize: 12, marginBottom: 16 }}>Điền thông tin banner cho vị trí <b>{BANNER_POSITIONS.find(p => p.key === (submitTarget.session as BannerAuctionSession).position)?.label}</b></p>
-                {(() => {
-                  const spec = BANNER_IMAGE_SPECS[(submitTarget.session as BannerAuctionSession).position]
-                  return <p style={{ fontSize: 12, color: C.blue, background: C.blueLight, padding: '8px 12px', borderRadius: 8, marginBottom: 14 }}>📐 Yêu cầu ảnh: tỉ lệ <b>{spec.ratioLabel}</b> — khuyến nghị {spec.recommendedW}×{spec.recommendedH}px — tối đa {spec.maxKB.toLocaleString()}KB</p>
-                })()}
-                <input placeholder="Tiêu đề banner *" value={bannerForm.title} onChange={e => setBannerForm(f => ({ ...f, title: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 10, boxSizing: 'border-box' }} />
-                <input placeholder="Đường dẫn khi click (tuỳ chọn)" value={bannerForm.link} onChange={e => setBannerForm(f => ({ ...f, link: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 10, boxSizing: 'border-box' }} />
-                <div style={{ marginBottom: 10 }}>
-                  <input type="file" accept="image/*" onChange={e => e.target.files?.[0] && handleBannerImageFile(e.target.files[0])} />
-                  {bannerImgError && <p style={{ color: '#DC2626', fontSize: 12, marginTop: 4 }}>{bannerImgError}</p>}
-                  {bannerForm.image && !bannerImgError && <img src={bannerForm.image} alt="preview" style={{ marginTop: 8, maxWidth: '100%', borderRadius: 8 }} />}
-                </div>
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                  <button style={btnStyle('#6B7280')} onClick={() => setSubmitTarget(null)}>Huỷ</button>
+                <h3 style={{ margin: '0 0 4px' }}>Đăng banner quảng cáo</h3>
+                <p style={{ fontSize: 13, color: C.gray, marginBottom: 16 }}>
+                  {BANNER_POSITIONS.find(p => p.key === (submitTarget.session as BannerAuctionSession).position)?.label}
+                </p>
+                <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 10 }}>
+                  Tiêu đề banner *
+                  <input value={bannerForm.title} onChange={e => setBannerForm(f => ({ ...f, title: e.target.value }))}
+                    style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, boxSizing: 'border-box' }} />
+                </label>
+                <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 10 }}>
+                  Đường dẫn (tuỳ chọn)
+                  <input value={bannerForm.link} onChange={e => setBannerForm(f => ({ ...f, link: e.target.value }))}
+                    style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, boxSizing: 'border-box' }} />
+                </label>
+                <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 6 }}>
+                  Ảnh banner *
+                  <input type="file" accept="image/*" style={{ display: 'block', marginTop: 4 }}
+                    onChange={async e => { const f = e.target.files?.[0]; if (f) await handleBannerImageFile(f) }} />
+                  {bannerImgError && <p style={{ color: '#DC2626', fontSize: 12, margin: '4px 0 0' }}>{bannerImgError}</p>}
+                  {bannerForm.image && !bannerImgError && <img src={bannerForm.image} alt="preview" style={{ marginTop: 8, maxWidth: '100%', maxHeight: 120, objectFit: 'cover', borderRadius: 8 }} />}
+                </label>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+                  <button style={btnStyle('transparent', C.gray)} onClick={() => setSubmitTarget(null)}>Huỷ</button>
                   <button style={btnStyle(C.primary)} onClick={handleSubmitBanner}>Gửi duyệt</button>
                 </div>
               </>
             ) : (
               <>
-                <h3 style={{ marginBottom: 4 }}>📦 Đăng sản phẩm Flash Sale</h3>
+                <h3 style={{ margin: '0 0 4px' }}>📦 Đăng sản phẩm Flash Sale</h3>
                 <p style={{ color: C.gray, fontSize: 12, marginBottom: 16 }}>Điền thông tin sản phẩm cho <b>{FLASH_SLOTS.find(s => s.key === (submitTarget.session as FlashAuctionSession).slot)?.label}</b></p>
                 <p style={{ fontSize: 12, color: C.orange, background: C.orangeLight, padding: '8px 12px', borderRadius: 8, marginBottom: 14 }}>📐 Yêu cầu ảnh: tỉ lệ <b>{FLASH_IMAGE_SPEC.ratioLabel}</b> — khuyến nghị {FLASH_IMAGE_SPEC.recommendedW}×{FLASH_IMAGE_SPEC.recommendedH}px — tối đa {FLASH_IMAGE_SPEC.maxKB.toLocaleString()}KB</p>
-                <input placeholder="Tên sản phẩm *" value={flashForm.productName} onChange={e => setFlashForm(f => ({ ...f, productName: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 10, boxSizing: 'border-box' }} />
-                <input placeholder="Giá bán Flash Sale (đ) *" type="number" value={flashForm.price} onChange={e => setFlashForm(f => ({ ...f, price: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 10, boxSizing: 'border-box' }} />
-                <div style={{ marginBottom: 10 }}>
-                  <input type="file" accept="image/*" onChange={e => e.target.files?.[0] && handleFlashImageFile(e.target.files[0])} />
-                  {flashImgError && <p style={{ color: '#DC2626', fontSize: 12, marginTop: 4 }}>{flashImgError}</p>}
+                <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 10 }}>
+                  Tên sản phẩm *
+                  <input value={flashForm.productName} onChange={e => setFlashForm(f => ({ ...f, productName: e.target.value }))}
+                    style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, boxSizing: 'border-box' }} />
+                </label>
+                <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 10 }}>
+                  Giá bán Flash Sale (đ) *
+                  <input type="number" value={flashForm.price} onChange={e => setFlashForm(f => ({ ...f, price: e.target.value }))}
+                    style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, boxSizing: 'border-box' }} />
+                </label>
+                <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 6 }}>
+                  Ảnh sản phẩm *
+                  <input type="file" accept="image/*" style={{ display: 'block', marginTop: 4 }}
+                    onChange={async e => { const f = e.target.files?.[0]; if (f) await handleFlashImageFile(f) }} />
+                  {flashImgError && <p style={{ color: '#DC2626', fontSize: 12, margin: '4px 0 0' }}>{flashImgError}</p>}
                   {flashForm.image && !flashImgError && <img src={flashForm.image} alt="preview" style={{ marginTop: 8, maxWidth: 160, borderRadius: 8 }} />}
-                </div>
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                  <button style={btnStyle('#6B7280')} onClick={() => setSubmitTarget(null)}>Huỷ</button>
+                </label>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+                  <button style={btnStyle('transparent', C.gray)} onClick={() => setSubmitTarget(null)}>Huỷ</button>
                   <button style={btnStyle(C.orange)} onClick={handleSubmitFlash}>Gửi duyệt</button>
                 </div>
               </>
@@ -1098,8 +1540,6 @@ const BannerAuctionPage: React.FC = () => {
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
             <div style={{ background: C.cardBg, borderRadius: 14, width: 540, maxWidth: '95vw', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-
-              {/* Header */}
               <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(220,38,38,0.06)' }}>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: 16, color: '#DC2626' }}>❌ Nội dung bị từ chối</div>
@@ -1107,69 +1547,63 @@ const BannerAuctionPage: React.FC = () => {
                 </div>
                 <button onClick={() => setRejectedModal(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: C.gray, lineHeight: 1 }}>✕</button>
               </div>
-
               <div style={{ overflowY: 'auto', flex: 1 }}>
-                {/* Ảnh vi phạm */}
                 {image ? (
                   <div style={{ background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 180, maxHeight: 280, overflow: 'hidden' }}>
-                    <img src={image} alt="nội dung bị từ chối" style={{ width: '100%', maxHeight: 280, objectFit: isBanner ? 'cover' : 'contain', display: 'block' }} />
+                                        <img src={image} alt="noi dung bi tu choi" style={{ width: '100%', maxHeight: 280, objectFit: isBanner ? 'cover' : 'contain', display: 'block' }} />
                   </div>
                 ) : (
-                  <div style={{ height: 120, background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.gray }}>Không có ảnh</div>
+                  <div style={{ height: 120, background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.gray }}>Khong co anh</div>
                 )}
 
                 <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {/* Thông tin nội dung */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, color: isBanner ? C.blue : C.orange, background: isBanner ? C.blueLight : C.orangeLight }}>
-                      {isBanner ? '🖼️ Banner' : '⚡ Flash Sale'}
+                      {isBanner ? 'Banner' : 'Flash Sale'}
                     </span>
                     <span style={{ fontWeight: 700, fontSize: 15 }}>{title}</span>
                   </div>
 
                   {isBanner && bs.link && (
-                    <div style={{ fontSize: 12, color: C.blue }}>🔗 {bs.link}</div>
+                    <div style={{ fontSize: 12, color: C.blue }}>Link: {bs.link}</div>
                   )}
                   {!isBanner && (
-                    <div style={{ fontSize: 13, color: C.gray }}>💰 Giá: <b style={{ color: C.orange }}>{Number(fs.price).toLocaleString('vi-VN')}đ</b></div>
+                    <div style={{ fontSize: 13, color: C.gray }}>Gia: <b style={{ color: C.orange }}>{Number(fs.price).toLocaleString('vi-VN')}d</b></div>
                   )}
 
-                  {/* Lý do từ chối */}
                   <div style={{ background: 'rgba(220,38,38,0.07)', border: '1.5px solid rgba(220,38,38,0.2)', borderRadius: 10, padding: '14px 16px' }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: '#DC2626', marginBottom: 8 }}>📋 Lý do từ chối</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#DC2626', marginBottom: 8 }}>Ly do tu choi</div>
                     {rejectReason ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {rejectReason.split(' · ').map((r, i) => (
+                        {rejectReason.split(' - ').map((r, i) => (
                           <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
-                            <span style={{ color: '#DC2626', flexShrink: 0, marginTop: 1 }}>•</span>
+                            <span style={{ color: '#DC2626', flexShrink: 0, marginTop: 1 }}>-</span>
                             <span>{r}</span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div style={{ fontSize: 13, color: C.gray }}>Admin không ghi rõ lý do.</div>
+                      <div style={{ fontSize: 13, color: C.gray }}>Admin khong ghi ro ly do.</div>
                     )}
                   </div>
 
-                  {/* Hướng dẫn */}
                   <div style={{ background: C.primaryLight, borderRadius: 8, padding: '10px 14px', fontSize: 12, color: C.primary }}>
-                    💡 Vui lòng chỉnh sửa nội dung theo đúng chính sách, sau đó vào tab <b>⚙️ Chuẩn bị</b> để cập nhật mẫu và tham gia đấu giá lại.
+                    Vui long chinh sua noi dung theo dung chinh sach, sau do vao tab Chuan bi de cap nhat mau va tham gia dau gia lai.
                   </div>
                 </div>
               </div>
 
-              {/* Footer */}
               <div style={{ padding: '14px 20px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: C.gray }} onClick={() => setRejectedModal(null)}>Đóng</button>
+                <button style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: C.gray }} onClick={() => setRejectedModal(null)}>Dong</button>
                 <button style={{ background: C.primary, color: 'white', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
                   onClick={() => { setRejectedModal(null); setTab('prepare') }}>
-                  ⚙️ Cập nhật mẫu
+         Cập nhật mẫu
                 </button>
               </div>
             </div>
           </div>
         )
-      })()}
+      })()} 
 
     </div>
   )

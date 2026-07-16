@@ -7,11 +7,11 @@ import type {
 } from '../types/chat'
 
 export const chatService = {
-  /** Buyer: mở hoặc lấy conversation với shop */
+  /** Buyer: mo hoac lay conversation voi shop */
   openConversation: (shopId: number) =>
-    API.post<Conversation>(`/api/v1/chat/conversations/${shopId}`),
+    API.post<Conversation>('/api/v1/chat/conversations/' + shopId),
 
-  /** Buyer: danh sách tất cả conversation của mình */
+  /** Buyer: danh sach tat ca conversation cua minh */
   getMyConversations: () =>
     API.get<ConversationListResponse>('/api/v1/chat/conversations'),
 
@@ -19,28 +19,28 @@ export const chatService = {
   getShopConversations: () =>
     API.get<ConversationListResponse>('/api/v1/chat/shop/conversations'),
 
-  /** Lịch sử tin nhắn (cursor-based) */
+  /** Lich su tin nhan (cursor-based) */
   getMessages: (convId: number, beforeId?: number, limit = 30) =>
-    API.get<MessageListResponse>(`/api/v1/chat/conversations/${convId}/messages`, {
+    API.get<MessageListResponse>('/api/v1/chat/conversations/' + convId + '/messages', {
       params: { before_id: beforeId, limit },
     }),
 
-  /** Gửi tin nhắn */
+  /** Gui tin nhan */
   sendMessage: (convId: number, content: string, imageUrl?: string) =>
-    API.post<Message>(`/api/v1/chat/conversations/${convId}/messages`, {
+    API.post<Message>('/api/v1/chat/conversations/' + convId + '/messages', {
       content,
       image_url: imageUrl,
     }),
 
-  /** Đánh dấu đã đọc */
+  /** Danh dau da doc */
   markRead: (convId: number) =>
-    API.put(`/api/v1/chat/conversations/${convId}/read`),
+    API.put('/api/v1/chat/conversations/' + convId + '/read'),
 
-  /** Employee: inbox (chưa assign + assign cho mình) */
+  /** Employee: inbox (chua assign + assign cho minh) */
   getEmployeeConversations: () =>
     API.get<ConversationListResponse>('/api/v1/chat/employee/conversations'),
 
-  /** Employee: nhận phụ trách conversation */
+  /** Employee: nhan phu trach conversation */
   assignConversation: (convId: number) =>
-    API.post(`/api/v1/chat/conversations/${convId}/assign`),
+    API.post('/api/v1/chat/conversations/' + convId + '/assign'),
 }

@@ -249,7 +249,7 @@ const EventsPage: React.FC = () => {
         {vouchers.length > 0 && (
           <div className="card" style={{ padding: 24, marginTop: 20 }}>
             <h2 style={{ fontWeight: 700, fontSize: 16, marginBottom: 14 }}>🎟️ Voucher từ sự kiện</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
               {vouchers.slice(0, 8).map(v => (
                 <div key={v.code} style={{ padding: 12, border: '1px dashed #fdba74', background: '#fff7ed', borderRadius: 'var(--radius)' }}>
                   <p style={{ fontWeight: 700, fontSize: 13, color: '#b45309' }}>{v.label}</p>

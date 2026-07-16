@@ -101,7 +101,7 @@ def seed():
 
     try:
         # ROLES
-        for name in ("admin", "superadmin", "shop", "shipper", "user", "employee"):
+        for name in ("admin", "superadmin", "shop", "shipper", "user", "employee", "warehouse_manager"):
             upsert(db, Role, {"role_name": name})
         db.commit()
         roles = {r.role_name: r for r in db.query(Role).all()}
@@ -226,7 +226,7 @@ def seed():
         db.commit()
 
         # CATEGORIES
-        for cat_name in ("Dien tu", "Thoi trang", "Sach"):
+        for cat_name in ("Điện tử", "Thời trang", "Sách"):
             upsert(db, ProductCategory, {"category_name": cat_name})
         db.commit()
         cats = {c.category_name: c for c in db.query(ProductCategory).all()}
@@ -338,6 +338,26 @@ def seed():
                 (email, pw, name, u_status, s_status, rating, total_del, ban_reason))
         db.commit()
 
+        # WAREHOUSE MANAGER ACCOUNT
+        wm_user, _ = upsert(db, User, {"email": "warehouse@example.com"},
+            password_hash=hash_password("Warehouse@123"),
+            full_name="Nguyen Van Kho", phone="0908000001",
+            address="Kho tong HCM, 100 Nguyen Van Linh, Q7", status="active")
+        # Gán role shipper (bắt buộc phải là shipper trước)
+        upsert(db, UserRole,
+            {"user_id": wm_user.user_id, "role_id": roles["shipper"].role_id},
+            current_role=False, assigned_by=admin.user_id, status="active")
+        # Gán role warehouse_manager
+        upsert(db, UserRole,
+            {"user_id": wm_user.user_id, "role_id": roles["warehouse_manager"].role_id},
+            current_role=True, assigned_by=admin.user_id, status="active")
+        # Tạo shipper profile
+        upsert(db, Shipper, {"shipper_id": wm_user.user_id},
+            user_id=wm_user.user_id,
+            vehicle_type="truck_large", license_plate="51-WM-0001",
+            status="available", rating=4.9, total_deliveries=500)
+        db.commit()
+
         # THEM 2 SHOP PHU + OWNER
         extra_owners = [
             ("owner2@example.com", "Shop@123", "Nguyen Thi Lan",  "0902222222", "Fashion Hub", "123 Le Van Sy, Q3, HCM", "4.7"),
@@ -360,12 +380,12 @@ def seed():
         shop2, shop3 = extra_shops[0], extra_shops[1]
 
         # THEM CATEGORIES
-        for cat_name in ("My pham", "Gia dung", "The thao", "Do choi"):
+        for cat_name in ("Mỹ phẩm", "Gia dụng", "Thể thao", "Đồ chơi"):
             upsert(db, ProductCategory, {"category_name": cat_name})
         db.commit()
         cats = {c.category_name: c for c in db.query(ProductCategory).all()}
 
-        # PRODUCTS — TechWorld Store (Dien tu)
+        # PRODUCTS — TechWorld Store (Điện tử)
         tech_products = [
             ("Tai nghe Sony WH-1000XM5",  Decimal("8900000"), Decimal("6500000"), 25,  230, 4.9, "Chong on chu dong, pin 30h, ket noi Bluetooth 5.2. Am thanh Hi-Res."),
             ("Cap USB-C 100W",             Decimal("150000"),  Decimal("50000"),  200,  890, 4.6, "Sac nhanh 100W, ho tro PD 3.0, dai 1.5m, boc nylon ben."),
@@ -379,13 +399,13 @@ def seed():
         for pname, price, cost, stock, sold, rat, desc in tech_products:
             p, _ = upsert(db, Product,
                 {"shop_id": shop.shop_id, "product_name": pname},
-                category_id=cats["Dien tu"].category_id,
+                category_id=cats["Điện tử"].category_id,
                 price=price, cost=cost, stock_quantity=stock,
                 sales_count=sold, rating=str(rat), total_reviews=int(sold // 4),
                 description=desc, status="active", approved_at=now - timedelta(days=20))
             prods.append(p)
 
-        # PRODUCTS — Fashion Hub (Thoi trang)
+        # PRODUCTS — Fashion Hub (Thời trang)
         fashion_products = [
             ("Ao thun Oversize Unisex",    Decimal("280000"),  Decimal("110000"), 150,  780, 4.6, "Vai cotton 100%, form rong thoai mai, nhieu mau sac, size S-3XL."),
             ("Quan jeans skinny nam",      Decimal("450000"),  Decimal("200000"),  80,  345, 4.5, "Denim cao cap, co gian 4 chieu, wash nhe, form om vua."),
@@ -397,24 +417,24 @@ def seed():
         for pname, price, cost, stock, sold, rat, desc in fashion_products:
             p, _ = upsert(db, Product,
                 {"shop_id": shop2.shop_id, "product_name": pname},
-                category_id=cats["Thoi trang"].category_id,
+                category_id=cats["Thời trang"].category_id,
                 price=price, cost=cost, stock_quantity=stock,
                 sales_count=sold, rating=str(rat), total_reviews=int(sold // 4),
                 description=desc, status="active", approved_at=now - timedelta(days=15))
             prods.append(p)
 
-        # PRODUCTS — Book Corner (Sach + khac)
+        # PRODUCTS — Book Corner (Sách + khác)
         book_products = [
-            ("Clean Code - Robert Martin",     Decimal("320000"), Decimal("180000"),  40,  156, 4.9, "Sach lap trinh kinh dien ve viet code sach, de bao tri va mo rong."),
+            ("Clean Code - Robert Martin",     Decimal("320000"), Decimal("180000"),  40,  156, 4.9, "Sách lập trình kinh điển về viết code sạch, dễ bảo trì và mở rộng."),
             ("Atomic Habits - James Clear",    Decimal("198000"), Decimal("100000"),  80,  890, 4.8, "Phuong phap xay dung thoi quen tot, loai bo thoi quen xau hieu qua."),
-            ("Dac Nhan Tam",                   Decimal("88000"),  Decimal("40000"),  200, 1250, 4.7, "Sach ky nang giao tiep ban chay nhat moi thoi cua Dale Carnegie."),
+            ("Dac Nhan Tam",                   Decimal("88000"),  Decimal("40000"),  200, 1250, 4.7, "Sách kỹ năng giao tiếp bán chạy nhất mọi thời của Dale Carnegie."),
             ("The Psychology of Money",        Decimal("175000"), Decimal("90000"),   60,  340, 4.8, "Cach suy nghi ve tien bac va dau tu duoi goc nhin tam ly hoc."),
             ("Sapiens: Luoc su loai nguoi",    Decimal("185000"), Decimal("95000"),   70,  520, 4.6, "Hanh trinh 70000 nam cua loai nguoi tu thoi do da den ky nguyen so."),
         ]
         for pname, price, cost, stock, sold, rat, desc in book_products:
             p, _ = upsert(db, Product,
                 {"shop_id": shop3.shop_id, "product_name": pname},
-                category_id=cats["Sach"].category_id,
+                category_id=cats["Sách"].category_id,
                 price=price, cost=cost, stock_quantity=stock,
                 sales_count=sold, rating=str(rat), total_reviews=int(sold // 4),
                 description=desc, status="active", approved_at=now - timedelta(days=10))
@@ -534,10 +554,10 @@ def seed():
             print(f"  {email:<32} / {pw:<12} [{role}]")
 
         print("\nSimple test accounts:")
-        print(f"  {'admin':<32} / {'admin':<12} [admin]     — hành động ghi vào admin_logs")
-        print(f"  {'super':<32} / {'super':<12} [superadmin]— toàn quyền, KHÔNG ghi log")
-        print(f"  {'shop':<32} / {'shop':<12} [shop]")
-        print(f"  {'user1':<32} / {'user1':<12} [customer]")
+        print("  admin                            / admin        [admin]")
+        print("  super                            / super        [superadmin]")
+        print("  shop                             / shop         [shop]")
+        print("  user1                            / user1        [customer]")
 
         print("\nShop employees (/shop/*):")
         for email, pw, name, position, perms in emp_users:
@@ -545,12 +565,15 @@ def seed():
             print(f"    Perms: {', '.join(perms)}")
 
         print("\nShippers (/shipper):")
-        print(f"  {'shipper1@example.com':<32} / {'Ship@123':<12} | Vo Van Toc          | active  / available   | 4.8* | 312")
+        print("  shipper1@example.com             / Ship@123     | Vo Van Toc | available | 4.8* | 312")
         for email, pw, name, u_status, s_status, rating, total_del, ban_reason in extra_shipper_data:
             flag = " [BANNED]" if u_status == "banned" else ""
             print(f"  {email:<32} / {pw:<12} | {name:<22}| {u_status:<8} / {s_status:<12} | {rating}* | {total_del}{flag}")
             if ban_reason:
                 print(f"    Reason: {ban_reason}")
+
+        print("\nWarehouse Manager (/warehouse):")
+        print("  warehouse@example.com            / Warehouse@123  [warehouse_manager]")
         print()
 
     except Exception:

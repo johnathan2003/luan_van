@@ -142,7 +142,7 @@ const ShippingConfigPage: React.FC = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: C.tint }}>
-                {['Tên vùng', 'Tỉnh/TP áp dụng', 'Phí cơ bản', 'Phí/kg thêm', 'Thời gian ước tính', ''].map(h => (
+                {['Tên vùng', 'Tỉnh/TP áp dụng', 'Phí cơ bản', 'Phí/kg thêm', 'Thời gián ước tính', ''].map(h => (
                   <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: C.navy }}>{h}</th>
                 ))}
               </tr>
@@ -174,7 +174,7 @@ const ShippingConfigPage: React.FC = () => {
 
       {/* Methods tab */}
       {activeTab === 'methods' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
           {methods.length === 0 ? (
             <div className="card" style={{ padding: 40, textAlign: 'center', color: C.gray, gridColumn: '1/-1' }}>
               Chưa có phương thức nào. Nhấn "+ Thêm mới" để bắt đầu.
@@ -219,7 +219,7 @@ const ShippingConfigPage: React.FC = () => {
                 { key:'provinces',      label:'Tỉnh/TP áp dụng',           type:'text',   placeholder:'VD: HCM, Bình Dương' },
                 { key:'base_fee',       label:'Phí cơ bản (₫)',            type:'number', placeholder:'VD: 30000' },
                 { key:'per_kg',         label:'Phí/kg thêm (₫)',           type:'number', placeholder:'VD: 5000' },
-                { key:'estimated_days', label:'Thời gian ước tính (ngày)', type:'text',   placeholder:'VD: 1-2' },
+                { key:'estimated_days', label:'Thời gián ước tính (ngày)', type:'text',   placeholder:'VD: 1-2' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ fontSize:12, fontWeight:600, color:C.gray, display:'block', marginBottom:4 }}>{f.label}</label>

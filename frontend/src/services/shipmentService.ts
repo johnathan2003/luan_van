@@ -10,6 +10,8 @@ export const shipmentService = {
   updateLocation: (id: number, lat: number, lng: number) =>
     API.post(`/api/v1/shipments/${id}/update-location`, { lat, lng }),
   getMyDeliveries: (params: any = {}) => API.get('/api/v1/shipments/shipper/me/deliveries', { params }),
+  getPendingOrders: (params: { page?: number; limit?: number } = {}) =>
+    API.get('/api/v1/shipments/shipper/pending-orders', { params }),
   updateStatus: (status: string) => API.put('/api/v1/shipments/shipper/me/status', { status }),
   getMyRating: () => API.get('/api/v1/shipments/shipper/me/rating'),
 
@@ -33,6 +35,6 @@ export const shipmentService = {
   // Incidents
   getMyIncidents: (params: { page?: number; limit?: number; is_violation?: boolean } = {}) =>
     API.get('/api/v1/shipments/shipper/me/incidents', { params }),
-  createIncident: (data: { order_id?: number; type: string; title: string; description?: string }) =>
+  createIncident: (data: { order_id?: number; incident_type?: string; title: string; description?: string }) =>
     API.post('/api/v1/shipments/shipper/me/incidents', data),
 }
