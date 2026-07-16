@@ -1,5 +1,5 @@
 import React from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './ProtectedRoute'
 
 // Layouts — mỗi thực thể có layout riêng
@@ -54,6 +54,7 @@ import AuditLogsPage            from './pages/admin/AuditLogsPage'
 import ShopManagementPage       from './pages/admin/ShopManagementPage'
 import ProductAdminPage         from './pages/admin/ProductAdminPage'
 import OrderAdminPage           from './pages/admin/OrderAdminPage'
+import ShipperManagementPage    from './pages/admin/ShipperManagementPage'
 import VoucherAdminPage         from './pages/admin/VoucherAdminPage'
 import BannerAdminPage          from './pages/admin/BannerAdminPage'
 import FinancePage              from './pages/admin/FinancePage'
@@ -159,6 +160,7 @@ const Router: React.FC = () => (
       <Route path="/admin/banners"            element={inAdmin(<BannerAdminPage />)} />
       <Route path="/admin/notifications"      element={inAdmin(<SystemNotificationPage />)} />
       {/* Vận hành */}
+      <Route path="/admin/shippers"           element={inAdmin(<ShipperManagementPage />)} />
       <Route path="/admin/shipping-config"    element={inAdmin(<ShippingConfigPage />)} />
       <Route path="/admin/system-employees"   element={inAdmin(<SystemEmployeePage />)} />
       <Route path="/admin/mall-requests"      element={inAdmin(<MallRequestsPage />)} />
@@ -180,7 +182,7 @@ const Router: React.FC = () => (
 
     {/* ── 🚚 Shipper ──────────────────────────────────────────────────────── */}
     <Route element={<ProtectedRoute requiredRole="shipper" />}>
-      <Route path="/shipper"                       element={inShipper(<ShipperOverviewPage />)} />
+      <Route path="/shipper"                       element={<Navigate to="/shipper/deliveries" replace />} />
       <Route path="/shipper/deliveries"            element={inShipper(<DeliveryListPage />)} />
       <Route path="/shipper/earnings"              element={inShipper(<EarningsPage />)} />
       <Route path="/shipper/withdrawal"            element={inShipper(<WithdrawalPage />)} />

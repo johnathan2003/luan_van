@@ -70,6 +70,7 @@ const ADMIN_NAV: NavGroup[] = [
   {
     group: 'Vận hành',
     items: [
+      { icon: '🛵', label: 'Quản lý Shipper',  path: '/admin/shippers' },
       { icon: '🚚', label: 'Cấu hình VC',      path: '/admin/shipping-config' },
       { icon: '🧑‍💼', label: 'Nhân viên HT',  path: '/admin/system-employees' },
     ],

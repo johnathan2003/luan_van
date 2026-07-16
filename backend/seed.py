@@ -101,7 +101,7 @@ def seed():
 
     try:
         # ROLES
-        for name in ("admin", "superadmin", "shop", "shipper", "user", "employee"):
+        for name in ("admin", "superadmin", "shop", "shipper", "user", "employee", "warehouse_manager"):
             upsert(db, Role, {"role_name": name})
         db.commit()
         roles = {r.role_name: r for r in db.query(Role).all()}
@@ -338,6 +338,26 @@ def seed():
                 (email, pw, name, u_status, s_status, rating, total_del, ban_reason))
         db.commit()
 
+        # WAREHOUSE MANAGER ACCOUNT
+        wm_user, _ = upsert(db, User, {"email": "warehouse@example.com"},
+            password_hash=hash_password("Warehouse@123"),
+            full_name="Nguyen Van Kho", phone="0908000001",
+            address="Kho tong HCM, 100 Nguyen Van Linh, Q7", status="active")
+        # Gán role shipper (bắt buộc phải là shipper trước)
+        upsert(db, UserRole,
+            {"user_id": wm_user.user_id, "role_id": roles["shipper"].role_id},
+            current_role=False, assigned_by=admin.user_id, status="active")
+        # Gán role warehouse_manager
+        upsert(db, UserRole,
+            {"user_id": wm_user.user_id, "role_id": roles["warehouse_manager"].role_id},
+            current_role=True, assigned_by=admin.user_id, status="active")
+        # Tạo shipper profile
+        upsert(db, Shipper, {"shipper_id": wm_user.user_id},
+            user_id=wm_user.user_id,
+            vehicle_type="truck_large", license_plate="51-WM-0001",
+            status="available", rating=4.9, total_deliveries=500)
+        db.commit()
+
         # THEM 2 SHOP PHU + OWNER
         extra_owners = [
             ("owner2@example.com", "Shop@123", "Nguyen Thi Lan",  "0902222222", "Fashion Hub", "123 Le Van Sy, Q3, HCM", "4.7"),
@@ -534,10 +554,10 @@ def seed():
             print(f"  {email:<32} / {pw:<12} [{role}]")
 
         print("\nSimple test accounts:")
-        print(f"  {'admin':<32} / {'admin':<12} [admin]     — hành động ghi vào admin_logs")
-        print(f"  {'super':<32} / {'super':<12} [superadmin]— toàn quyền, KHÔNG ghi log")
-        print(f"  {'shop':<32} / {'shop':<12} [shop]")
-        print(f"  {'user1':<32} / {'user1':<12} [customer]")
+        print("  admin                            / admin        [admin]")
+        print("  super                            / super        [superadmin]")
+        print("  shop                             / shop         [shop]")
+        print("  user1                            / user1        [customer]")
 
         print("\nShop employees (/shop/*):")
         for email, pw, name, position, perms in emp_users:
@@ -545,12 +565,15 @@ def seed():
             print(f"    Perms: {', '.join(perms)}")
 
         print("\nShippers (/shipper):")
-        print(f"  {'shipper1@example.com':<32} / {'Ship@123':<12} | Vo Van Toc          | active  / available   | 4.8* | 312")
+        print("  shipper1@example.com             / Ship@123     | Vo Van Toc | available | 4.8* | 312")
         for email, pw, name, u_status, s_status, rating, total_del, ban_reason in extra_shipper_data:
             flag = " [BANNED]" if u_status == "banned" else ""
             print(f"  {email:<32} / {pw:<12} | {name:<22}| {u_status:<8} / {s_status:<12} | {rating}* | {total_del}{flag}")
             if ban_reason:
                 print(f"    Reason: {ban_reason}")
+
+        print("\nWarehouse Manager (/warehouse):")
+        print("  warehouse@example.com            / Warehouse@123  [warehouse_manager]")
         print()
 
     except Exception:
