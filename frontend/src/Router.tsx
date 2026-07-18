@@ -37,6 +37,7 @@ import OrderManagementPage      from './pages/shop/OrderManagementPage'
 import EmployeeManagementPage   from './pages/shop/EmployeeManagementPage'
 import AnalyticsPage            from './pages/shop/AnalyticsPage'
 import VoucherManagementPage    from './pages/shop/VoucherManagementPage'
+import BuyZoMallRegisterPage    from './pages/shop/BuyZoMallRegisterPage'
 import VoucherCenterPage        from './pages/VoucherCenterPage'
 
 const BannerAuctionPage     = React.lazy(() => import('./pages/shop/BannerAuctionPage'))
@@ -54,7 +55,8 @@ import AuditLogsPage            from './pages/admin/AuditLogsPage'
 import ShopManagementPage       from './pages/admin/ShopManagementPage'
 import ProductAdminPage         from './pages/admin/ProductAdminPage'
 import OrderAdminPage           from './pages/admin/OrderAdminPage'
-import ShipperManagementPage    from './pages/admin/ShipperManagementPage'
+import ShipperManagementPage       from './pages/admin/ShipperManagementPage'
+import WarehouseManagerAdminPage   from './pages/admin/WarehouseManagerAdminPage'
 import VoucherAdminPage         from './pages/admin/VoucherAdminPage'
 import BannerAdminPage          from './pages/admin/BannerAdminPage'
 import FinancePage              from './pages/admin/FinancePage'
@@ -135,6 +137,7 @@ const Router: React.FC = () => (
       <Route path="/shop/vouchers"     element={inShop(<VoucherManagementPage />)} />
       <Route path="/shop/auction"      element={inShop(<BannerAuctionPage />)} />
       <Route path="/shop/chat"         element={inShop(<ShopChatPage />)} />
+      <Route path="/shop/mall"         element={inShop(<BuyZoMallRegisterPage />)} />
     </Route>
 
     {/* ── ⚙️ Admin ─────────────────────────────────────────────────────────── */}
@@ -160,7 +163,8 @@ const Router: React.FC = () => (
       <Route path="/admin/banners"            element={inAdmin(<BannerAdminPage />)} />
       <Route path="/admin/notifications"      element={inAdmin(<SystemNotificationPage />)} />
       {/* Vận hành */}
-      <Route path="/admin/shippers"           element={inAdmin(<ShipperManagementPage />)} />
+      <Route path="/admin/shippers"            element={inAdmin(<ShipperManagementPage />)} />
+      <Route path="/admin/warehouse-managers" element={inAdmin(<WarehouseManagerAdminPage />)} />
       <Route path="/admin/shipping-config"    element={inAdmin(<ShippingConfigPage />)} />
       <Route path="/admin/system-employees"   element={inAdmin(<SystemEmployeePage />)} />
       <Route path="/admin/mall-requests"      element={inAdmin(<MallRequestsPage />)} />

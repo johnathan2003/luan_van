@@ -20,67 +20,68 @@ const ADMIN_NAV: NavGroup[] = [
   {
     group: 'Tổng quan',
     items: [
-      { icon: '📊', label: 'Dashboard',        path: '/admin' },
+      { icon: '📊', label: 'Tổng Quan Hệ Thống', path: '/admin' },
     ],
   },
   {
     group: 'Người dùng',
     items: [
-      { icon: '👥', label: 'Danh sách ND',     path: '/admin/users' },
-      { icon: '🔐', label: 'Phân quyền',       path: '/admin/users/roles' },
+      { icon: '👥', label: 'Danh Sách Người Dùng', path: '/admin/users' },
+      { icon: '🔐', label: 'Phân quyền',            path: '/admin/users/roles' },
+      { icon: '🧑‍💼', label: 'Nhân Viên Hệ Thống', path: '/admin/system-employees' },
     ],
   },
   {
     group: 'Cửa hàng',
     items: [
-      { icon: '🏪', label: 'Danh sách shop',   path: '/admin/shops' },
-      { icon: '✅', label: 'Duyệt đăng ký',    path: '/admin/approvals' },
+      { icon: '🏪', label: 'Danh Sách Shop',    path: '/admin/shops' },
+      { icon: '✅', label: 'Duyệt Đăng Ký',    path: '/admin/approvals' },
     ],
   },
   {
     group: 'Sản phẩm',
     items: [
-      { icon: '🏷️', label: 'Quản lý SP',      path: '/admin/products' },
-      { icon: '🗑️', label: 'Yêu cầu xóa',     path: '/admin/deletion-requests' },
+      { icon: '🏷️', label: 'Quản Lý Sản Phẩm',          path: '/admin/products' },
+      { icon: '🗑️', label: 'Duyệt & Xử Lý Sản Phẩm',  path: '/admin/deletion-requests' },
     ],
   },
   {
     group: 'Đơn hàng',
     items: [
-      { icon: '📦', label: 'Danh sách ĐH',    path: '/admin/orders' },
-      { icon: '⚖️', label: 'Tranh chấp',       path: '/admin/disputes' },
+      { icon: '📦', label: 'Danh Sách Đơn Hàng', path: '/admin/orders' },
+      { icon: '⚖️', label: 'Tranh Chấp',        path: '/admin/disputes' },
     ],
   },
   {
     group: 'Tài chính',
     items: [
-      { icon: '💰', label: 'Doanh thu HT',     path: '/admin/finance' },
-      { icon: '🎫', label: 'Mã giảm giá',      path: '/admin/vouchers' },
+      { icon: '💰', label: 'Doanh Thu Hệ Thống',     path: '/admin/finance' },
+      { icon: '🎫', label: 'Mã Giảm Giá',       path: '/admin/vouchers' },
     ],
   },
   {
-    group: 'Nội dung',
+    group: 'Quảng Cáo & Nội Dung',
     items: [
-      { icon: '🖼️', label: 'Banner QC',        path: '/admin/banners' },
-      { icon: '🏆', label: 'Đấu giá QC',      path: '/admin/auction' },
-      { icon: '📷', label: 'Thư viện ảnh',    path: '/admin/images' },
-      { icon: '📣', label: 'Thông báo HT',     path: '/admin/notifications' },
+      { icon: '🖼️', label: 'Banner Quảng Cáo',      path: '/admin/banners' },
+      { icon: '🏆', label: 'Đấu Giá Quảng Cáo',     path: '/admin/auction' },
+      { icon: '📷', label: 'Thư Viện Ảnh',           path: '/admin/images' },
+      { icon: '📣', label: 'Thông Báo Hoạt Động',    path: '/admin/notifications' },
     ],
   },
   {
     group: 'Vận hành',
     items: [
-      { icon: '🛵', label: 'Quản lý Shipper',  path: '/admin/shippers' },
-      { icon: '🚚', label: 'Cấu hình VC',      path: '/admin/shipping-config' },
-      { icon: '🧑‍💼', label: 'Nhân viên HT',  path: '/admin/system-employees' },
+      { icon: '🛵', label: 'Quản Lý Shipper',   path: '/admin/shippers' },
+      { icon: '🏭', label: 'Quản Lý Kho',      path: '/admin/warehouse-managers' },
+      { icon: '🚚', label: 'Cấu Hình Vận Chuyển',      path: '/admin/shipping-config' },
     ],
   },
   {
     group: 'Báo cáo & Log',
     items: [
-      { icon: '📈', label: 'Báo cáo',          path: '/admin/reports' },
-      { icon: '💬', label: 'Phản hồi ND',      path: '/admin/feedback' },
-      { icon: '📋', label: 'Nhật ký hệ thống', path: '/admin/logs' },
+      { icon: '📈', label: 'Báo Cáo',              path: '/admin/reports' },
+      { icon: '💬', label: 'Phản Hồi Người Dùng', path: '/admin/feedback' },
+      { icon: '📋', label: 'Nhật Ký Hệ Thống',    path: '/admin/logs' },
     ],
   },
 ]

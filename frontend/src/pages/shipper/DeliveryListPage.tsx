@@ -19,7 +19,6 @@ const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }>
 }
 
 const SHIPPER_TYPE: Record<string, { label: string; icon: string; color: string; bg: string }> = {
-  free:           { label: 'Tự do',     icon: '🛵', color: C.purple, bg: '#EDE9FE' },
   zone:           { label: 'Khu vực',   icon: '🏍️', color: C.teal,   bg: '#CCFBF1' },
   inter_province: { label: 'Liên tỉnh', icon: '🚚', color: C.amber,  bg: C.light   },
 }
@@ -323,7 +322,7 @@ const DeliveryListPage: React.FC = () => {
     delivery: any; mode: 'pickup' | 'deliver'
   } | null>(null)
   // Will come from /api/v1/shipments/shipper/me/profile in real backend
-  const [shipperType] = useState<string>('free')
+  const [shipperType] = useState<string>('zone')
 
   const loadMyDeliveries = () => {
     setLoading(true)
@@ -399,7 +398,7 @@ const DeliveryListPage: React.FC = () => {
       ? deliveries.filter(d => d.status === 'in_transit' || d.status === 'out_for_delivery')
       : deliveries.filter(d => d.status === filter)
 
-  const stype = SHIPPER_TYPE[shipperType] ?? SHIPPER_TYPE.free
+  const stype = SHIPPER_TYPE[shipperType] ?? SHIPPER_TYPE.zone
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

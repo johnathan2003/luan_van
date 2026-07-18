@@ -81,6 +81,11 @@ const ProductManagement: React.FC = () => {
   // bundle items (global – not per-variant)
   const [bundleItems, setBundleItems]         = useState<BundleItem[]>([])
   const [bundleUploading, setBundleUploading] = useState<string | null>(null)
+
+  // packaging dimensions (product-level)
+  const [packaging, setPackaging] = useState({ length: '', width: '', height: '', weight: '' })
+  const setPkg = (field: 'length' | 'width' | 'height' | 'weight', val: string) =>
+    setPackaging(prev => ({ ...prev, [field]: val }))
   const [bundleAttrInputs, setBundleAttrInputs] = useState<Record<string, string>>({})
   const bundleFileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
@@ -154,6 +159,7 @@ const ProductManagement: React.FC = () => {
     setEditProduct(null); setForm(EMPTY_FORM)
     const v = newVariant(); setLocalVariants([v])
     setBundleItems([]); setVLabelInput({}); setVPriceInput({}); setBundleAttrInputs({})
+    setPackaging({ length: '', width: '', height: '', weight: '' })
     setModalOpen(true)
   }
   const openEdit = (p: any) => {
@@ -1519,6 +1525,58 @@ const ProductManagement: React.FC = () => {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Kích thước đóng gói */}
+          <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '16px 18px' }}>
+            <p style={{ fontSize: 12, fontWeight: 800, color: '#15803D', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              📦 Kích thước đóng gói
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+              {([
+                { key: 'length' as const, label: 'Dài', unit: 'cm', icon: '↔️', placeholder: 'vd: 30' },
+                { key: 'width'  as const, label: 'Rộng', unit: 'cm', icon: '↕️', placeholder: 'vd: 20' },
+                { key: 'height' as const, label: 'Cao',  unit: 'cm', icon: '⬆️', placeholder: 'vd: 15' },
+                { key: 'weight' as const, label: 'Cân nặng', unit: 'kg', icon: '⚖️', placeholder: 'vd: 1.5' },
+              ]).map(f => (
+                <div key={f.key}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#166534', display: 'block', marginBottom: 5 }}>
+                    {f.icon} {f.label} <span style={{ fontWeight: 400, color: '#64748B' }}>({f.unit})</span>
+                  </label>
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="decimal"
+                    value={packaging[f.key]}
+                    onChange={e => setPkg(f.key, e.target.value.replace(/[^0-9.]/g, ''))}
+                    placeholder={f.placeholder}
+                  />
+                </div>
+              ))}
+            </div>
+            {/* Tính toán tự động */}
+            {(packaging.length !== '' && packaging.width !== '' && packaging.height !== '') ? (() => {
+              const vol  = (parseFloat(packaging.length) * parseFloat(packaging.width) * parseFloat(packaging.height) / 1000).toFixed(1)
+              const volW = (parseFloat(packaging.length) * parseFloat(packaging.width) * parseFloat(packaging.height) / 5000).toFixed(2)
+              const actW = parseFloat(packaging.weight)
+              const charge = Math.max(actW || 0, parseFloat(volW)).toFixed(2)
+              return (
+                <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                  <div style={{ flex: 1, background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 9, padding: '8px 12px', textAlign: 'center' }}>
+                    <p style={{ fontSize: 10, color: '#3B82F6', fontWeight: 700, margin: 0 }}>Thể tích</p>
+                    <p style={{ fontSize: 16, fontWeight: 800, color: '#1D4ED8', margin: '2px 0 0' }}>{vol} <span style={{ fontSize: 10, fontWeight: 400 }}>dm³</span></p>
+                  </div>
+                  <div style={{ flex: 1, background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 9, padding: '8px 12px', textAlign: 'center' }}>
+                    <p style={{ fontSize: 10, color: '#16A34A', fontWeight: 700, margin: 0 }}>Cân thể tích</p>
+                    <p style={{ fontSize: 16, fontWeight: 800, color: '#15803D', margin: '2px 0 0' }}>{volW} <span style={{ fontSize: 10, fontWeight: 400 }}>kg</span></p>
+                  </div>
+                  <div style={{ flex: 1, background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 9, padding: '8px 12px', textAlign: 'center' }}>
+                    <p style={{ fontSize: 10, color: '#EA580C', fontWeight: 700, margin: 0 }}>Cân tính phí</p>
+                    <p style={{ fontSize: 16, fontWeight: 800, color: '#C2410C', margin: '2px 0 0' }}>{charge} <span style={{ fontSize: 10, fontWeight: 400 }}>kg</span></p>
+                  </div>
+                </div>
+              )
+            })() : null}
           </div>
 
           {/* Footer buttons */}

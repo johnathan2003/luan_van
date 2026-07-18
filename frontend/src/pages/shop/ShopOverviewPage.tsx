@@ -3,7 +3,7 @@
  * Layout: ShopLayout (do Router bọc ngoài)
  */
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import Loading from '../../components/common/Loading'
 import { shopService } from '../../services/shopService'
 import { formatCurrency } from '../../utils/formatters'
@@ -12,6 +12,7 @@ import { getDisputesByComplainant, getDisputesByTarget } from '../../utils/dispu
 
 const ShopOverviewPage: React.FC = () => {
   const { user } = useAppSelector(s => s.auth)
+  const navigate = useNavigate()
   const [shop, setShop]       = useState<any>(null)
   const [analytics, setAnalytics] = useState<any>(null)
   const [orders, setOrders]   = useState<any[]>([])
@@ -66,7 +67,7 @@ const ShopOverviewPage: React.FC = () => {
           ) : shop?.mall_request_status === 'pending' ? (
             <span style={{ padding: '7px 14px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 20, fontSize: 13, color: 'var(--text-secondary)' }}>⏳ Đang chờ duyệt Mall</span>
           ) : (
-            <button onClick={requestMall} style={{ padding: '7px 16px', background: 'linear-gradient(135deg, #7C3AED, #4F46E5)', color: '#fff', border: 'none', borderRadius: 20, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>🏆 Đăng ký BuyZo Mall</button>
+            <button onClick={() => navigate('/shop/mall')} style={{ padding: '7px 16px', background: 'linear-gradient(135deg, #7C3AED, #4F46E5)', color: '#fff', border: 'none', borderRadius: 20, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>🏆 Đăng ký BuyZo Mall</button>
           )}
           {mallMsg && <span style={{ fontSize: 13, color: 'var(--text-secondary)', alignSelf: 'center' }}>{mallMsg}</span>}
           <Link to="/shop/products" className="btn btn-primary">+ Thêm sản phẩm</Link>

@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAppSelector } from '../../store/hooks'
-import { getDisputesByComplainant, getDisputesByTarget } from '../../utils/disputeStore'
+import { getDisputesByComplainant, getDisputesByTarget, seedUserDemoDisputesIfNeeded } from '../../utils/disputeStore'
 import type { Dispute } from '../../types/dispute'
 import { DISPUTE_STATUS_LABELS, DISPUTE_STATUS_COLORS, DISPUTE_TARGET_LABELS } from '../../types/dispute'
 import { formatDate, formatOrderId } from '../../utils/formatters'
@@ -21,9 +21,21 @@ const MyDisputesPage: React.FC = () => {
 
   const [tab, setTab] = useState<Tab>(isShipper ? 'received' : 'sent')
   const [selected, setSelected] = useState<Dispute | null>(null)
+  const [sentDisputes, setSentDisputes] = useState<Dispute[]>([])
+  const [receivedDisputes, setReceivedDisputes] = useState<Dispute[]>([])
 
-  const sentDisputes = (user && !isShipper) ? getDisputesByComplainant(complainantType, user.user_id) : []
-  const receivedDisputes = user ? getDisputesByTarget(targetType, user.user_id) : []
+  const reload = () => {
+    if (!user) return
+    setSentDisputes(isShipper ? [] : getDisputesByComplainant(complainantType, user.user_id))
+    setReceivedDisputes(getDisputesByTarget(targetType, user.user_id))
+  }
+
+  useEffect(() => {
+    if (!user) return
+    seedUserDemoDisputesIfNeeded(user.user_id, user.full_name || 'Người dùng', role as 'user' | 'shop' | 'shipper')
+    reload()
+  }, [user?.user_id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const disputes = tab === 'sent' ? sentDisputes : receivedDisputes
 
   return (
@@ -97,7 +109,7 @@ const MyDisputesPage: React.FC = () => {
       {selected && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onClick={() => setSelected(null)}>
-          <div className="card" style={{ width: 520, maxHeight: '90vh', overflowY: 'auto', padding: 26 }} onClick={e => e.stopPropagation()}>
+          <div className="card" style={{ width: '90vw', maxWidth: 780, maxHeight: '90vh', overflowY: 'auto', padding: '32px 36px' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
               <div>
                 <h2 style={{ fontSize: 17, fontWeight: 800 }}>{formatOrderId(selected.order_id)}</h2>
@@ -125,7 +137,7 @@ const MyDisputesPage: React.FC = () => {
                 <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)', marginBottom: 6 }}>HÌNH ẢNH BẰNG CHỨNG</p>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {selected.evidence.images.map((img, i) => (
-                    <img key={i} src={img} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--gray-200)' }} />
+                    <img key={i} src={img} alt="" style={{ width: 220, height: 220, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--gray-200)', cursor: 'pointer' }} onClick={() => window.open(img, '_blank')} />
                   ))}
                 </div>
               </div>

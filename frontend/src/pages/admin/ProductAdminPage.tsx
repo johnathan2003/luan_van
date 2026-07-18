@@ -16,11 +16,15 @@ const C = {
   gray: '#64748B', success: '#16A34A', warning: '#D97706', error: '#DC2626',
 }
 const STATUS: Record<string, { label: string; color: string; bg: string }> = {
-  all:      { label: 'Tất cả',    color: C.blue,    bg: C.light },
-  pending:  { label: 'Chờ duyệt',  color: C.warning, bg: '#FEF3C7' },
-  approved: { label: 'Đã duyệt',   color: '#0EA5E9', bg: '#E0F2FE' },
-  active:   { label: 'Đang bán',   color: C.success, bg: '#DCFCE7' },
-  hidden:   { label: 'Đã ẩn',     color: C.gray,    bg: '#F1F5F9' },
+  all:      { label: 'Tất cả',   color: C.blue,    bg: C.light },
+  approved: { label: 'Đã duyệt', color: '#0EA5E9', bg: '#E0F2FE' },
+  active:   { label: 'Đang bán', color: C.success, bg: '#DCFCE7' },
+  hidden:   { label: 'Đã ẩn',   color: C.gray,    bg: '#F1F5F9' },
+}
+// Extended status styles for product cards (pending/rejected can still arrive in 'all' tab)
+const ALL_STATUS_STYLE: Record<string, { label: string; color: string; bg: string }> = {
+  ...STATUS,
+  pending:  { label: 'Chờ duyệt', color: C.warning, bg: '#FEF3C7' },
   rejected: { label: 'Từ chối',   color: C.error,   bg: '#FEE2E2' },
 }
 interface Product {
@@ -76,9 +80,19 @@ const ProductDetailModal: React.FC<{
   onApprove: (id: number) => void
   onRejectWithNotes: (id: number, reason: string, anns: Ann[]) => void
   openImgModal: (p: Product) => void
-}> = ({ data, onClose, onApprove, onRejectWithNotes, openImgModal }) => {
+  onDelete: (id: number) => void
+  onRevoke: (id: number) => void
+}> = ({ data, onClose, onApprove, onRejectWithNotes, openImgModal, onDelete, onRevoke }) => {
   const { p, variants, allAttrs, allPromos, accessories, gifts, imgs, price, stock } = data
-  const st = STATUS[p.status] ?? STATUS.pending
+  const ALL_ST: Record<string, { label: string; color: string; bg: string }> = {
+    all:      { label: 'Tất cả',   color: '#1D4ED8', bg: '#DBEAFE' },
+    approved: { label: 'Đã duyệt', color: '#0EA5E9', bg: '#E0F2FE' },
+    active:   { label: 'Đang bán', color: '#16A34A', bg: '#DCFCE7' },
+    hidden:   { label: 'Đã ẩn',   color: '#64748B', bg: '#F1F5F9' },
+    pending:  { label: 'Chờ duyệt', color: '#D97706', bg: '#FEF3C7' },
+    rejected: { label: 'Từ chối',   color: '#DC2626', bg: '#FEE2E2' },
+  }
+  const st = ALL_ST[p.status] ?? ALL_ST.pending
 
   const [annotateMode, setAnnotateMode] = useState(false)
   const [annotations, setAnnotations]   = useState<Ann[]>([])
@@ -435,7 +449,16 @@ const ProductDetailModal: React.FC<{
                 </button>
               </>
             ) : (
-              <div style={{ flex: 1, textAlign: 'center', padding: '10px', borderRadius: 10, background: st.bg, color: st.color, fontWeight: 700 }}>{st.label}</div>
+              <>
+                <button onClick={() => { onRevoke(p.product_id); onClose() }}
+                  style={{ flex: 1, padding: '11px', background: '#FEF3C7', color: C.warning, border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  🔄 Thu hồi
+                </button>
+                <button onClick={() => { onDelete(p.product_id); onClose() }}
+                  style={{ flex: 1, padding: '11px', background: '#FEE2E2', color: C.error, border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  🗑️ Xóa sản phẩm
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -450,7 +473,7 @@ interface Product { product_id: number; product_name: string; shop_id: number; p
 const ProductAdminPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading]   = useState(true)
-  const [tab, setTab]           = useState('all')
+  const [tab, setTab]           = useState('active')
   const [search, setSearch]     = useState('')
   const [detail, setDetail]     = useState<any | null>(null)
   const [imgModal, setImgModal]       = useState<Product | null>(null)
@@ -522,6 +545,23 @@ const ProductAdminPage: React.FC = () => {
     const f = e.target.files?.[0]; if (!f) return
     setPendingFile(f); setPreviewUrl(URL.createObjectURL(f)); e.target.value = ''
   }
+  const handleDeleteProduct = async (id: number) => {
+    if (!window.confirm('Xác nhận xóa sản phẩm này?')) return
+    try {
+      await adminService.rejectProduct(id, 'Admin xóa sản phẩm')
+      setProducts(p => p.filter(x => x.product_id !== id))
+      toast.success('Đã xóa sản phẩm')
+    } catch { toast.error('Lỗi khi xóa') }
+  }
+
+  const handleRevokeProduct = async (id: number) => {
+    try {
+      await adminService.rejectProduct(id, 'Admin thu hồi — tạm ẩn sản phẩm')
+      setProducts(p => p.filter(x => x.product_id !== id))
+      toast.success('Đã thu hồi sản phẩm')
+    } catch { toast.error('Lỗi khi thu hồi') }
+  }
+
   const handleSaveImage = async () => {
     if (!imgModal) return; setUploading(true)
     try {
@@ -538,15 +578,12 @@ const ProductAdminPage: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: C.navy }}>🏷️ Quản lý sản phẩm</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: C.navy }}>🏷️ Quản Lý Sản Phẩm Đang Bán</h1>
         <p style={{ fontSize: 13, color: C.gray, marginTop: 2 }}>Click card để zoom ảnh, xem chi tiết & đánh dấu vi phạm gửi shop</p>
       </div>
 
-      <div className="card" style={{ padding: '12px 16px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        {Object.entries(STATUS).map(([k, v]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ padding: '7px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, background: tab === k ? v.color : C.tint, color: tab === k ? 'white' : C.gray }}>{v.label}</button>
-        ))}
-        <form onSubmit={e => { e.preventDefault(); load(tab, search) }} style={{ display: 'flex', gap: 8, flex: 1, minWidth: 180 }}>
+      <div className="card" style={{ padding: '12px 16px' }}>
+        <form onSubmit={e => { e.preventDefault(); load(tab, search) }} style={{ display: 'flex', gap: 8 }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Tìm sản phẩm..."
             style={{ flex: 1, padding: '7px 14px', border: `1px solid ${C.light}`, borderRadius: 8, fontSize: 13, outline: 'none' }} />
           <button type="submit" style={{ padding: '7px 14px', borderRadius: 8, background: C.blue, color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Tìm</button>
@@ -571,7 +608,7 @@ const ProductAdminPage: React.FC = () => {
             const allPromos   = variants.flatMap((v: any) => v.promos || [])
             const accessories = allBundles.filter((b: any) => b.type === 'accessory')
             const gifts       = allBundles.filter((b: any) => b.type === 'gift')
-            const st          = STATUS[p.status] ?? STATUS.pending
+            const st          = ALL_STATUS_STYLE[p.status] ?? ALL_STATUS_STYLE.pending
             const openDetail  = () => setDetail({ p, variants, allAttrs, allPromos, accessories, gifts, imgs, price, stock })
             const rejection   = rejectionStore.get(p.product_id)
 
@@ -598,7 +635,18 @@ const ProductAdminPage: React.FC = () => {
                         <button onClick={() => handleApprove(p.product_id)} style={{ flex: 1, padding: '7px', background: '#DCFCE7', color: C.success, border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✅ Duyệt</button>
                         <button onClick={() => setRejectModal({ id: p.product_id, shop_id: p.shop_id, reason: '', anns: [], flagCount: 1 })} style={{ flex: 1, padding: '7px', background: '#FEE2E2', color: C.error, border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>❌ Từ chối</button>
                       </>
-                    ) : <div style={{ flex: 1, textAlign: 'center', padding: '6px', borderRadius: 7, background: st.bg, color: st.color, fontSize: 12, fontWeight: 700 }}>{st.label}</div>}
+                    ) : (
+                      <>
+                        <button onClick={e => { e.stopPropagation(); handleRevokeProduct(p.product_id) }}
+                          style={{ flex: 1, padding: '7px', background: '#FEF3C7', color: C.warning, border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                          🔄 Thu hồi
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); handleDeleteProduct(p.product_id) }}
+                          style={{ flex: 1, padding: '7px', background: '#FEE2E2', color: C.error, border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                          🗑️ Xóa
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -607,7 +655,7 @@ const ProductAdminPage: React.FC = () => {
         </div>
       )}
 
-      {detail && <ProductDetailModal data={detail} onClose={() => setDetail(null)} onApprove={handleApprove} onRejectWithNotes={handleRejectWithNotes} openImgModal={openImgModal} />}
+      {detail && <ProductDetailModal data={detail} onClose={() => setDetail(null)} onApprove={handleApprove} onRejectWithNotes={handleRejectWithNotes} openImgModal={openImgModal} onDelete={handleDeleteProduct} onRevoke={handleRevokeProduct} />}
 
       {rejectModal !== null && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setRejectModal(null)}>
