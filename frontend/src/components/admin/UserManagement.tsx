@@ -45,10 +45,7 @@ const UserManagement: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: C.navy }}>👥 Quản lý người dùng</h1>
-        <p style={{ fontSize: 13, color: C.gray, marginTop: 2 }}>Xem và quản lý tất cả tài khoản trong hệ thống</p>
-      </div>
+
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>

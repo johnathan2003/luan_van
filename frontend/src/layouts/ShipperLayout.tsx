@@ -15,7 +15,6 @@ import Navbar from '../components/common/Navbar'
 import { shipmentService } from '../services/shipmentService'
 
 const SHIPPER_NAV = [
-  { icon: '🏠', label: 'Tổng quan',       path: '/shipper' },
   { icon: '📦', label: 'Đơn giao hàng',  path: '/shipper/deliveries' },
   { icon: '💰', label: 'Thu nhập',        path: '/shipper/earnings' },
   { icon: '🏦', label: 'Rút tiền',        path: '/shipper/withdrawal' },
@@ -116,9 +115,9 @@ const ShipperSidebar: React.FC = () => {
                 padding: '10px 20px',
                 fontSize: 13,
                 fontWeight: isActive ? 600 : 400,
-                color: isActive ? 'var(--role-active-color, #D97706)' : 'var(--text-secondary)',
-                background: isActive ? 'var(--role-active-bg, rgba(217,119,6,0.1))' : 'transparent',
-                borderRight: isActive ? '3px solid var(--role-active-border, #F59E0B)' : '3px solid transparent',
+                color: isActive ? '#D97706' : '#64748B',
+                background: isActive ? 'rgba(217,119,6,0.1)' : 'transparent',
+                borderRight: isActive ? '3px solid #F59E0B' : '3px solid transparent',
                 textDecoration: 'none',
                 transition: 'all 0.15s ease',
               })}

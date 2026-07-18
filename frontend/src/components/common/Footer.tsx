@@ -68,7 +68,7 @@ const Footer: React.FC = () => {
             </div>
             <div>
               <h4 style={{ color: '#fff', fontWeight: 600, marginBottom: 10, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>Bán hàng</h4>
-              {([[ '/register-shop', 'Đăng ký shop'], ['/shop', 'Quản lý shop'], ['/register-shipper', 'Trở thành shipper']] as [string, string][]).map(([to, label]) => (
+              {([['/register-shop', 'Đăng ký shop'], ['/register-shipper', 'Trở thành shipper']] as [string, string][]).map(([to, label]) => (
                 <Link key={to} to={to} style={{ display: 'block', fontSize: 13, marginBottom: 7, color: 'rgba(255,255,255,0.7)' }}>{label}</Link>
               ))}
             </div>

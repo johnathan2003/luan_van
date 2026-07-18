@@ -593,6 +593,16 @@ const Navbar: React.FC = () => {
                       </div>
                     )}
 
+                    {/* Warehouse Manager */}
+                    {currentRole === 'warehouse_manager' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"     onClick={close} />
+                        <NavSectionLabel border>Quản lý Kho</NavSectionLabel>
+                        <MenuItem icon="🏭" label="Vào giao diện kho"   sub="Quản lý đơn hàng & shipper" path="/warehouse" onClick={close} />
+                      </div>
+                    )}
+
                     {/* Customer / default */}
                     {(currentRole === 'user' || !currentRole) && (
                       <div>
@@ -602,6 +612,12 @@ const Navbar: React.FC = () => {
                         <MenuItem icon="💬" label="Tin nhắn"            path="/chat"        onClick={close} />
                         <MenuItem icon="🎁" label="Trung tâm voucher"   path="/vouchers"    onClick={close} />
                         <MenuItem icon="⚠️" label="Khiếu nại của tôi"  path="/complaints"  onClick={close} />
+                        {roleNames.includes('warehouse_manager') && (
+                          <>
+                            <NavSectionLabel border>Quản lý Kho</NavSectionLabel>
+                            <MenuItem icon="🏭" label="Vào giao diện kho" sub="Quản lý đơn hàng & shipper" path="/warehouse" onClick={close} />
+                          </>
+                        )}
                       </div>
                     )}
 

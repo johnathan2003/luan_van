@@ -84,12 +84,10 @@ const WarehouseOverviewPage: React.FC = () => {
             <h3 style={{ fontWeight: 800, color: C.navy, marginBottom: 20, fontSize: 16 }}>🗺️ Luồng vận chuyển</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
               {[
-                { icon: '🛵', title: 'Ship Tự Do', color: '#7C3AED', bg: '#EDE9FE',
-                  desc: 'Giao hàng linh hoạt trong bán kính gần. Tự nhận đơn, không ràng buộc khu vực.' },
                 { icon: '🏍️', title: 'Ship Khu Vực', color: '#0D9488', bg: '#CCFBF1',
-                  desc: 'Phụ trách một tỉnh/thành cố định. Lấy hàng từ kho khu vực giao đến khách.' },
+                  desc: 'Thuộc kho cố định theo tỉnh/thành. Nhận đơn từ kho và giao đến tay khách trong khu vực.' },
                 { icon: '🚚', title: 'Ship Liên Tỉnh', color: '#D97706', bg: '#FEF3C7',
-                  desc: 'Xe tải chạy kho-đến-kho. Vận chuyển hàng từ kho tỉnh này đến kho tỉnh khác.' },
+                  desc: 'Xe tải vận chuyển hàng loạt giữa các kho tỉnh thành. Không giao đến khách trực tiếp.' },
               ].map(item => (
                 <div key={item.title} style={{ background: item.bg, borderRadius: 14, padding: '18px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -103,7 +101,7 @@ const WarehouseOverviewPage: React.FC = () => {
 
             {/* Flow arrow */}
             <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-              {['🏪 Shop', '→', '🚚 Liên tỉnh', '→', '🏭 Kho khu vực', '→', '🏍️ Khu vực', '→', '🏠 Khách'].map((s, i) => (
+              {['🏪 Shop', '→', '🚚 Liên tỉnh', '→', '🏭 Kho tỉnh', '→', '🏍️ Khu vực', '→', '🏠 Khách'].map((s, i) => (
                 <span key={i} style={{ fontSize: s === '→' ? 20 : 14, color: s === '→' ? '#94A3B8' : C.navy, fontWeight: s !== '→' ? 600 : 400 }}>{s}</span>
               ))}
             </div>

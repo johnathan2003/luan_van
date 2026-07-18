@@ -5,15 +5,6 @@ import { userService } from '../services/userService'
 
 const SHIPPER_TYPES = [
   {
-    value: 'free',
-    icon: '🛵',
-    label: 'Ship Tự Do',
-    vehicle: 'Xe máy',
-    desc: 'Nhận đơn linh hoạt, giao trong bán kính gần. Không ràng buộc khu vực hay lịch cố định.',
-    color: '#7C3AED',
-    bg: '#EDE9FE',
-  },
-  {
     value: 'zone',
     icon: '🏍️',
     label: 'Ship Khu Vực',

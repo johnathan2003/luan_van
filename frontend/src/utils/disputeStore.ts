@@ -99,6 +99,191 @@ export function hasOpenDispute(orderId: number, complainantType: DisputeComplain
   )
 }
 
+// ── Seed 3 mau test gan voi user_id thuc te (goi tu MyDisputesPage) ─────────────────────
+export function seedUserDemoDisputesIfNeeded(
+  userId: number,
+  userName: string,
+  role: 'user' | 'shop' | 'shipper' = 'user',
+) {
+  const all = readAll()
+  const cType: DisputeComplainantType = role === 'shop' ? 'shop' : 'user'
+  const tType: DisputeTargetType      = role === 'shop' ? 'shop' : role === 'shipper' ? 'shipper' : 'user'
+
+  const hasAny = all.some(d =>
+    (d.complainant_type === cType && d.complainant_id === userId) ||
+    (d.target_type === tType && d.target_id === userId)
+  )
+  if (hasAny) return
+
+  const ago = (d: number) => new Date(Date.now() - d * 24 * 3600 * 1000).toISOString()
+  const pic = (s: string) => `https://picsum.photos/seed/${s}/200/200`
+  const baseId = all.reduce((mx, d) => Math.max(mx, d.dispute_id), 89999) + 1
+
+  let seeds: Dispute[]
+
+  if (role === 'shop') {
+    // Shop gửi đi 2 + bị khiếu nại 1
+    seeds = [
+      {
+        dispute_id: baseId,
+        order_id: 80011,
+        complainant_type: 'shop',
+        complainant_id: userId,
+        complainant_name: userName,
+        target_type: 'user',
+        target_id: 201,
+        target_name: 'Nguyễn Văn An',
+        reason_code: 'order_bom',
+        reason_label: 'Khách đặt hàng rồi "bom" hàng (không nhận hàng)',
+        content: 'Khách đặt ví da nam thanh toán COD nhưng từ chối nhận hàng không lý do khi shipper giao tới, gây thiệt hại phí vận chuyển 2 chiều.',
+        evidence: { images: [pic('sh1a')] },
+        status: 'pending',
+        created_at: ago(1),
+      },
+      {
+        dispute_id: baseId + 1,
+        order_id: 80012,
+        complainant_type: 'shop',
+        complainant_id: userId,
+        complainant_name: userName,
+        target_type: 'shipper',
+        target_id: 7,
+        target_name: 'Shipper #7 — Lê Văn Hoàng',
+        reason_code: 'damaged',
+        reason_label: 'Shipper làm hỏng hàng trong quá trình giao',
+        content: 'Đơn điện thoại cao cấp được đóng gói cẩn thận nhưng khi giao tới khách thì màn hình bị vỡ, shop phải hoàn tiền cho khách và chịu thiệt hại.',
+        evidence: { images: [pic('sh2a'), pic('sh2b')] },
+        status: 'reviewing',
+        created_at: ago(3),
+      },
+      {
+        dispute_id: baseId + 2,
+        order_id: 80013,
+        complainant_type: 'user',
+        complainant_id: 202,
+        complainant_name: 'Trần Thị Bích',
+        target_type: 'shop',
+        target_id: userId,
+        target_name: userName,
+        reason_code: 'fake_goods',
+        reason_label: 'Hàng giả / hàng nhái',
+        content: 'Sản phẩm nhận được có tem giả, chất lượng khác hẳn mô tả trên trang sản phẩm. Khách yêu cầu hoàn tiền toàn bộ.',
+        evidence: { images: [pic('sh3a'), pic('sh3b')], videoName: 'video_hanggia.mp4' },
+        status: 'pending',
+        created_at: ago(2),
+      },
+    ]
+  } else if (role === 'shipper') {
+    // Shipper chỉ bị khiếu nại
+    seeds = [
+      {
+        dispute_id: baseId,
+        order_id: 80021,
+        complainant_type: 'user',
+        complainant_id: 301,
+        complainant_name: 'Lê Quốc Bảo',
+        target_type: 'shipper',
+        target_id: userId,
+        target_name: userName,
+        reason_code: 'damaged',
+        reason_label: 'Hàng bị móp/hỏng trong quá trình giao',
+        content: 'Nồi chiên không dầu nhận được bị móp bên hông, có vết va đập mạnh. Khách nghi shipper làm rơi.',
+        evidence: { images: [pic('sp1a'), pic('sp1b')] },
+        status: 'pending',
+        created_at: ago(2),
+      },
+      {
+        dispute_id: baseId + 1,
+        order_id: 80022,
+        complainant_type: 'shop',
+        complainant_id: 3,
+        complainant_name: 'Shop Điện Máy Xanh',
+        target_type: 'shipper',
+        target_id: userId,
+        target_name: userName,
+        reason_code: 'harassment',
+        reason_label: 'Shipper có hành vi hiềm khích / gây khó dễ',
+        content: 'Shipper liên tục trễ giờ lấy hàng, có lời lẽ thiếu tôn trọng với nhân viên shop qua điện thoại khi bị nhắc nhở.',
+        evidence: { images: [], videoName: 'ghiam_cuocgoi.mp4' },
+        status: 'reviewing',
+        created_at: ago(4),
+      },
+      {
+        dispute_id: baseId + 2,
+        order_id: 80023,
+        complainant_type: 'user',
+        complainant_id: 302,
+        complainant_name: 'Phạm Thị Mai',
+        target_type: 'shipper',
+        target_id: userId,
+        target_name: userName,
+        reason_code: 'false_delivered',
+        reason_label: 'Hệ thống xác nhận đã giao nhưng chưa nhận được hàng',
+        content: 'Đơn hàng hiện trạng thái "đã giao" nhưng tôi chưa hề nhận được hàng hoặc cuộc gọi từ shipper.',
+        evidence: { images: [pic('sp3a')] },
+        status: 'resolved',
+        resolution_note: 'Xác minh giao nhầm địa chỉ, đã hoàn tiền 100% và nhắc nhở shipper.',
+        created_at: ago(7),
+        resolved_at: ago(5),
+      },
+    ]
+  } else {
+    // User thường: gửi 2 + bị khiếu nại 1
+    seeds = [
+      {
+        dispute_id: baseId,
+        order_id: 80001,
+        complainant_type: 'user',
+        complainant_id: userId,
+        complainant_name: userName,
+        target_type: 'shop',
+        target_id: 3,
+        target_name: 'Shop Điện Máy Xanh Tiện Ích',
+        reason_code: 'fake_goods',
+        reason_label: 'Hàng giả / hàng nhái',
+        content: 'Bàn ủi nhận được không phải hàng chính hãng như mô tả, tem chống giả khác hoàn toàn so với hình shop đăng.',
+        evidence: { images: [pic('sd1a'), pic('sd1b')], videoName: 'video_banui_sosanh.mp4' },
+        status: 'pending',
+        created_at: ago(2),
+      },
+      {
+        dispute_id: baseId + 1,
+        order_id: 80002,
+        complainant_type: 'user',
+        complainant_id: userId,
+        complainant_name: userName,
+        target_type: 'shipper',
+        target_id: 7,
+        target_name: 'Shipper #7 — Lê Văn Hoàng',
+        reason_code: 'damaged',
+        reason_label: 'Hàng bị móp/hỏng trong quá trình giao',
+        content: 'Nồi chiên không dầu khi nhận bị móp một bên, vỏ ngoài trầy xước. Có khả năng shipper làm rơi trong lúc vận chuyển.',
+        evidence: { images: [pic('sd2a'), pic('sd2b')] },
+        status: 'reviewing',
+        created_at: ago(4),
+      },
+      {
+        dispute_id: baseId + 2,
+        order_id: 80003,
+        complainant_type: 'shop',
+        complainant_id: 5,
+        complainant_name: 'Shop Thời Trang Việt',
+        target_type: 'user',
+        target_id: userId,
+        target_name: userName,
+        reason_code: 'used_return',
+        reason_label: 'Khách trả hàng trong tình trạng đã sử dụng',
+        content: 'Khách trả hàng trong hạn 3 ngày nhưng mũ nhận lại đã có dấu hiệu đội, mồ hôi bám phần lót trong, không còn nguyên tem mác.',
+        evidence: { images: [pic('sd3a'), pic('sd3b')] },
+        status: 'pending',
+        created_at: ago(1),
+      },
+    ]
+  }
+
+  writeAll([...all, ...seeds])
+}
+
 // ── Du lieu khieu nai GIA (demo) - tu dong nap vao localStorage neu chua co gi ───────────
 // De admin co du lieu xem ngay, dung 8 don khieu nai mau, du ca 4 chieu va 4 trang thai.
 const img = (seed: string) => `https://picsum.photos/seed/${seed}/200/200`
