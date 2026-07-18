@@ -81,7 +81,7 @@ const ChatPage: React.FC = () => {
     const sio = uid ? getSocket(uid) : null
     if (!sio || !activeConvId) return
     sio.emit('join_conversation', { conversation_id: activeConvId })
-    return () => sio.emit('leave_conversation', { conversation_id: activeConvId })
+    return () => { sio.emit('leave_conversation', { conversation_id: activeConvId }) }
   }, [uid, activeConvId])
 
   // ── Socket: nhận tin nhắn mới từ shop/NV gửi về ───────────────────────────

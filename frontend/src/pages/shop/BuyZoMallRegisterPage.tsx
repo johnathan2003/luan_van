@@ -159,11 +159,10 @@ const BuyZoMallRegisterPage: React.FC = () => {
                     fontWeight: 800, fontSize: 12, transition: 'all 0.2s',
                   }}>{s.num}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, color: checks[i] ? '#15803D' : '#1E3A8A', marginBottom: 2 }}
+                    <div style={{ fontSize: 14, color: checks[i] ? '#15803D' : '#1E3A8A', marginBottom: 2, fontWeight: 700 }}
                       className={isStep0 ? 'mall-step-title' : ''}
                       onMouseEnter={e => isStep0 && ((e.currentTarget as HTMLElement).style.fontWeight = '800')}
-                      onMouseLeave={e => isStep0 && ((e.currentTarget as HTMLElement).style.fontWeight = '700')}
-                      style={{ fontWeight: 700 }}>
+                      onMouseLeave={e => isStep0 && ((e.currentTarget as HTMLElement).style.fontWeight = '700')}>
                       {s.title}
                     </div>
                     <div style={{ fontSize: 12, color: '#64748B', lineHeight: 1.4 }}>{s.desc}</div>

@@ -126,7 +126,7 @@ const EmployeeChatPage: React.FC = () => {
     const sio = uid ? getSocket(uid) : null
     if (!sio || !activeConvId) return
     sio.emit('join_conversation', { conversation_id: activeConvId })
-    return () => sio.emit('leave_conversation', { conversation_id: activeConvId })
+    return () => { sio.emit('leave_conversation', { conversation_id: activeConvId }) }
   }, [uid, activeConvId])
 
   // ── Socket: real-time new_message trong conv đang mở ─────────────────────

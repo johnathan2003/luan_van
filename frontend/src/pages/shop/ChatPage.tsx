@@ -62,7 +62,7 @@ const ShopChatPage: React.FC = () => {
     const sio = uid ? getSocket(uid) : null
     if (!sio || !activeConvId) return
     sio.emit('join_conversation', { conversation_id: activeConvId })
-    return () => sio.emit('leave_conversation', { conversation_id: activeConvId })
+    return () => { sio.emit('leave_conversation', { conversation_id: activeConvId }) }
   }, [uid, activeConvId])
 
   // ── Socket: nhận tin nhắn realtime (new_message từ conv room + new_chat_message từ user room) ──
