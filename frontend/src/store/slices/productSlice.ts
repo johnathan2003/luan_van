@@ -64,6 +64,9 @@ const productSlice = createSlice({
     setFilters(state, action: PayloadAction<Partial<ProductFilters>>) {
       state.filters = { ...state.filters, ...action.payload }
     },
+    resetFilters(state, action: PayloadAction<Partial<ProductFilters> | undefined>) {
+      state.filters = { page: 1, limit: 12, sort: 'popular', ...action.payload }
+    },
     clearSelectedProduct(state) {
       state.selectedProduct = null
     },
@@ -94,5 +97,5 @@ const productSlice = createSlice({
   },
 })
 
-export const { setFilters, clearSelectedProduct } = productSlice.actions
+export const { setFilters, resetFilters, clearSelectedProduct } = productSlice.actions
 export default productSlice.reducer

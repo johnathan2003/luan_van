@@ -55,7 +55,7 @@ const TrackingPage: React.FC = () => {
             {/* Map placeholder */}
             <div className="card" style={{ height: 450, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gray-100)', color: 'var(--gray-400)', flexDirection: 'column', gap: 12 }}>
               <div style={{ fontSize: 48 }}>🗺️</div>
-              <p style={{ fontSize: 14 }}>Bản đồ theo dõi thời gian thực</p>
+              <p style={{ fontSize: 14 }}>Bản đồ theo dõi thời gián thực</p>
               {shipment.current_location && (
                 <p style={{ fontSize: 13, fontWeight: 600 }}>
                   📍 {shipment.current_location.lat?.toFixed(4)}, {shipment.current_location.lng?.toFixed(4)}

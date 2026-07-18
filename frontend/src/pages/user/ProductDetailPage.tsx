@@ -8,6 +8,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency, formatRating } from '../../utils/formatters'
 import { getImageUrl } from '../../utils/helpers'
 import { trackMissionEvent } from '../../utils/eventsStore'
+import { trackViewedProduct } from '../../store/searchTrackingStore'
 
 const C = {
   primary: '#1D4ED8', navy: '#1E3A8A',
@@ -57,9 +58,12 @@ const ProductDetailPage: React.FC = () => {
     if (id) dispatch(fetchProductById(Number(id)))
   }, [id, dispatch])
 
-  // tich tien do nhiem vu "luot xem san pham" cho su kien
+  // tich tien do nhiem vu "luot xem san pham" + tracking san pham da xem
   useEffect(() => {
-    if (id) trackMissionEvent('view_product')
+    if (id) {
+      trackMissionEvent('view_product')
+      trackViewedProduct(Number(id))
+    }
   }, [id])
 
   const handleAddToCart = async () => {

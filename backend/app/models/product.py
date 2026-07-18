@@ -30,7 +30,7 @@ class Product(Base):
     cost = Column(Numeric(10, 2))
     stock_quantity = Column(Integer, default=0)
     image_urls = Column(JSON)
-    status = Column(Enum("active", "pending", "rejected", "archived"), default="pending", index=True)
+    status = Column(Enum("active", "approved", "pending", "rejected", "archived"), default="pending", index=True)
     # rating, reviews — giữ lại cho tính năng reviews
     rating = Column(Numeric(3, 2), default=0.00)
     total_reviews = Column(Integer, default=0)

@@ -210,9 +210,12 @@ const ChatWidget: React.FC = () => {
               convs.map(conv => (
                 <div
                   key={conv.conversation_id}
+
+                  onClick={() => goTo(conv)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '12px 16px',
+                    padding: '12px 16px', cursor: 'pointer',
+
                     borderBottom: '1px solid var(--border-subtle)',
                     background: conv.unread_count > 0
                       ? 'rgba(124,58,237,0.04)'
@@ -222,6 +225,7 @@ const ChatWidget: React.FC = () => {
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-highlight, rgba(0,0,0,0.04))')}
                   onMouseLeave={e => (e.currentTarget.style.background = conv.unread_count > 0 ? 'rgba(124,58,237,0.04)' : 'transparent')}
                 >
+
                   {/* Avatar — click toàn bộ row vẫn navigate */}
                   <div style={{ cursor: 'pointer' }} onClick={() => goTo(conv)}>
                     <AvatarCircle name={conv.partner_name} url={conv.partner_avatar} size={42} />
@@ -242,6 +246,7 @@ const ChatWidget: React.FC = () => {
                         onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
                         title="Mở trang chat"
                       >
+
                         {conv.partner_name || 'Shop'}
                       </span>
                       <span style={{ fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0, marginLeft: 6 }}>
@@ -254,7 +259,9 @@ const ChatWidget: React.FC = () => {
                         color: conv.unread_count > 0 ? 'var(--text-primary)' : 'var(--text-secondary)',
                         fontWeight: conv.unread_count > 0 ? 600 : 400,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        maxWidth: 200,
+
+                        maxWidth: 220,
+
                       }}>
                         {conv.last_message || 'Bắt đầu cuộc trò chuyện'}
                       </span>
@@ -272,6 +279,7 @@ const ChatWidget: React.FC = () => {
                     </div>
                   </div>
 
+
                   {/* Nút → mở trang chat đầy đủ */}
                   <button
                     onClick={e => { e.stopPropagation(); goTo(conv) }}
@@ -287,6 +295,7 @@ const ChatWidget: React.FC = () => {
                   >
                     ↗
                   </button>
+
                 </div>
               ))
             )}

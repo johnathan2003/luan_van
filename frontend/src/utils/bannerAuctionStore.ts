@@ -26,11 +26,16 @@ function readJSON<T>(key: string, fallback: T): T {
 }
 
 function writeJSON(key: string, value: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
+
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch (e) {
+    console.error('[bannerAuctionStore] localStorage write failed (quota?):', e)
+    throw e  // re-throw so callers know save failed
+  }
 }
 
 // ── Định nghĩa vị trí đấu giá ────────────────────────────────────────────────
-export type BannerPositionKey = 'home_slider' | 'mall_ads_main' | 'mall_ads_fixed'
+export type BannerPositionKey = 'home_slider' | 'mall_ads_main' | 'mall_ads_fixed' | 'mall_banner'
+
 
 export interface BannerPositionDef {
   key: BannerPositionKey
@@ -50,17 +55,28 @@ export const BANNER_POSITIONS: BannerPositionDef[] = [
   },
   {
     key: 'mall_ads_main',
-    label: 'Banner BuyZo Mall (khu chính)',
-    description: 'Banner chạy lớn (7 phần) trong khu quảng cáo BuyZo Mall trên Trang chủ.',
+
+    label: 'Banner Quảng Cáo (Center)',
+    description: 'Banner chạy lớn (7 phần) trong khu quảng cáo trung tâm trên Trang chủ.',
     basePrice: 1_200_000,
-    previewImage: encodeURI('/banner_thueQC/ChatGPT Image Jun 19, 2026, 01_09_11 PM.png'),
+    previewImage: '/img/banner_admin/mall_main_1.png',
+
   },
   {
     key: 'mall_ads_fixed',
     label: 'Banner BuyZo Mall (khu cố định)',
     description: 'Banner cố định (3 phần) bên cạnh khu quảng cáo chạy của BuyZo Mall.',
     basePrice: 800_000,
-    previewImage: '/banner/4.png',
+
+    previewImage: '/img/banner_admin/mall_fixed_1.png',
+  },
+  {
+    key: 'mall_banner',
+    label: 'Banner Mall (Hình 4)',
+    description: 'Banner ngang toàn khu Mall — hiển thị giữa khu quảng cáo và danh sách sản phẩm Mall.',
+    basePrice: 600_000,
+    previewImage: '/img/banner_admin/mall_banner_1.png',
+
   },
 ]
 
@@ -84,6 +100,11 @@ export interface BannerAuctionSession {
   position: BannerPositionKey
   startedAt: string
   endsAt: string
+  endedAt?: string           // thời điểm thực tế phiên kết thúc (có thể sớm hơn endsAt)
+
+  scheduledStartAt?: string  // nếu set → chờ đến thời điểm này mới mở đặt giá
+  description?: string       // mô tả admin đặt khi mở phiên
+
   bids: BannerBid[]
   status: 'active' | 'ended'
   winner?: BannerBid
@@ -93,6 +114,19 @@ export interface BannerAuctionSession {
   paymentDeadline?: string   // hạn thanh toán đủ (sau khi cọc)
   displayDurationMs?: number
 }
+
+
+/** True khi phiên đã qua thời gian chờ và đang nhận đặt giá */
+export function isAuctionLive(session: BannerAuctionSession): boolean {
+  if (!session.scheduledStartAt) return true
+  return Date.now() >= new Date(session.scheduledStartAt).getTime()
+}
+/** ms còn lại đến khi phiên bắt đầu (0 nếu đã live) */
+export function msUntilStart(session: BannerAuctionSession): number {
+  if (!session.scheduledStartAt) return 0
+  return Math.max(0, new Date(session.scheduledStartAt).getTime() - Date.now())
+}
+
 
 export interface AuctionAdminSettings {
   basePrice: number
@@ -114,9 +148,12 @@ export interface ImageSpec {
 }
 
 export const BANNER_IMAGE_SPECS: Record<BannerPositionKey, ImageSpec> = {
-  home_slider:    { ratioLabel: '8:3 (ngang dài)', ratio: 1280/480, tolerance: 0.1, recommendedW: 1280, recommendedH: 480, maxKB: 2048 },
-  mall_ads_main:  { ratioLabel: '9:4 (ngang)',     ratio: 900/400,  tolerance: 0.1, recommendedW: 900,  recommendedH: 400, maxKB: 2048 },
+
+  home_slider:    { ratioLabel: '8:1 (ngang rất dài)', ratio: 1280/160, tolerance: 0.2, recommendedW: 1280, recommendedH: 160, maxKB: 2048 },
+  mall_ads_main:  { ratioLabel: '3:2 (ngang)',     ratio: 1536/1024, tolerance: 0.25, recommendedW: 1536, recommendedH: 1024, maxKB: 4096 },
   mall_ads_fixed: { ratioLabel: '1:1 (vuông)',     ratio: 1,        tolerance: 0.1, recommendedW: 400,  recommendedH: 400, maxKB: 2048 },
+  mall_banner:    { ratioLabel: '3:4 (đứng)',       ratio: 240/320, tolerance: 0.2, recommendedW: 480,  recommendedH: 640, maxKB: 2048 },
+
 }
 
 // ── BannerSubmission ──────────────────────────────────────────────────────────
@@ -146,7 +183,9 @@ const KEY = 'buyzo_banner_auction_v1'
 
 const FAKE_SHOP_NAMES = [
   'TechWorld Store', 'FashionVN', 'BookStore360', 'Mẹ và Bé Xinh', 'Nhà Sạch Plus',
-  'Đồ Gia Dụng An Phát', 'Giày Sneaker House', 'Mỹ Phẩm Hàn Việt', 'Thế Giới Phụ Kiện',
+
+  'Đồ Giá Dụng Ẩn Phát', 'Giày Sneaker House', 'Mỹ Phẩm Hàn Việt', 'Thế Giới Phụ Kiện',
+ 
 ]
 const FAKE_EMOJIS = ['🔥', '🎉', '🛍️', '⚡', '🎁', '👗', '📱', '🍱', '✨']
 
@@ -154,12 +193,22 @@ function defaultSettings(basePrice: number): AuctionAdminSettings {
   return { basePrice, biddingDurationMs: AUCTION_DURATION_MS, displayDurationMs: 2 * 24 * 60 * 60 * 1000, locked: false }
 }
 
-function newSession(position: BannerPositionKey, settings: AuctionAdminSettings): BannerAuctionSession {
+
+function newSession(
+  position: BannerPositionKey,
+  settings: AuctionAdminSettings,
+  opts?: { startDelayMinutes?: number; description?: string }
+): BannerAuctionSession {
   const now = Date.now()
+  const delayMs = (opts?.startDelayMinutes ?? 0) * 60000
+  const scheduledStartAt = delayMs > 0 ? new Date(now + delayMs).toISOString() : undefined
   return {
     id: position + '-' + now, position,
     startedAt: new Date(now).toISOString(),
-    endsAt: new Date(now + settings.biddingDurationMs).toISOString(),
+    endsAt: new Date(now + delayMs + settings.biddingDurationMs).toISOString(),
+    scheduledStartAt,
+    description: opts?.description || undefined,
+
     bids: [], status: 'active',
   }
 }
@@ -245,6 +294,7 @@ export function getShopCooldownRemaining(position: BannerPositionKey, shopName: 
 }
 
 export function placeBid(position: BannerPositionKey, shopName: string, amount: number, bannerImage?: string): PlaceBidResult {
+
   // Kiểm tra shop đã chuẩn bị mẫu banner chưa
   try {
     const KEY_DRAFT = 'buyzo_banner_draft_v1'
@@ -255,10 +305,14 @@ export function placeBid(position: BannerPositionKey, shopName: string, amount: 
       return { ok: false, error: '⚠️ Bạn chưa chuẩn bị mẫu banner cho vị trí này. Vào tab ⚙️ Chuẩn bị để upload trước khi đặt giá.' }
     }
   } catch {}
+
   const data = getStore(); const session = rollIfExpired(data, position)
   if (!session) return { ok: false, error: 'Vị trí này đang bị Admin tạm khoá, chưa thể đặt giá.' }
   const basePrice = data.settings[position]?.basePrice ?? BANNER_POSITIONS.find(d => d.key === position)!.basePrice
   const minNext = (session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice - MIN_STEP) + MIN_STEP
+
+  if (!isAuctionLive(session)) return { ok: false, error: `⏳ Phiên chưa bắt đầu. Vui lòng chờ đến ${session.scheduledStartAt ? new Date(session.scheduledStartAt).toLocaleTimeString('vi-VN') : ''}` }
+
   if (new Date(session.endsAt).getTime() <= Date.now()) return { ok: false, error: 'Phiên đấu giá đã kết thúc, vui lòng đặt giá ở phiên mới.' }
   const lastByShop = session.bids.find(b => b.shopName === shopName)
   if (lastByShop) {
@@ -316,8 +370,10 @@ export function getPendingWinsForShop(shopName: string): BannerAuctionSession[] 
   )
 }
 
-/** Shop đặt cọc 20% — tự động submit draft banner lên admin duyệt */
-export function payDeposit(historyId: string): boolean {
+
+/** Shop đặt cọc 20% — tự động submit draft banner lên admin duyệt nếu có draft */
+export function payDeposit(historyId: string, draft?: { title: string; link?: string; image: string }): boolean {
+
   const data = getStore(); const idx = data.history.findIndex(h => h.id === historyId); if (idx === -1) return false
   const h = data.history[idx]
   if (h.confirmation !== 'pending') return false
@@ -333,6 +389,7 @@ export function payDeposit(historyId: string): boolean {
       action_url: '/shop/auction',
     })
   }
+
   // Auto-submit draft nếu chưa có submission
   if (h.winner) {
     try {
@@ -356,6 +413,7 @@ export function payDeposit(historyId: string): boolean {
         }
       }
     } catch {}
+
   }
   return true
 }
@@ -369,7 +427,10 @@ export function payWin(historyId: string): boolean {
 
 export function submitBanner(historyId: string, payload: { title: string; link?: string; image: string }): BannerSubmission | null {
   const data = getStore(); const h = data.history.find(x => x.id === historyId)
-  if (!h || h.confirmation !== 'paid' || !h.winner) return null
+
+
+  if (!h || !['deposit_paid', 'paid'].includes(h.confirmation ?? '') || !h.winner) return null
+
   const existingIdx = data.submissions.findIndex(s => s.historyId === historyId)
   if (existingIdx !== -1 && data.submissions[existingIdx].status !== 'rejected') return null
   const submission: BannerSubmission = {
@@ -388,6 +449,32 @@ export function getSubmissionByHistoryId(historyId: string): BannerSubmission | 
 }
 export function getAllSubmissions(): BannerSubmission[] { return getStore().submissions }
 
+
+/** Seed 3 pending submissions (1 per position) — dùng để test admin UI */
+export function seedTestPendingSubmissions(): void {
+  const data = getStore()
+  const testEntries: Array<{ position: BannerPositionKey; title: string; image: string }> = [
+    { position: 'home_slider',   title: '[TEST] Banner Đầu Trang', image: 'https://placehold.co/1280x160/1E3A8A/white?text=Banner+Dau+Trang' },
+    { position: 'mall_ads_main', title: '[TEST] Banner Quảng Cáo Center', image: 'https://placehold.co/1536x1024/7C3AED/white?text=Banner+Quang+Cao+Center' },
+    { position: 'mall_ads_fixed',title: '[TEST] Banner BuyZo Mall Fixed', image: 'https://placehold.co/400x400/EA580C/white?text=Banner+Mall+Fixed' },
+  ]
+  for (const { position, title, image } of testEntries) {
+    const exists = data.submissions.some(s => s.position === position && s.status === 'pending')
+    if (exists) continue
+    const fakeHistId = 'test-hist-' + position
+    const sub: BannerSubmission = {
+      id: 'test-sub-' + position + '-' + Date.now(),
+      historyId: fakeHistId, position,
+      shopName: 'Shop Demo', title,
+      image, status: 'pending',
+      createdAt: new Date().toISOString(),
+    }
+    data.submissions.unshift(sub)
+  }
+  saveStore(data)
+}
+
+
 const PAYMENT_WINDOW_FINAL_MS = 30 * 60 * 1000 // 30 phút thanh toán phần còn lại
 
 export function approveSubmission(id: string): boolean {
@@ -403,7 +490,153 @@ export function rejectSubmission(id: string, reason?: string): boolean {
 }
 export function cancelSubmissionExpired(id: string): boolean {
   const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false
-  data.submissions[idx] = { ...data.submissions[idx], status: 'cancelled', rejectReason: 'Hết thời gian thanh toán phần còn lại' }
+
+  data.submissions[idx] = { ...data.submissions[idx], status: 'cancelled', rejectReason: 'Hết thời gián thanh toán phần còn lại' }
+  saveStore(data); return true
+}
+// ── Image ref system: lưu ảnh lớn ở key riêng, tránh vượt quota ─────────────
+const IMG_KEY_PREFIX = 'buyzo_img_'
+
+/** Lưu ảnh vào key riêng, trả về ref string 'ref:<key>' */
+export function saveImage(dataUrl: string): string {
+  const key = IMG_KEY_PREFIX + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
+  // First try to free space by migrating old raw-embedded images
+  migrateRawImages()
+  localStorage.setItem(key, dataUrl) // throws if quota exceeded — caller handles
+  return 'ref:' + key
+}
+
+/** Migrate ảnh raw base64 nhúng trong main store → key riêng (giải phóng quota) */
+export function migrateRawImages(): void {
+  try {
+    const data = getStore()
+    let changed = false
+    for (const sub of data.submissions) {
+      if (sub.image && sub.image.startsWith('data:')) {
+        try {
+          const key = IMG_KEY_PREFIX + sub.id
+          localStorage.setItem(key, sub.image)
+          sub.image = 'ref:' + key
+          changed = true
+        } catch { /* nếu vẫn fail thì bỏ qua */ }
+      }
+    }
+    if (changed) saveStore(data)
+  } catch { /* ignore */ }
+}
+
+/** Xóa key ảnh nếu là ref */
+export function removeImage(imageOrRef: string): void {
+  if (imageOrRef.startsWith('ref:')) localStorage.removeItem(imageOrRef.slice(4))
+}
+
+/** Trả về data URL thực — hỗ trợ cả ref lẫn raw data URL (backward compat) */
+export function resolveImage(imageOrRef: string): string {
+  if (imageOrRef.startsWith('ref:')) return localStorage.getItem(imageOrRef.slice(4)) ?? ''
+  return imageOrRef
+}
+
+/** Dọn dẹp: xóa key ảnh của các submission không còn tồn tại */
+export function cleanupOrphanImages(): number {
+  const data = getStore()
+  const activeRefs = new Set(data.submissions.map(s => s.image).filter(i => i.startsWith('ref:')).map(i => i.slice(4)))
+  let count = 0
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && key.startsWith(IMG_KEY_PREFIX) && !activeRefs.has(key)) {
+      localStorage.removeItem(key)
+      i--; count++
+    }
+  }
+  return count
+}
+
+/** Admin tạo banner trực tiếp lên trang chủ (không qua đấu giá) */
+export function adminCreateBanner(opts: {
+  position: BannerPositionKey
+  title: string
+  image: string
+  link?: string
+  displayDurationMs?: number
+}): void {
+  const data = getStore()
+  const now = new Date().toISOString()
+  const fakeHistId = 'admin_' + Date.now()
+  const fakeHistory: BannerAuctionSession = {
+    id: fakeHistId,
+    position: opts.position,
+    startedAt: now,
+     endedAt: now,
+    bids: [],
+    status: 'ended',
+    confirmation: 'paid',
+    displayDurationMs: opts.displayDurationMs ?? 7 * 24 * 60 * 60 * 1000,
+  }
+  data.history.unshift(fakeHistory)
+  // Nếu image đã là ref (idb: / ref:) thì giữ nguyên, không bọc thêm
+  const imageRef = (opts.image.startsWith('idb:') || opts.image.startsWith('ref:'))
+    ? opts.image
+    : saveImage(opts.image)
+  const sub: BannerSubmission = {
+    id: 'admin_sub_' + Date.now(),
+    historyId: fakeHistId,
+    position: opts.position,
+    shopName: 'BuyZo Admin',
+    title: opts.title,
+    link: opts.link,
+    image: imageRef,
+    status: 'approved',
+    createdAt: now,
+    approvedAt: now,
+    paymentDeadline: new Date(Date.now() + 999 * 24 * 60 * 60 * 1000).toISOString(),
+  }
+  data.submissions.unshift(sub)
+  saveStore(data)
+}
+
+/** Xóa toàn bộ banner do admin tạo (shopName === 'BuyZo Admin') */
+export function purgeAdminBanners(): number {
+  const data = getStore()
+  const toDelete = data.submissions.filter(s => s.shopName === 'BuyZo Admin')
+  toDelete.forEach(s => removeImage(s.image))
+  const histIds = new Set(toDelete.map(s => s.historyId))
+  data.submissions = data.submissions.filter(s => s.shopName !== 'BuyZo Admin')
+  data.history = data.history.filter(h => !histIds.has(h.id))
+  saveStore(data)
+  return toDelete.length
+}
+
+export function deleteSubmission(id: string): boolean {
+  const data = getStore()
+  const idx = data.submissions.findIndex(s => s.id === id)
+  if (idx === -1) return false
+  removeImage(data.submissions[idx].image) // xóa key ảnh riêng nếu có
+  data.submissions.splice(idx, 1)
+  saveStore(data)
+  return true
+}
+
+export function updateSubmission(id: string, patch: Partial<Pick<BannerSubmission, 'title' | 'image' | 'link'>>): boolean {
+  const data = getStore()
+  const idx = data.submissions.findIndex(s => s.id === id)
+  if (idx === -1) return false
+  if (patch.image) {
+    removeImage(data.submissions[idx].image) // xóa ảnh cũ
+    // Nếu image đã là ref (idb: / ref:) thì giữ nguyên, không bọc thêm
+    patch.image = (patch.image.startsWith('idb:') || patch.image.startsWith('ref:'))
+      ? patch.image
+      : saveImage(patch.image)
+  }
+  data.submissions[idx] = { ...data.submissions[idx], ...patch }
+  saveStore(data)
+  return true
+}
+
+export function expireDisplaySubmission(id: string): boolean {
+  const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false
+  if (data.submissions[idx].status !== 'approved') return false
+  data.submissions[idx] = { ...data.submissions[idx], status: 'cancelled', rejectReason: 'Hết thời gian hiển thị' }
+
   saveStore(data); return true
 }
 
@@ -428,8 +661,13 @@ export function lockPosition(position: BannerPositionKey): void {
   delete (data.sessions as any)[position]; saveStore(data)
 }
 
-export function openAuction(position: BannerPositionKey): BannerAuctionSession {
-  const data = getStore(); const session = data.sessions[position]
+
+export function openAuction(
+  position: BannerPositionKey,
+  opts?: { startDelayMinutes?: number; description?: string }
+): BannerAuctionSession {
+   const data = getStore(); const session = data.sessions[position]
+
   if (session && session.status === 'active') {
     const winner = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)) : undefined
     const ended: BannerAuctionSession = {
@@ -441,8 +679,25 @@ export function openAuction(position: BannerPositionKey): BannerAuctionSession {
     data.history.unshift(ended); data.history = data.history.slice(0, 30)
   }
   data.settings[position] = { ...data.settings[position], locked: false }
-  const fresh = newSession(position, data.settings[position])
-  data.sessions[position] = fresh; saveStore(data); return fresh
+
+  const fresh = newSession(position, data.settings[position], opts)
+  data.sessions[position] = fresh; saveStore(data)
+
+  // 📢 Broadcast thông báo đến tất cả shop
+  const posLabel = BANNER_POSITIONS.find(p => p.key === position)?.label ?? position
+  const delayMin = opts?.startDelayMinutes ?? 0
+  const startTimeStr = delayMin > 0
+    ? `sau ${delayMin} phút (${new Date(Date.now() + delayMin * 60000).toLocaleTimeString('vi-VN')})`
+    : 'ngay bây giờ'
+  addNotificationFor('', 'shop', 0, {
+    title: '⚡ Phiên đấu giá mới sắp mở!',
+    message: `Vị trí "${posLabel}" mở đấu giá ${startTimeStr}.${opts?.description ? '\n📋 ' + opts.description : ''}\nVào trang Đấu giá để tham gia!`,
+    type: 'auction_open',
+    action_url: '/shop/auction',
+  })
+
+  return fresh
+
 }
 
 export function isLocked(position: BannerPositionKey): boolean { return !!getStore().settings[position]?.locked }

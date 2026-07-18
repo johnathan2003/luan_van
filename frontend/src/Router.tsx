@@ -1,5 +1,5 @@
 import React from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './ProtectedRoute'
 
 // Layouts — mỗi thực thể có layout riêng
@@ -40,6 +40,9 @@ import AnalyticsPage            from './pages/shop/AnalyticsPage'
 import VoucherManagementPage    from './pages/shop/VoucherManagementPage'
 import VoucherCenterPage        from './pages/VoucherCenterPage'
 
+const BannerAuctionPage     = React.lazy(() => import('./pages/shop/BannerAuctionPage'))
+const AuctionManagementPage = React.lazy(() => import('./pages/admin/AuctionManagementPage'))
+
 // ── ⚙️ Admin pages ────────────────────────────────────────────────────────────
 import AdminOverviewPage        from './pages/admin/AdminOverviewPage'
 import UserManagementPage       from './pages/admin/UserManagementPage'
@@ -52,6 +55,7 @@ import AuditLogsPage            from './pages/admin/AuditLogsPage'
 import ShopManagementPage       from './pages/admin/ShopManagementPage'
 import ProductAdminPage         from './pages/admin/ProductAdminPage'
 import OrderAdminPage           from './pages/admin/OrderAdminPage'
+import ShipperManagementPage    from './pages/admin/ShipperManagementPage'
 import VoucherAdminPage         from './pages/admin/VoucherAdminPage'
 import BannerAdminPage          from './pages/admin/BannerAdminPage'
 import FinancePage              from './pages/admin/FinancePage'
@@ -60,6 +64,7 @@ import ShippingConfigPage       from './pages/admin/ShippingConfigPage'
 import MallRequestsPage         from './pages/admin/MallRequestsPage'
 import ReportsPage              from './pages/admin/ReportsPage'
 import FeedbackPage             from './pages/admin/FeedbackPage'
+import ImageLibraryPage         from './pages/admin/ImageLibraryPage'
 
 // ── ⚡ Superadmin (nằm ngoài hệ thống, không ghi log) ────────────────────────
 import SuperRouter from '@super/SuperRouter'
@@ -79,6 +84,12 @@ import IncidentsPage       from './pages/shipper/IncidentsPage'
 import BenefitsPage        from './pages/shipper/BenefitsPage'
 import TrackingPage        from './pages/shipper/TrackingPage'
 
+// ── 🏭 Warehouse Manager pages ───────────────────────────────────────────────
+import WarehouseManagerLayout   from './pages/warehouse/WarehouseManagerLayout'
+import WarehouseOverviewPage    from './pages/warehouse/WarehouseOverviewPage'
+import AllShipmentsPage         from './pages/warehouse/AllShipmentsPage'
+import IncomingShipmentsPage    from './pages/warehouse/IncomingShipmentsPage'
+
 // ── Helper: bọc page trong layout ─────────────────────────────────────────────
 const inPublic   = (el: React.ReactNode) => <PublicLayout>{el}</PublicLayout>
 const inUser     = (el: React.ReactNode, sub?: string) => <UserLayout subtitle={sub}>{el}</UserLayout>
@@ -87,6 +98,7 @@ const inShop     = (el: React.ReactNode) => <ShopLayout>{el}</ShopLayout>
 const inShipper  = (el: React.ReactNode) => <ShipperLayout>{el}</ShipperLayout>
 
 const Router: React.FC = () => (
+  <React.Suspense fallback={<div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontSize:16 }}>Đang tải...</div>}>
   <Routes>
     {/* ── Auth (không layout) ─────────────────────────────────────────────── */}
     <Route path="/login"    element={<AuthLayout title="Đăng nhập"    subtitle="Chào mừng bạn quay trở lại"><Login /></AuthLayout>} />
@@ -123,6 +135,7 @@ const Router: React.FC = () => (
       <Route path="/shop/employees"    element={inShop(<EmployeeManagementPage />)} />
       <Route path="/shop/analytics"    element={inShop(<AnalyticsPage />)} />
       <Route path="/shop/vouchers"     element={inShop(<VoucherManagementPage />)} />
+      <Route path="/shop/auction"      element={inShop(<BannerAuctionPage />)} />
       <Route path="/shop/chat"         element={inShop(<ShopChatPage />)} />
     </Route>
 
@@ -149,6 +162,7 @@ const Router: React.FC = () => (
       <Route path="/admin/banners"            element={inAdmin(<BannerAdminPage />)} />
       <Route path="/admin/notifications"      element={inAdmin(<SystemNotificationPage />)} />
       {/* Vận hành */}
+      <Route path="/admin/shippers"           element={inAdmin(<ShipperManagementPage />)} />
       <Route path="/admin/shipping-config"    element={inAdmin(<ShippingConfigPage />)} />
       <Route path="/admin/system-employees"   element={inAdmin(<SystemEmployeePage />)} />
       <Route path="/admin/mall-requests"      element={inAdmin(<MallRequestsPage />)} />
@@ -156,6 +170,8 @@ const Router: React.FC = () => (
       <Route path="/admin/reports"            element={inAdmin(<ReportsPage />)} />
       <Route path="/admin/feedback"           element={inAdmin(<FeedbackPage />)} />
       <Route path="/admin/logs"               element={inAdmin(<AuditLogsPage />)} />
+      <Route path="/admin/auction"            element={inAdmin(<AuctionManagementPage />)} />
+      <Route path="/admin/images"             element={inAdmin(<ImageLibraryPage />)} />
     </Route>
 
     {/* ── 👷 Employee (nhân viên shop) ────────────────────────────────────── */}
@@ -169,7 +185,7 @@ const Router: React.FC = () => (
 
     {/* ── 🚚 Shipper ──────────────────────────────────────────────────────── */}
     <Route element={<ProtectedRoute requiredRole="shipper" />}>
-      <Route path="/shipper"                       element={inShipper(<ShipperOverviewPage />)} />
+      <Route path="/shipper"                       element={<Navigate to="/shipper/deliveries" replace />} />
       <Route path="/shipper/deliveries"            element={inShipper(<DeliveryListPage />)} />
       <Route path="/shipper/earnings"              element={inShipper(<EarningsPage />)} />
       <Route path="/shipper/withdrawal"            element={inShipper(<WithdrawalPage />)} />
@@ -178,11 +194,20 @@ const Router: React.FC = () => (
       <Route path="/shipper/tracking/:shipmentId"  element={inShipper(<TrackingPage />)} />
     </Route>
 
-    {/* ── ⚡ Superadmin — tách biệt, layout riêng, không dùng Redux auth ─── */}
+    {/* ── 🏭 Warehouse Manager ──────────────────────────────────────────── */}
+    <Route element={<ProtectedRoute requiredRole="warehouse_manager" />}>
+      <Route path="/warehouse" element={<WarehouseManagerLayout />}>
+        <Route index element={<WarehouseOverviewPage />} />
+        <Route path="shipments" element={<AllShipmentsPage />} />
+        <Route path="incoming"  element={<IncomingShipmentsPage />} />
+      </Route>
+    </Route>
+
+    {/* ── ⚡ Superadmin — tách biệt, layout riêng ───────────────────────── */}
     <Route path="/super/*" element={<SuperRouter />} />
 
-    <Route path="*" element={inPublic(<NotFoundPage />)} />
   </Routes>
+  </React.Suspense>
 )
 
 export default Router

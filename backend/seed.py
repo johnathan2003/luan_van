@@ -28,7 +28,8 @@ from app.models.shop import Shop, ShopEmployee, EmployeeRolePermission
 from app.models.product import Product, ProductCategory
 from app.models.order import Order, OrderItem
 from app.models.payment import Payment
-from app.models.shipment import Shipment, Shipper
+from app.models.shipment import Shipment, Shipper, Warehouse, WarehouseManager
+from app.models.wallet_auction import ShopWallet, ShopWalletTransaction, BannerSlot
 from app.models.voucher import Voucher, VoucherCollection
 
 
@@ -71,9 +72,13 @@ def upsert(db, Model, filter_kw, **kw):
 
 def reset_tables(engine):
     tables = [
+        "banner_bids", "banner_auctions", "banner_slots",
+        "shop_wallet_transactions", "shop_wallet",
+        "transfer_packages", "warehouse_transfers",
         "payments", "shipments", "order_items", "orders",
         "voucher_collections", "vouchers", "products", "product_categories",
         "employee_role_permissions", "shop_employees",
+        "warehouse_managers", "warehouses",
         "shops", "shippers", "user_roles", "users", "roles",
     ]
     print("Reset old data...")
@@ -101,7 +106,7 @@ def seed():
 
     try:
         # ROLES
-        for name in ("admin", "superadmin", "shop", "shipper", "user", "employee"):
+        for name in ("admin", "superadmin", "shop", "shipper", "user", "employee", "warehouse_manager", "warehouse_chief"):
             upsert(db, Role, {"role_name": name})
         db.commit()
         roles = {r.role_name: r for r in db.query(Role).all()}
@@ -226,7 +231,7 @@ def seed():
         db.commit()
 
         # CATEGORIES
-        for cat_name in ("Dien tu", "Thoi trang", "Sach"):
+        for cat_name in ("Điện tử", "Thời trang", "Sách"):
             upsert(db, ProductCategory, {"category_name": cat_name})
         db.commit()
         cats = {c.category_name: c for c in db.query(ProductCategory).all()}
@@ -234,7 +239,7 @@ def seed():
         # SHOP
         shop, _ = upsert(db, Shop, {"shop_id": owner.user_id},
             shop_name="TechWorld Store",
-            description="Thiet bi dien tu chinh hang",
+            description="Thiết bị điện tử chính hãng",
             address="42 Nguyen Hue, Q1, TP.HCM",
             phone="0902222221",
             rating="4.8",
@@ -244,7 +249,7 @@ def seed():
         # Shop cho customer1 (để test vai trò shop)
         upsert(db, Shop, {"shop_id": customer.user_id},
             shop_name="Hoang An Shop",
-            description="Shop da nang cua Hoang Van An",
+            description="Shop đa năng của Hoàng Văn An",
             address="99 CMT8, Q3, TP.HCM",
             phone="0905555551",
             rating="4.5",
@@ -256,20 +261,20 @@ def seed():
         shop_emp_data = [
             (
                 "emp_orders@example.com", "Emp@123",
-                "Nguyen Thi Don Hang", "0906000001",
-                "Nhan vien xu ly don hang",
+                "Nguyễn Thị Đơn Hàng", "0906000001",
+                "Nhân viên xử lý đơn hàng",
                 ["order:read", "order:confirm", "order:cancel"],
             ),
             (
                 "emp_feedback@example.com", "Emp@123",
-                "Le Van Phan Hoi", "0906000002",
-                "Nhan vien xu ly phan hoi khach",
+                "Lê Văn Phản Hồi", "0906000002",
+                "Nhân viên xử lý phản hồi khách",
                 ["message:read", "message:send", "order:read"],
             ),
             (
                 "emp_chat@example.com", "Emp@123",
-                "Pham Thi Tu Van", "0906000003",
-                "Nhan vien tu van truc tuyen",
+                "Phạm Thị Tư Vấn", "0906000003",
+                "Nhân viên tư vấn trực tuyến",
                 ["message:read", "message:send"],
             ),
         ]
@@ -338,7 +343,116 @@ def seed():
                 (email, pw, name, u_status, s_status, rating, total_del, ban_reason))
         db.commit()
 
-        # THEM 2 SHOP PHU + OWNER
+        # WAREHOUSE MANAGER ACCOUNT
+        wm_user, _ = upsert(db, User, {"email": "warehouse@example.com"},
+            password_hash=hash_password("Warehouse@123"),
+            full_name="Nguyen Van Kho", phone="0908000001",
+            address="Kho tong HCM, 100 Nguyen Van Linh, Q7", status="active")
+        # Gán role shipper (bắt buộc phải là shipper trước)
+        upsert(db, UserRole,
+            {"user_id": wm_user.user_id, "role_id": roles["shipper"].role_id},
+            current_role=False, assigned_by=admin.user_id, status="active")
+        # Gán role warehouse_manager
+        upsert(db, UserRole,
+            {"user_id": wm_user.user_id, "role_id": roles["warehouse_manager"].role_id},
+            current_role=True, assigned_by=admin.user_id, status="active")
+        # Tạo shipper profile
+        upsert(db, Shipper, {"shipper_id": wm_user.user_id},
+            user_id=wm_user.user_id,
+            vehicle_type="truck_large", license_plate="51-WM-0001",
+            status="available", rating=4.9, total_deliveries=500)
+        db.commit()
+
+        # ── WAREHOUSE CHIEF ───────────────────────────────────────────────────
+        chief_user, _ = upsert(db, User, {"email": "chief@example.com"},
+            password_hash=hash_password("Chief@123"),
+            full_name="Trần Tổng Quản Lý", phone="0908000000",
+            address="Tổng kho quốc gia, TP.HCM", status="active")
+        upsert(db, UserRole,
+            {"user_id": chief_user.user_id, "role_id": roles["warehouse_chief"].role_id},
+            current_role=True, assigned_by=admin.user_id, status="active")
+        db.commit()
+
+        # ── WAREHOUSE HIERARCHY (2 tier1 + 4 tier2 + 8 tier3 = 14 kho) ─────
+        # Tier 1 — Kho liên vùng
+        wh_t1_hcm, _ = upsert(db, Warehouse, {"name": "Kho Liên vùng Miền Nam"},
+            province="TP. Hồ Chí Minh", district="Bình Thạnh",
+            address="123 Điện Biên Phủ, Q.Bình Thạnh, TP.HCM",
+            tier=1, lat=10.8037, lng=106.7119)
+        wh_t1_hn, _  = upsert(db, Warehouse, {"name": "Kho Liên vùng Miền Bắc"},
+            province="Hà Nội", district="Hoàng Mai",
+            address="45 Giải Phóng, Hoàng Mai, Hà Nội",
+            tier=1, lat=20.9983, lng=105.8440)
+        db.flush()
+
+        # Tier 2 — Kho phân phối
+        wh_t2_data = [
+            ("Kho Phân phối Quận 1",   "TP. Hồ Chí Minh", "Quận 1",   "1 Lê Duẩn, Q.1, TP.HCM",          wh_t1_hcm.warehouse_id, 10.7769, 106.7009),
+            ("Kho Phân phối Quận 7",   "TP. Hồ Chí Minh", "Quận 7",   "100 Nguyễn Lương Bằng, Q.7, HCM", wh_t1_hcm.warehouse_id, 10.7376, 106.7219),
+            ("Kho Phân phối Hoàng Mai","Hà Nội",           "Hoàng Mai","88 Trần Điền, Hoàng Mai, Hà Nội",  wh_t1_hn.warehouse_id,  20.9831, 105.8561),
+            ("Kho Phân phối Cầu Giấy", "Hà Nội",           "Cầu Giấy", "32 Xuân Thủy, Cầu Giấy, Hà Nội",  wh_t1_hn.warehouse_id,  21.0275, 105.7946),
+        ]
+        wh_t2_list = []
+        for wname, prov, dist, addr, parent_id, lat, lng in wh_t2_data:
+            w, _ = upsert(db, Warehouse, {"name": wname},
+                province=prov, district=dist, address=addr,
+                tier=2, parent_warehouse_id=parent_id, lat=lat, lng=lng)
+            wh_t2_list.append(w)
+        db.flush()
+        wh_t2_q1, wh_t2_q7, wh_t2_hm, wh_t2_cg = wh_t2_list
+
+        # Tier 3 — Kho tập kết (2 dưới mỗi tier2)
+        wh_t3_data = [
+            ("Kho Tập kết Bến Nghé",     "TP. Hồ Chí Minh", "Quận 1",   "Bến Nghé",    "5 Tôn Đức Thắng, Q.1",        wh_t2_q1.warehouse_id, 10.7731, 106.7056),
+            ("Kho Tập kết Cầu Ông Lãnh", "TP. Hồ Chí Minh", "Quận 1",   "Cầu Ông Lãnh","12 Võ Văn Kiệt, Q.1",         wh_t2_q1.warehouse_id, 10.7583, 106.6994),
+            ("Kho Tập kết Phú Mỹ Hưng",  "TP. Hồ Chí Minh", "Quận 7",   "Phú Mỹ Hưng", "68 Nguyễn Đức Cảnh, Q.7",    wh_t2_q7.warehouse_id, 10.7277, 106.7196),
+            ("Kho Tập kết Tân Thuận",     "TP. Hồ Chí Minh", "Quận 7",   "Tân Thuận",   "20 Huỳnh Tấn Phát, Q.7",     wh_t2_q7.warehouse_id, 10.7234, 106.7101),
+            ("Kho Tập kết Hoàng Văn Thụ","Hà Nội",           "Hoàng Mai","Hoàng Văn Thụ","3 Hoàng Văn Thụ, Hoàng Mai", wh_t2_hm.warehouse_id, 20.9867, 105.8598),
+            ("Kho Tập kết Vĩnh Hưng",    "Hà Nội",           "Hoàng Mai","Vĩnh Hưng",   "15 Vĩnh Hưng, Hoàng Mai",    wh_t2_hm.warehouse_id, 20.9779, 105.8521),
+            ("Kho Tập kết Quan Hoa",      "Hà Nội",           "Cầu Giấy", "Quan Hoa",    "9 Quan Hoa, Cầu Giấy",       wh_t2_cg.warehouse_id, 21.0312, 105.7923),
+            ("Kho Tập kết Nghĩa Tân",     "Hà Nội",           "Cầu Giấy", "Nghĩa Tân",   "22 Nghĩa Tân, Cầu Giấy",    wh_t2_cg.warehouse_id, 21.0395, 105.7867),
+        ]
+        wh_t3_list = []
+        for wname, prov, dist, ward, addr, parent_id, lat, lng in wh_t3_data:
+            w, _ = upsert(db, Warehouse, {"name": wname},
+                province=prov, district=dist, ward=ward, address=addr,
+                tier=3, parent_warehouse_id=parent_id, lat=lat, lng=lng)
+            wh_t3_list.append(w)
+        db.flush()
+
+        # ── TẠO ACCOUNTS CHO MANAGERS (2 tier1 + 4 tier2 + 8 tier3) ─────────
+        wm_accounts = [
+            # (email,                  pw,              full_name,                  phone,        warehouse, role)
+            ("wm_t1_hcm@example.com",  "Wm123456",  "Nguyễn Văn Kho Nam",       "0909000001", wh_t1_hcm,  "warehouse_manager"),
+            ("wm_t1_hn@example.com",   "Wm123456",  "Trần Thị Kho Bắc",         "0909000002", wh_t1_hn,   "warehouse_manager"),
+            ("wm_t2_q1@example.com",   "Wm123456",  "Lê Phân Phối Quận 1",      "0909000003", wh_t2_q1,   "warehouse_manager"),
+            ("wm_t2_q7@example.com",   "Wm123456",  "Phạm Phân Phối Quận 7",    "0909000004", wh_t2_q7,   "warehouse_manager"),
+            ("wm_t2_hm@example.com",   "Wm123456",  "Vũ Phân Phối Hoàng Mai",   "0909000005", wh_t2_hm,   "warehouse_manager"),
+            ("wm_t2_cg@example.com",   "Wm123456",  "Đỗ Phân Phối Cầu Giấy",   "0909000006", wh_t2_cg,   "warehouse_manager"),
+            ("wm_t3_bn@example.com",   "Wm123456",  "Hoàng Tập Kết Bến Nghé",   "0909000007", wh_t3_list[0], "warehouse_manager"),
+            ("wm_t3_col@example.com",  "Wm123456",  "Bùi Tập Kết Cầu Ông Lãnh","0909000008", wh_t3_list[1], "warehouse_manager"),
+            ("wm_t3_pmh@example.com",  "Wm123456",  "Dương Tập Kết Phú Mỹ Hưng","0909000009", wh_t3_list[2], "warehouse_manager"),
+            ("wm_t3_tt@example.com",   "Wm123456",  "Đinh Tập Kết Tân Thuận",  "0909000010", wh_t3_list[3], "warehouse_manager"),
+            ("wm_t3_hvt@example.com",  "Wm123456",  "Cao Tập Kết Hoàng Văn Thụ","0909000011", wh_t3_list[4], "warehouse_manager"),
+            ("wm_t3_vh@example.com",   "Wm123456",  "Lý Tập Kết Vĩnh Hưng",    "0909000012", wh_t3_list[5], "warehouse_manager"),
+            ("wm_t3_qh@example.com",   "Wm123456",  "Mai Tập Kết Quan Hoa",     "0909000013", wh_t3_list[6], "warehouse_manager"),
+            ("wm_t3_nt@example.com",   "Wm123456",  "Ngô Tập Kết Nghĩa Tân",   "0909000014", wh_t3_list[7], "warehouse_manager"),
+        ]
+        for email, pw, name, phone, wh_obj, role_name in wm_accounts:
+            u, _ = upsert(db, User, {"email": email},
+                password_hash=hash_password(pw),
+                full_name=name, phone=phone, status="active")
+            upsert(db, UserRole,
+                {"user_id": u.user_id, "role_id": roles[role_name].role_id},
+                current_role=True, assigned_by=admin.user_id, status="active")
+            upsert(db, WarehouseManager,
+                {"manager_id": u.user_id},
+                warehouse_id=wh_obj.warehouse_id)
+            # cập nhật manager_id trên warehouse
+            wh_obj.manager_id = u.user_id
+        db.commit()
+
+        # ── THEM 2 SHOP PHU + OWNER
         extra_owners = [
             ("owner2@example.com", "Shop@123", "Nguyen Thi Lan",  "0902222222", "Fashion Hub", "123 Le Van Sy, Q3, HCM", "4.7"),
             ("owner3@example.com", "Shop@123", "Pham Van Bookman","0902222223", "Book Corner",  "88 Dinh Tien Hoang, Q1, HCM", "4.5"),
@@ -359,18 +473,47 @@ def seed():
         db.commit()
         shop2, shop3 = extra_shops[0], extra_shops[1]
 
+        # ── SHOP WALLETS (mock balance cho demo) ─────────────────────────────
+        wallet_data = [
+            (shop.shop_id,  Decimal("5000000"),  Decimal("0")),    # TechWorld
+            (shop2.shop_id, Decimal("3000000"),  Decimal("0")),    # Fashion Hub
+            (shop3.shop_id, Decimal("1500000"),  Decimal("0")),    # Book Corner
+        ]
+        if shop_test_user:
+            wallet_data.append((shop_test_user.user_id, Decimal("2000000"), Decimal("0")))
+        for s_id, bal, res in wallet_data:
+            w, created = upsert(db, ShopWallet, {"shop_id": s_id},
+                balance=bal, reserved=res)
+            if created:
+                db.add(ShopWalletTransaction(
+                    wallet_id=w.wallet_id, shop_id=s_id,
+                    amount=bal, txn_type="deposit", ref_type="mock_deposit",
+                    note="Số dư khởi tạo (mock)",
+                ))
+        db.commit()
+
         # THEM CATEGORIES
-        for cat_name in ("My pham", "Gia dung", "The thao", "Do choi"):
+        for cat_name in ("Mỹ phẩm", "Gia dụng", "Thể thao", "Đồ chơi"):
             upsert(db, ProductCategory, {"category_name": cat_name})
         db.commit()
         cats = {c.category_name: c for c in db.query(ProductCategory).all()}
 
-        def _imgs(slug: str, n: int = 3) -> list:
-            """Picsum.photos: consistent placeholder images per slug, no auth needed."""
-            base = "https://picsum.photos/seed"
-            return [f"{base}/{slug}-{i}/400/400" for i in range(1, n + 1)]
+
+        _PALETTES = [
+            ("dbeafe", "1d4ed8"), ("fce7f3", "9d174d"), ("dcfce7", "15803d"),
+            ("fef9c3", "854d0e"), ("ede9fe", "6d28d9"), ("ffedd5", "c2410c"),
+        ]
+
+        def _imgs(label: str, n: int = 3) -> list:
+            """placehold.co với text tên sản phẩm — dễ nhận diện khi demo."""
+            text = label.replace(" ", "+").replace("/", "+")
+            return [
+                f"https://placehold.co/400x400/{_PALETTES[i % len(_PALETTES)][0]}/{_PALETTES[i % len(_PALETTES)][1]}?text={text}"
+                for i in range(n)
+            ]
 
         # PRODUCTS — TechWorld Store (Dien tu)
+
         tech_products = [
             ("Tai nghe Sony WH-1000XM5",  Decimal("8900000"), Decimal("6500000"), 25,  230, 4.9, "Chong on chu dong, pin 30h, ket noi Bluetooth 5.2. Am thanh Hi-Res.",  _imgs("sony-wh1000xm5")),
             ("Cap USB-C 100W",             Decimal("150000"),  Decimal("50000"),  200,  890, 4.6, "Sac nhanh 100W, ho tro PD 3.0, dai 1.5m, boc nylon ben.",             _imgs("usbc-cable-100w")),
@@ -384,14 +527,14 @@ def seed():
         for pname, price, cost, stock, sold, rat, desc, imgs in tech_products:
             p, _ = upsert(db, Product,
                 {"shop_id": shop.shop_id, "product_name": pname},
-                category_id=cats["Dien tu"].category_id,
+                category_id=cats["Điện tử"].category_id,
                 price=price, cost=cost, stock_quantity=stock,
                 sales_count=sold, rating=str(rat), total_reviews=int(sold // 4),
                 description=desc, image_urls=imgs,
                 status="active", approved_at=now - timedelta(days=20))
             prods.append(p)
 
-        # PRODUCTS — Fashion Hub (Thoi trang)
+        # PRODUCTS — Fashion Hub (Thời trang)
         fashion_products = [
             ("Ao thun Oversize Unisex",    Decimal("280000"),  Decimal("110000"), 150,  780, 4.6, "Vai cotton 100%, form rong thoai mai, nhieu mau sac, size S-3XL.", _imgs("oversize-tshirt")),
             ("Quan jeans skinny nam",      Decimal("450000"),  Decimal("200000"),  80,  345, 4.5, "Denim cao cap, co gian 4 chieu, wash nhe, form om vua.",          _imgs("skinny-jeans")),
@@ -403,25 +546,25 @@ def seed():
         for pname, price, cost, stock, sold, rat, desc, imgs in fashion_products:
             p, _ = upsert(db, Product,
                 {"shop_id": shop2.shop_id, "product_name": pname},
-                category_id=cats["Thoi trang"].category_id,
+                category_id=cats["Thời trang"].category_id,
                 price=price, cost=cost, stock_quantity=stock,
                 sales_count=sold, rating=str(rat), total_reviews=int(sold // 4),
                 description=desc, image_urls=imgs,
                 status="active", approved_at=now - timedelta(days=15))
             prods.append(p)
 
-        # PRODUCTS — Book Corner (Sach + khac)
+        # PRODUCTS — Book Corner (Sách + khác)
         book_products = [
-            ("Clean Code - Robert Martin",     Decimal("320000"), Decimal("180000"),  40,  156, 4.9, "Sach lap trinh kinh dien ve viet code sach, de bao tri va mo rong.", _imgs("book-clean-code")),
-            ("Atomic Habits - James Clear",    Decimal("198000"), Decimal("100000"),  80,  890, 4.8, "Phuong phap xay dung thoi quen tot, loai bo thoi quen xau hieu qua.", _imgs("book-atomic-habits")),
-            ("Dac Nhan Tam",                   Decimal("88000"),  Decimal("40000"),  200, 1250, 4.7, "Sach ky nang giao tiep ban chay nhat moi thoi cua Dale Carnegie.",    _imgs("book-dac-nhan-tam")),
-            ("The Psychology of Money",        Decimal("175000"), Decimal("90000"),   60,  340, 4.8, "Cach suy nghi ve tien bac va dau tu duoi goc nhin tam ly hoc.",       _imgs("book-psych-money")),
-            ("Sapiens: Luoc su loai nguoi",    Decimal("185000"), Decimal("95000"),   70,  520, 4.6, "Hanh trinh 70000 nam cua loai nguoi tu thoi do da den ky nguyen so.", _imgs("book-sapiens")),
+            ("Clean Code - Robert Martin",     Decimal("320000"), Decimal("180000"),  40,  156, 4.9, "Sách lập trình kinh điển về viết code sạch, dễ bảo trì và mở rộng.",      _imgs("book-clean-code")),
+            ("Atomic Habits - James Clear",    Decimal("198000"), Decimal("100000"),  80,  890, 4.8, "Phương pháp xây dựng thói quen tốt, loại bỏ thói quen xấu hiệu quả.",    _imgs("book-atomic-habits")),
+            ("Đắc Nhân Tâm",                   Decimal("88000"),  Decimal("40000"),  200, 1250, 4.7, "Sách kỹ năng giao tiếp bán chạy nhất mọi thời của Dale Carnegie.",         _imgs("book-dac-nhan-tam")),
+            ("The Psychology of Money",        Decimal("175000"), Decimal("90000"),   60,  340, 4.8, "Cách suy nghĩ về tiền bạc và đầu tư dưới góc nhìn tâm lý học.",          _imgs("book-psych-money")),
+            ("Sapiens: Lược sử loài người",    Decimal("185000"), Decimal("95000"),   70,  520, 4.6, "Hành trình 70.000 năm của loài người từ thời đồ đá đến kỷ nguyên số.",   _imgs("book-sapiens")),
         ]
         for pname, price, cost, stock, sold, rat, desc, imgs in book_products:
             p, _ = upsert(db, Product,
                 {"shop_id": shop3.shop_id, "product_name": pname},
-                category_id=cats["Sach"].category_id,
+                category_id=cats["Sách"].category_id,
                 price=price, cost=cost, stock_quantity=stock,
                 sales_count=sold, rating=str(rat), total_reviews=int(sold // 4),
                 description=desc, image_urls=imgs,
@@ -542,10 +685,10 @@ def seed():
             print(f"  {email:<32} / {pw:<12} [{role}]")
 
         print("\nSimple test accounts:")
-        print(f"  {'admin':<32} / {'admin':<12} [admin]     — hành động ghi vào admin_logs")
-        print(f"  {'super':<32} / {'super':<12} [superadmin]— toàn quyền, KHÔNG ghi log")
-        print(f"  {'shop':<32} / {'shop':<12} [shop]")
-        print(f"  {'user1':<32} / {'user1':<12} [customer]")
+        print("  admin                            / admin        [admin]")
+        print("  super                            / super        [superadmin]")
+        print("  shop                             / shop         [shop]")
+        print("  user1                            / user1        [customer]")
 
         print("\nShop employees (/shop/*):")
         for email, pw, name, position, perms in emp_users:
@@ -553,12 +696,22 @@ def seed():
             print(f"    Perms: {', '.join(perms)}")
 
         print("\nShippers (/shipper):")
-        print(f"  {'shipper1@example.com':<32} / {'Ship@123':<12} | Vo Van Toc          | active  / available   | 4.8* | 312")
+        print("  shipper1@example.com             / Ship@123     | Vo Van Toc | available | 4.8* | 312")
         for email, pw, name, u_status, s_status, rating, total_del, ban_reason in extra_shipper_data:
             flag = " [BANNED]" if u_status == "banned" else ""
             print(f"  {email:<32} / {pw:<12} | {name:<22}| {u_status:<8} / {s_status:<12} | {rating}* | {total_del}{flag}")
             if ban_reason:
                 print(f"    Reason: {ban_reason}")
+
+        print("\nWarehouse Chief:")
+        print("  chief@example.com                / Chief@123      [warehouse_chief]")
+        print("\nWarehouse Managers (password: Wm123456) [warehouse_manager]:")
+        print("  Tier 1: wm_t1_hcm@example.com  | wm_t1_hn@example.com")
+        print("  Tier 2: wm_t2_q1  wm_t2_q7  wm_t2_hm  wm_t2_cg  @example.com")
+        print("  Tier 3: wm_t3_bn  wm_t3_col  wm_t3_pmh  wm_t3_tt  @example.com")
+        print("          wm_t3_hvt  wm_t3_vh  wm_t3_qh  wm_t3_nt  @example.com")
+        print("\nShop Wallets seeded:")
+        print("  TechWorld 5,000,000đ | Fashion Hub 3,000,000đ | Book Corner 1,500,000đ")
         print()
 
     except Exception:

@@ -12,7 +12,7 @@ const LEVELS = [
   { name: 'Bạc',         icon: '🥈', min: 100,  max: 299,   color: '#6B7280', bg: '#F9FAFB', bonus_pct: 5,  desc: 'Thưởng +5% mỗi đơn' },
   { name: 'Vàng',        icon: '🥇', min: 300,  max: 499,   color: '#D97706', bg: '#FEF3C7', bonus_pct: 10, desc: 'Thưởng +10% mỗi đơn' },
   { name: 'Kim cương',   icon: '💎', min: 500,  max: 999,   color: '#1D4ED8', bg: '#DBEAFE', bonus_pct: 15, desc: 'Thưởng +15% + ưu tiên đơn hàng' },
-  { name: 'Huyền thoại', icon: '👑', min: 1000, max: 99999, color: '#7C3AED', bg: '#EDE9FE', bonus_pct: 20, desc: 'Thưởng +20% + bảo hiểm xe miễn phí' },
+  { name: 'Hủyền thoại', icon: '👑', min: 1000, max: 99999, color: '#7C3AED', bg: '#EDE9FE', bonus_pct: 20, desc: 'Thưởng +20% + bảo hiểm xe miễn phí' },
 ]
 
 const WELFARE_LIST = [
@@ -20,7 +20,7 @@ const WELFARE_LIST = [
   { id: 2, icon: '⛽', title: 'Hỗ trợ nhiên liệu',    desc: 'Phụ cấp xăng 500.000₫/tháng cho shipper từ cấp Bạc trở lên.', active: true },
   { id: 3, icon: '🔧', title: 'Sửa chữa xe',          desc: 'Hỗ trợ chi phí sửa chữa phương tiện tối đa 2.000.000₫/năm.', active: true },
   { id: 4, icon: '🎓', title: 'Đào tạo kỹ năng',      desc: 'Khóa học kỹ năng giao tiếp và an toàn giao thông miễn phí hàng quý.', active: true },
-  { id: 5, icon: '💎', title: 'Bảo hiểm xe miễn phí', desc: 'Dành riêng cho shipper Huyền thoại — bảo hiểm xe máy 1 năm miễn phí.', active: false },
+  { id: 5, icon: '💎', title: 'Bảo hiểm xe miễn phí', desc: 'Dành riêng cho shipper Hủyền thoại — bảo hiểm xe máy 1 năm miễn phí.', active: false },
 ]
 
 function getLevelFromDeliveries(total: number) {

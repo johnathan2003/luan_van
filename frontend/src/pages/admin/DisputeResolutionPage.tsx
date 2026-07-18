@@ -5,7 +5,7 @@ import { DISPUTE_STATUS_LABELS, DISPUTE_STATUS_COLORS, DISPUTE_TARGET_LABELS } f
 import { formatDate, formatOrderId } from '../../utils/formatters'
 import { addNotificationFor, type NotificationRecipientType } from '../../utils/notificationStore'
 
-// Sau khi admin xu ly 1 khieu nai, suy ra "3 ben lien quan" toi don hang do
+// Sau khi admin xu ly 1 khiếu nại, suy ra "3 ben lien quan" toi đơn hàng do
 // (nguoi mua / shop / shipper) de gui thong bao, du dispute chi co 2 ben truc tiep
 // (nguoi gui khieu nai + doi tuong bi khieu nai). Ben thu 3 (khong xuat hien truc tiep
 // trong dispute) duoc thong bao voi id mac dinh — chi de demo hien thi, khong can khop
@@ -82,7 +82,7 @@ const DisputeResolutionPage: React.FC = () => {
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: C.navy }}>⚖️ Giải quyết khiếu nại</h1>
         <p style={{ fontSize: 13, color: C.gray, marginTop: 2 }}>
-          Xem xét và xử lý khiếu nại giữa người mua, shop và shipper — bao gồm hàng giả, hư hỏng/giao gian dối, đổi trả gian lận, "bom" hàng, hiềm khích shop–shipper.
+          Xem xét và xử lý khiếu nại giữa người mua, shop và shipper — bao gồm hàng giả, hư hỏng/giao gián dối, đổi trả gián lận, "bom" hàng, hiềm khích shop–shipper.
         </p>
       </div>
 

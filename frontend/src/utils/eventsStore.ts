@@ -27,7 +27,7 @@ function writeJSON(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
 }
 
-// đếm ngược thời gian tới 0h ngày mai (hiển thị "còn bao lâu")
+// đếm ngược thời gián tới 0h ngày mai (hiển thị "còn bao lâu")
 export function msUntilMidnight(): number {
   const now = new Date()
   const tomorrow = new Date(now)

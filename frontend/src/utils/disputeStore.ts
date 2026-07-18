@@ -1,5 +1,5 @@
 // Luu khieu nai (dispute/complaint) tam o localStorage - phuc vu demo/test, chua co backend thuc
-// Bao gom 4 chieu khieu nai: user->shop, user->shipper, shop->user, shop->shipper. Admin xem tat ca.
+// Bao gom 4 chieu khiếu nại: user->shop, user->shipper, shop->user, shop->shipper. Admin xem tất cả.
 import type { Dispute, DisputeComplainantType, DisputeTargetType, DisputeStatus } from '../types/dispute'
 
 const KEY = 'buyzo_disputes_v1'
@@ -101,7 +101,7 @@ export function hasOpenDispute(orderId: number, complainantType: DisputeComplain
 
 // ── Du lieu khieu nai GIA (demo) - tu dong nap vao localStorage neu chua co gi ───────────
 // De admin co du lieu xem ngay, dung 8 don khieu nai mau, du ca 4 chieu va 4 trang thai.
-const img = (seed: string) => `https://picsum.photos/seed/${seed}/200/200`
+const img = (label: string) => `https://placehold.co/200x200/dbeafe/1d4ed8?text=${encodeURIComponent(label)}`
 const daysAgo = (d: number) => new Date(Date.now() - d * 24 * 3600 * 1000).toISOString()
 
 // Email demo khớp với seed.py để route thông báo đúng tài khoản
@@ -124,7 +124,7 @@ const DEMO_DISPUTES: Dispute[] = [
     reason_code: 'fake_goods',
     reason_label: 'Hàng giả / hàng nhái',
     content: 'Bàn ủi nhận được không phải hàng chính hãng như mô tả trên sản phẩm, tem chống giả khác hoàn toàn so với hình shop đăng. Mong sàn kiểm tra và hỗ trợ hoàn tiền.',
-    evidence: { images: [img('dispute1a'), img('dispute1b')], videoName: 'video_banui_sosanh.mp4' },
+    evidence: { images: [img('Bằng chứng 1A'), img('Bằng chứng 1B')], videoName: 'video_banui_sosanh.mp4' },
     status: 'pending',
     created_at: daysAgo(2),
   },
@@ -142,7 +142,7 @@ const DEMO_DISPUTES: Dispute[] = [
     reason_code: 'damaged',
     reason_label: 'Hàng bị móp/hỏng trong quá trình giao',
     content: 'Nồi chiên không dầu khi nhận bị móp một bên, vỏ ngoài trầy xước nhiều so với lúc đặt. Có khả năng shipper làm rơi trong lúc vận chuyển.',
-    evidence: { images: [img('dispute2a'), img('dispute2b'), img('dispute2c')] },
+    evidence: { images: [img('Bằng chứng 2A'), img('Bằng chứng 2B'), img('Bằng chứng 2C')] },
     status: 'reviewing',
     created_at: daysAgo(4),
   },
@@ -160,7 +160,7 @@ const DEMO_DISPUTES: Dispute[] = [
     reason_code: 'false_delivered',
     reason_label: 'Hệ thống xác nhận đã giao nhưng chưa nhận được hàng',
     content: 'Đơn hàng hiện trạng thái "đã giao" nhưng tôi chưa hề nhận được hàng hoặc cuộc gọi nào từ shipper. Đề nghị kiểm tra lại.',
-    evidence: { images: [img('dispute3a')] },
+    evidence: { images: [img('Bằng chứng 3A')] },
     status: 'resolved',
     resolution_note: 'Đã xác minh với shipper, xác nhận giao nhầm địa chỉ. Đã hoàn tiền 100% cho khách và nhắc nhở shipper.',
     created_at: daysAgo(7),
@@ -180,7 +180,7 @@ const DEMO_DISPUTES: Dispute[] = [
     reason_code: 'used_return',
     reason_label: 'Khách trả hàng trong tình trạng đã sử dụng',
     content: 'Khách yêu cầu trả hàng trong hạn 3 ngày nhưng mũ nhận lại đã có dấu hiệu đội/sử dụng, mồ hôi bám phần lót trong, không còn nguyên tem mác như lúc giao.',
-    evidence: { images: [img('dispute4a'), img('dispute4b')], videoName: 'video_kiemtra_hangtra.mp4' },
+    evidence: { images: [img('Bằng chứng 4A'), img('Bằng chứng 4B')], videoName: 'video_kiemtra_hangtra.mp4' },
     status: 'pending',
     created_at: daysAgo(1),
   },
@@ -198,7 +198,7 @@ const DEMO_DISPUTES: Dispute[] = [
     reason_code: 'order_bom',
     reason_label: 'Khách đặt hàng rồi "bom" hàng (không nhận hàng)',
     content: 'Khách đặt ví da nam thanh toán COD nhưng từ chối nhận hàng không lý do khi shipper giao tới, gây thiệt hại phí vận chuyển 2 chiều cho shop.',
-    evidence: { images: [img('dispute5a')] },
+    evidence: { images: [img('Bằng chứng 5A')] },
     status: 'rejected',
     resolution_note: 'Qua xác minh, khách có lý do hợp lệ (đổi địa chỉ nhận hàng đột xuất, đã báo trước cho shipper). Không xử phạt khách lần này.',
     created_at: daysAgo(10),
@@ -236,7 +236,7 @@ const DEMO_DISPUTES: Dispute[] = [
     reason_code: 'unboxed',
     reason_label: 'Phát hiện hàng đã bị mở (unbox) trước khi giao',
     content: 'Hộp tai nghe khi nhận đã bị bóc seal, bên trong thiếu phụ kiện đi kèm (dây sạc) so với mô tả sản phẩm.',
-    evidence: { images: [img('dispute7a'), img('dispute7b')] },
+    evidence: { images: [img('Bằng chứng 7A'), img('Bằng chứng 7B')] },
     status: 'resolved',
     resolution_note: 'Xác minh hộp hàng bị mở trong quá trình trung chuyển. Đã bồi thường phụ kiện thiếu và nhắc nhở đơn vị vận chuyển.',
     created_at: daysAgo(15),
@@ -251,12 +251,12 @@ const DEMO_DISPUTES: Dispute[] = [
     complainant_email: DEMO_SHOP_EMAIL,
     target_type: 'user',
     target_id: 1,
-    target_name: 'Tran Quoc Anh',
+    target_name: 'Tran Quoc Ẩnh',
     target_email: DEMO_USER_EMAIL,
     reason_code: 'no_pay',
-    reason_label: 'Khach nhan hang nhung khong thanh toan (COD)',
-    content: 'Khach da nhan giay nhung bao voi shipper la "chuyen khoan sau" roi khong thanh toan, lien he lai khong phan hoi.',
-    evidence: { images: [img('dispute8a')] },
+    reason_label: 'Khách nhận hàng nhưng không thanh toán (COD)',
+    content: 'Khách đã nhận hàng nhưng bảo với shipper là "chuyển khoản sau" rồi không thanh toán, liên hệ lại không phản hồi.',
+    evidence: { images: [img('Bằng chứng 8A')] },
     status: 'pending',
     created_at: daysAgo(0.5),
   },
@@ -267,4 +267,5 @@ function seedDemoDisputesIfEmpty() {
   writeAll(DEMO_DISPUTES)
 }
 
+// Auto-seed khi module được import lần đầu — đảm bảo admin luôn thấy dữ liệu demo
 seedDemoDisputesIfEmpty()

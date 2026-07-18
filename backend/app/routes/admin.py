@@ -123,6 +123,94 @@ def reject_shipper(reg_id: int, data: dict, current_user: User = Depends(require
     return {"message": "Shipper registration rejected"}
 
 
+@router.get("/shippers")
+def list_shippers(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Danh sách shipper đã được duyệt (để admin quản lý + promote)."""
+    from app.models.shipment import Shipper
+    from app.models.user import UserRole, Role
+    query = db.query(Shipper).join(User, User.user_id == Shipper.user_id)
+    total = query.count()
+    items = query.offset((page - 1) * limit).limit(limit).all()
+    result = []
+    for s in items:
+        roles = {ur.role.role_name for ur in s.user.user_roles if ur.status == "active"}
+        result.append({
+            "user_id":       s.user_id,
+            "shipper_id":    s.shipper_id,
+            "full_name":     s.user.full_name,
+            "email":         s.user.email,
+            "phone":         s.user.phone,
+            "vehicle_type":  s.vehicle_type,
+            "license_plate": s.license_plate,
+            "shipper_type":  getattr(s, "shipper_type", "free"),
+            "status":        s.status,
+            "is_warehouse_manager": "warehouse_manager" in roles,
+        })
+    return {"shippers": result, "total": total, "page": page, "pages": -(-total // limit)}
+
+
+@router.post("/shippers/{user_id}/promote-warehouse-manager")
+def promote_to_warehouse_manager(
+    user_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Bổ nhiệm shipper thành quản lý kho. Shipper vẫn giữ role shipper nhưng không giao hàng trực tiếp nữa."""
+    from app.models.user import UserRole, Role
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Không tìm thấy người dùng")
+    # Kiểm tra đã là shipper chưa
+    shipper_roles = {ur.role.role_name for ur in user.user_roles if ur.status == "active"}
+    if "shipper" not in shipper_roles:
+        raise HTTPException(400, "Người dùng này chưa phải là shipper")
+    # Lấy role warehouse_manager
+    wm_role = db.query(Role).filter(Role.role_name == "warehouse_manager").first()
+    if not wm_role:
+        raise HTTPException(500, "Role warehouse_manager chưa được tạo trong DB. Hãy chạy migration.")
+    # Kiểm tra đã có role chưa
+    existing = db.query(UserRole).filter(
+        UserRole.user_id == user_id,
+        UserRole.role_id == wm_role.role_id,
+    ).first()
+    if existing:
+        if existing.status == "active":
+            raise HTTPException(400, "Người dùng đã là quản lý kho rồi")
+        existing.status = "active"
+    else:
+        db.add(UserRole(user_id=user_id, role_id=wm_role.role_id, status="active", assigned_by=current_user.user_id))
+    db.commit()
+    return {"message": f"Đã bổ nhiệm {user.full_name} làm quản lý kho"}
+
+
+@router.delete("/shippers/{user_id}/remove-warehouse-manager")
+def remove_warehouse_manager(
+    user_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Thu hồi quyền quản lý kho."""
+    from app.models.user import UserRole, Role
+    wm_role = db.query(Role).filter(Role.role_name == "warehouse_manager").first()
+    if not wm_role:
+        raise HTTPException(404, "Role không tồn tại")
+    ur = db.query(UserRole).filter(
+        UserRole.user_id == user_id,
+        UserRole.role_id == wm_role.role_id,
+        UserRole.status == "active",
+    ).first()
+    if not ur:
+        raise HTTPException(400, "Người dùng không phải quản lý kho")
+    ur.status = "inactive"
+    db.commit()
+    return {"message": "Đã thu hồi quyền quản lý kho"}
+
+
 # ─── Products ────────────────────────────────────────────────────────────────
 
 @router.get("/products")

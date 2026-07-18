@@ -52,20 +52,20 @@ const ITruck = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
 const StockBadge: React.FC<{ item: CartItem }> = ({ item }) => {
   if (isOutOfStock(item)) return (
     <span style={{ fontSize: 11, fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '3px 8px', borderRadius: 20 }}>
-      🚫 Het hang
+      🚫 Hết hàng
     </span>
   )
   if (isOverStock(item)) return (
     <span style={{ fontSize: 11, fontWeight: 700, background: '#FEF3C7', color: '#D97706', padding: '3px 8px', borderRadius: 20 }}>
-      ⚠️ Chi con {stock(item)} san pham
+      ⚠️ Chỉ còn {stock(item)} sản phẩm
     </span>
   )
   if (isLowStock(item)) return (
     <span style={{ fontSize: 11, fontWeight: 600, background: '#FFF7ED', color: '#EA580C', padding: '3px 8px', borderRadius: 20 }}>
-      🔥 Sap het ({stock(item)} con lai)
+      🔥 Sắp hết ({stock(item)} còn lại)
     </span>
   )
-  return <span style={{ fontSize: 11, color: '#16A34A', fontWeight: 500 }}>✓ Con hang</span>
+  return <span style={{ fontSize: 11, color: '#16A34A', fontWeight: 500 }}>✓ Còn hàng</span>
 }
 
 // ─── Main ──────────────────────────────────────────────────────────────────────
@@ -186,9 +186,9 @@ const CartPage: React.FC = () => {
     <div className="page-wrapper">
       <div className="container" style={{ paddingTop: 60, paddingBottom: 60, textAlign: 'center' }}>
         <div style={{ fontSize: 80, marginBottom: 16 }}>🛒</div>
-        <h2 style={{ fontWeight: 700, fontSize: 22, marginBottom: 8, color: 'var(--text-primary)' }}>Gio hang trong</h2>
-        <p style={{ color: 'var(--text-secondary)', marginBottom: 28 }}>Them san pham vao gio de tiep tuc mua sam</p>
-        <Link to="/products" className="btn btn-primary btn-lg">Kham pha san pham</Link>
+        <h2 style={{ fontWeight: 700, fontSize: 22, marginBottom: 8, color: 'var(--text-primary)' }}>Giỏ hàng trống</h2>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: 28 }}>Thêm sản phẩm vào giỏ để tiếp tục mua sắm</p>
+        <Link to="/products" className="btn btn-primary btn-lg">Khám phá sản phẩm</Link>
         <div style={{ textAlign: 'left', marginTop: 32 }}><SuggestedDealsSection /></div>
       </div>
     </div>
@@ -201,14 +201,14 @@ const CartPage: React.FC = () => {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-            Gio hang
+            Giỏ hàng
             {loading
-              ? <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)', marginLeft: 10 }}>Dang tai...</span>
-              : <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-secondary)', marginLeft: 8 }}>({items.length} san pham)</span>
+              ? <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)', marginLeft: 10 }}>Đang tải...</span>
+              : <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-secondary)', marginLeft: 8 }}>({items.length} sản phẩm)</span>
             }
           </h1>
           <Link to="/products" style={{ fontSize: 14, color: 'var(--primary)', fontWeight: 500, textDecoration: 'none' }}>
-            + Tiep tuc mua sam
+            + Tiếp tục mua sắm
           </Link>
         </div>
 
@@ -222,13 +222,13 @@ const CartPage: React.FC = () => {
             <span style={{ color: '#DC2626', marginTop: 1 }}><IWarn /></span>
             <div style={{ flex: 1 }}>
               <p style={{ fontWeight: 700, fontSize: 14, color: '#DC2626', margin: '0 0 4px' }}>
-                Co {outOfStock.length} san pham het hang trong gio!
+                Có {outOfStock.length} sản phẩm hết hàng trong giỏ!
               </p>
-              <p style={{ fontSize: 13, color: '#7F1D1D', margin: 0 }}>Xoa chung truoc khi thanh toan.</p>
+              <p style={{ fontSize: 13, color: '#7F1D1D', margin: 0 }}>Xóa chúng trước khi thanh toán.</p>
             </div>
             <button onClick={handleRemoveOutOfStock}
               style={{ flexShrink: 0, padding: '5px 14px', background: '#DC2626', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              Xoa het hang
+              Xóa hết hàng
             </button>
           </div>
         )}
@@ -236,7 +236,7 @@ const CartPage: React.FC = () => {
         {loading && items.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-secondary)' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
-            <p>Dang tai gio hang...</p>
+            <p>Đang tải giỏ hàng...</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, alignItems: 'start' }}>
@@ -248,12 +248,12 @@ const CartPage: React.FC = () => {
                 <input type="checkbox" checked={allBuyableSelected} onChange={toggleAll}
                   style={{ width: 17, height: 17, cursor: 'pointer', accentColor: 'var(--primary)' }} />
                 <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                  Chon tat ca ({buyableIds.length} co the mua)
+                  Chọn tất cả ({buyableIds.length} có thể mua)
                 </span>
                 {selectedBuyable.length > 0 && (
                   <button onClick={handleRemoveSelected}
                     style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--error, #EF4444)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <ITrash /> Xoa da chon ({selectedBuyable.length})
+                    <ITrash /> Xóa đã chọn ({selectedBuyable.length})
                   </button>
                 )}
               </div>
@@ -312,7 +312,7 @@ const CartPage: React.FC = () => {
                           {/* Info */}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 4, lineHeight: 1.4 }}>
-                              {item.product_name || `San pham #${item.product_id}`}
+                              {item.product_name || `Sản phẩm #${item.product_id}`}
                             </p>
                             <div style={{ marginBottom: 8 }}>
                               <StockBadge item={item} />
@@ -339,7 +339,7 @@ const CartPage: React.FC = () => {
                                 style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 6 }}
                                 onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
                                 onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'}>
-                                <ITrash /> Xoa
+                                <ITrash /> Xóa
                               </button>
                             </div>
                           </div>
@@ -351,12 +351,12 @@ const CartPage: React.FC = () => {
                             </p>
                             {item.quantity > 1 && (
                               <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                                {formatCurrency(Number(item.price))} / cai
+                                {formatCurrency(Number(item.price))} / cái
                               </p>
                             )}
                             {over && (
                               <p style={{ fontSize: 11, color: '#D97706', margin: '4px 0 0', fontWeight: 600 }}>
-                                Tinh theo {stock(item)} cai
+                                Tính theo {stock(item)} cái
                               </p>
                             )}
                           </div>
@@ -372,36 +372,36 @@ const CartPage: React.FC = () => {
             <div style={{ position: 'sticky', top: 80 }}>
               <div className="card" style={{ padding: 20 }}>
                 <h3 style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginBottom: 16, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 12 }}>
-                  Tom tat don hang
+                  Tóm tắt đơn hàng
                 </h3>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>San pham da chon ({selectedBuyable.length})</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>Sản phẩm đã chọn ({selectedBuyable.length})</span>
                     <span>{formatCurrency(subtotal)}</span>
                   </div>
 
                   {discount > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Voucher giam gia</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>Voucher giảm giá</span>
                       <span style={{ color: '#16A34A', fontWeight: 600 }}>-{formatCurrency(discount)}</span>
                     </div>
                   )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <ITruck /> Phi van chuyen
+                      <ITruck /> Phí vận chuyển
                     </span>
                     <span style={{ color: shipping === 0 ? '#16A34A' : 'var(--text-primary)', fontWeight: 500 }}>
                       {shipping === 0
-                        ? subtotal > 0 ? 'Mien phi' : '—'
+                        ? subtotal > 0 ? 'Miễn phí' : '—'
                         : formatCurrency(shipping)}
                     </span>
                   </div>
 
                   {subtotal > 0 && subtotal < 500000 && (
                     <p style={{ fontSize: 12, color: '#2563EB', margin: 0 }}>
-                      Mua them {formatCurrency(500000 - subtotal)} de mien phi ship
+                      Mua thêm {formatCurrency(500000 - subtotal)} để miễn phí ship
                     </p>
                   )}
                 </div>
@@ -409,7 +409,7 @@ const CartPage: React.FC = () => {
                 <div style={{ height: 1, background: 'var(--border-subtle)', margin: '14px 0' }} />
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>Tong cong</span>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>Tổng cộng</span>
                   <span style={{ fontWeight: 800, fontSize: 20, color: 'var(--primary, #7C3AED)' }}>
                     {formatCurrency(grandTotal)}
                   </span>
@@ -427,15 +427,15 @@ const CartPage: React.FC = () => {
                   }}
                   onMouseEnter={e => { if (selectedBuyable.length > 0) e.currentTarget.style.opacity = '0.9' }}
                   onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}>
-                  {selectedBuyable.length === 0 ? 'Chon san pham de thanh toan' : `Thanh toan (${selectedBuyable.length} san pham)`}
+                  {selectedBuyable.length === 0 ? 'Chọn sản phẩm để thanh toán' : `Thanh toán (${selectedBuyable.length} sản phẩm)`}
                 </button>
 
                 {/* Cam kết */}
                 <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    '🔒 Thanh toan bao mat, ma hoa SSL',
-                    '↩️ Doi tra trong 7 ngay',
-                    '✅ Hang chinh hang 100%',
+                    '🔒 Thanh toán bảo mật, mã hóa SSL',
+                    '↩️ Đổi trả trong 7 ngày',
+                    '✅ Hàng chính hãng 100%',
                   ].map((t, i) => (
                     <p key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>{t}</p>
                   ))}

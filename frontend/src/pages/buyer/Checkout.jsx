@@ -82,7 +82,7 @@ export default function Checkout() {
             {field("receiver_name", "Họ và tên người nhận")}
             {field("phone", "Số điện thoại", "tel")}
             {field("province", "Tỉnh / Thành phố")}
-            {field("district", "Quận / Huyện")}
+            {field("district", "Quận / Hủyện")}
             {field("ward", "Phường / Xã")}
             {field("street", "Địa chỉ chi tiết (số nhà, tên đường)")}
           </div>

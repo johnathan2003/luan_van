@@ -26,7 +26,7 @@ const useAuthStore = create((set, get) => ({
       return userWithRole;
     } catch (err) {
       const msg =
-        err.response?.data?.detail || err.response?.data?.message || "Dang nhap that bai";
+        err.response?.data?.detail || err.response?.data?.message || "Đăng nhập thất bại";
       set({ error: msg, isLoading: false });
       throw new Error(msg);
     }
@@ -43,7 +43,7 @@ const useAuthStore = create((set, get) => ({
       set({ user: userWithRole, isAuthenticated: true, isLoading: false });
       return userWithRole;
     } catch (err) {
-      const msg = err.response?.data?.detail || "Dang ky that bai";
+      const msg = err.response?.data?.detail || "Đăng ký thất bại";
       set({ error: msg, isLoading: false });
       throw err;
     }

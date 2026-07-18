@@ -68,7 +68,7 @@ def get_my_orders(
                 "order_status": o.order_status,
                 "created_at": str(o.created_at),
                 "items": [
-                    {"product_name": i.product_name, "quantity": i.quantity, "price": i.price_at_order}
+                    {"product_name": i.product_name, "quantity": i.quantity, "price_at_order": str(i.price_at_order) if i.price_at_order else "0"}
                     for i in o.items
                 ],
             }

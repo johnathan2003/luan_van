@@ -35,6 +35,7 @@ export interface ProductCreate {
   stock_quantity: number
   category_id?: number
   image_urls?: string[]
+  video_url?: string
 }
 
 export interface ProductUpdate {

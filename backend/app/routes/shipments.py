@@ -13,7 +13,7 @@ from app.schemas.shipment import LocationUpdate, ShipperStatusUpdate, ShipmentRe
 from app.services.shipment_service import (
     get_available_shippers, assign_shipper_to_order, pickup_order,
     update_location, mark_delivered, reject_delivery, update_shipper_status,
-    get_shipper_deliveries,
+    get_shipper_deliveries, get_pending_shipments, claim_shipment,
 )
 
 router = APIRouter()
@@ -47,10 +47,41 @@ def get_shipment(shipment_id: int, current_user: User = Depends(get_current_user
     }
 
 
+@router.get("/shipper/pending-orders")
+def pending_orders(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50),
+    current_user: User = Depends(require_shipper),
+    db: Session = Depends(get_db),
+):
+    """Lấy danh sách đơn hàng chưa có shipper — để shipper tự nhận."""
+    items, total, pages = get_pending_shipments(db, page, limit)
+    return {
+        "shipments": [
+            {
+                "shipment_id":       s.shipment_id,
+                "order_id":          s.order_id,
+                "status":            s.status,
+                "pickup_location":   s.pickup_location,
+                "delivery_location": s.delivery_location,
+                "created_at":        str(s.created_at),
+                "recipient":         s.order.recipient_name  if s.order else None,
+                "phone":             s.order.recipient_phone if s.order else None,
+                "amount":            float(s.order.final_price) if s.order and s.order.final_price else None,
+                "payment_method":    s.order.payment_method  if s.order else None,
+            }
+            for s in items
+        ],
+        "total": total,
+        "pages": pages,
+    }
+
+
 @router.post("/{shipment_id}/accept")
 def accept_shipment(shipment_id: int, current_user: User = Depends(require_shipper), db: Session = Depends(get_db)):
-    shipment = pickup_order(db, shipment_id, current_user.user_id)
-    return {"message": "Delivery accepted", "status": shipment.status}
+    """Shipper nhận đơn chưa được assign → gán shipper và chuyển trạng thái assigned."""
+    shipment = claim_shipment(db, shipment_id, current_user.user_id)
+    return {"message": "Đã nhận đơn thành công", "status": shipment.status}
 
 
 @router.post("/{shipment_id}/reject")

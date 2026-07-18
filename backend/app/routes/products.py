@@ -8,7 +8,7 @@ from app.models.user import User
 from app.schemas.product import ProductCreate, ProductUpdate, DeletionRequestCreate, CategoryCreate
 from app.services.product_service import (
     get_products, get_product_by_id, create_product, update_product,
-    delete_product_direct, approve_product, reject_product,
+    delete_product_direct, approve_product, reject_product, activate_product,
     create_deletion_request, get_categories, create_category,
 )
 from app.utils.upload_service import save_upload_file
@@ -128,6 +128,17 @@ def remove_product(
         raise HTTPException(status_code=403, detail="Insufficient permission")
     delete_product_direct(db, product_id, current_user.user_id)
     return {"message": "Product deleted"}
+
+
+@router.post("/{product_id}/activate")
+def publish_product(
+    product_id: int,
+    current_user: User = Depends(require_shop_owner),
+    db: Session = Depends(get_db),
+):
+    """Shop bấm Đăng bán — chuyển từ approved → active."""
+    product = activate_product(db, product_id)
+    return {"message": "Product is now active", "product_id": product.product_id, "status": product.status}
 
 
 @router.post("/{product_id}/deletion-request", status_code=201)

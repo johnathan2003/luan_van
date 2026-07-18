@@ -1,0 +1,81 @@
+@startuml
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+title Kiến trúc tổng thể — Hệ thống BuyZo E-commerce
+
+package "Người dùng" {
+  actor "Người mua" as UserBuyer
+  actor "Chủ shop" as UserShop
+  actor "Shipper" as UserShipper
+  actor "Nhân viên" as UserEmployee
+  actor "Admin / Superadmin" as UserAdmin
+}
+
+package "Giao diện người dùng (chạy trên trình duyệt)" {
+  component "Điều hướng trang\ntheo vai trò đăng nhập" as Router
+  component "Lưu trạng thái giỏ hàng\nvà thông tin tài khoản" as Redux
+  component "Gửi yêu cầu lên máy chủ\n(tự động gia hạn phiên khi hết hạn)" as Axios
+  component "Bộ nhớ cục bộ trên máy\n(giỏ hàng, trạng thái sản phẩm,\nthông báo, ảnh banner...)" as LocalStorage
+  component "Dữ liệu dùng chung\ngiữa các trang" as Context
+}
+
+package "Quản lý phiên đăng nhập" {
+  component "Thẻ truy cập\n(hết hạn sau vài phút)" as AccessToken
+  component "Thẻ gia hạn\n(dùng để cấp thẻ truy cập mới)" as RefreshToken
+}
+
+package "Máy chủ xử lý (FastAPI)" {
+  component "Tiếp nhận yêu cầu\n(/api/v1/...)" as APIRouter
+  component "Xử lý nghiệp vụ\n(tính toán, kiểm tra quyền)" as Service
+  component "Đọc/ghi dữ liệu\nvào cơ sở dữ liệu" as Repository
+  component "Quản lý phiên bản\ncấu trúc dữ liệu" as Alembic
+}
+
+database "Cơ sở dữ liệu\nPostgreSQL" as DB
+
+' Người dùng → Giao diện
+UserBuyer --> Router
+UserShop --> Router
+UserShipper --> Router
+UserEmployee --> Router
+UserAdmin --> Router
+
+' Giao diện nội bộ
+Router --> Redux
+Router --> Context
+Redux --> LocalStorage
+Axios --> AccessToken
+Axios --> RefreshToken
+
+' Giao diện → Máy chủ
+Axios --> APIRouter : Gửi yêu cầu qua Internet
+
+' Xác thực
+APIRouter --> AccessToken : Kiểm tra thẻ đăng nhập
+RefreshToken --> Axios : Cấp thẻ mới khi hết hạn
+
+' Máy chủ nội bộ
+APIRouter --> Service
+Service --> Repository
+Repository --> DB
+Alembic --> DB : Cập nhật cấu trúc bảng
+
+note right of LocalStorage
+  Một số dữ liệu chỉ lưu trên máy người dùng,
+  không đồng bộ lên máy chủ:
+  - Phiên đấu giá banner
+  - Trạng thái duyệt sản phẩm
+  - Thông báo nội bộ
+  - Ảnh banner kích thước lớn
+end note
+
+note right of Axios
+  Khi phiên đăng nhập hết hạn (lỗi 401):
+  1. Tự động lấy thẻ gia hạn đã lưu
+  2. Xin cấp thẻ truy cập mới
+  3. Gửi lại yêu cầu ban đầu tự động
+end note
+
+@enduml
