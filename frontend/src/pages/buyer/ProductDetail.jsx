@@ -45,7 +45,7 @@ export default function ProductDetail() {
         {/* Images */}
         <div>
           <div style={{ aspectRatio: "1", background: "#f5f5f5", borderRadius: 8, overflow: "hidden", marginBottom: 12 }}>
-            <img src={images[activeImg]?.image || "/placeholder.png"} alt={product.name}
+            <img src={images[activeImg]?.image || "https://placehold.co/400x400/dbeafe/1d4ed8?text=No+Image"} alt={product.name}
               style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           </div>
           <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>

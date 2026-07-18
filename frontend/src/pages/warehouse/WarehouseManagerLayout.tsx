@@ -2,9 +2,10 @@ import React, { useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 const NAV = [
-  { path: '/warehouse',           icon: '📊', label: 'Tổng quan' },
-  { path: '/warehouse/shipments', icon: '📋', label: 'Tất cả đơn' },
-  { path: '/warehouse/incoming',  icon: '🚛', label: 'Đơn đến kho' },
+  { path: '/warehouse',            icon: '📊', label: 'Tổng quan' },
+  { path: '/warehouse/shipments',  icon: '📋', label: 'Tất cả đơn' },
+  { path: '/warehouse/incoming',   icon: '🚛', label: 'Đơn đến kho' },
+  { path: '/warehouse/transfers',  icon: '🔄', label: 'Chuyến vận chuyển' },
 ]
 
 const C = {

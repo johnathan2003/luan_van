@@ -41,6 +41,8 @@ import VoucherManagementPage    from './pages/shop/VoucherManagementPage'
 import VoucherCenterPage        from './pages/VoucherCenterPage'
 
 const BannerAuctionPage     = React.lazy(() => import('./pages/shop/BannerAuctionPage'))
+const AuctionLivePage       = React.lazy(() => import('./pages/shop/AuctionLivePage'))
+const WalletPage            = React.lazy(() => import('./pages/shop/WalletPage'))
 const AuctionManagementPage = React.lazy(() => import('./pages/admin/AuctionManagementPage'))
 
 // ── ⚙️ Admin pages ────────────────────────────────────────────────────────────
@@ -58,6 +60,9 @@ import OrderAdminPage           from './pages/admin/OrderAdminPage'
 import ShipperManagementPage    from './pages/admin/ShipperManagementPage'
 import VoucherAdminPage         from './pages/admin/VoucherAdminPage'
 import BannerAdminPage          from './pages/admin/BannerAdminPage'
+import AdminWalletPage          from './pages/admin/AdminWalletPage'
+import BannerAuctionRealPage    from './pages/admin/BannerAuctionRealPage'
+import WarehouseHierarchyPage   from './pages/admin/WarehouseHierarchyPage'
 import FinancePage              from './pages/admin/FinancePage'
 import SystemNotificationPage   from './pages/admin/SystemNotificationPage'
 import ShippingConfigPage       from './pages/admin/ShippingConfigPage'
@@ -89,6 +94,7 @@ import WarehouseManagerLayout   from './pages/warehouse/WarehouseManagerLayout'
 import WarehouseOverviewPage    from './pages/warehouse/WarehouseOverviewPage'
 import AllShipmentsPage         from './pages/warehouse/AllShipmentsPage'
 import IncomingShipmentsPage    from './pages/warehouse/IncomingShipmentsPage'
+import TransferPage             from './pages/warehouse/TransferPage'
 
 // ── Helper: bọc page trong layout ─────────────────────────────────────────────
 const inPublic   = (el: React.ReactNode) => <PublicLayout>{el}</PublicLayout>
@@ -135,8 +141,10 @@ const Router: React.FC = () => (
       <Route path="/shop/employees"    element={inShop(<EmployeeManagementPage />)} />
       <Route path="/shop/analytics"    element={inShop(<AnalyticsPage />)} />
       <Route path="/shop/vouchers"     element={inShop(<VoucherManagementPage />)} />
-      <Route path="/shop/auction"      element={inShop(<BannerAuctionPage />)} />
-      <Route path="/shop/chat"         element={inShop(<ShopChatPage />)} />
+      <Route path="/shop/auction"        element={inShop(<BannerAuctionPage />)} />
+      <Route path="/shop/auction-live"  element={inShop(<AuctionLivePage />)} />
+      <Route path="/shop/wallet"        element={inShop(<WalletPage />)} />
+      <Route path="/shop/chat"          element={inShop(<ShopChatPage />)} />
     </Route>
 
     {/* ── ⚙️ Admin ─────────────────────────────────────────────────────────── */}
@@ -170,7 +178,10 @@ const Router: React.FC = () => (
       <Route path="/admin/reports"            element={inAdmin(<ReportsPage />)} />
       <Route path="/admin/feedback"           element={inAdmin(<FeedbackPage />)} />
       <Route path="/admin/logs"               element={inAdmin(<AuditLogsPage />)} />
-      <Route path="/admin/auction"            element={inAdmin(<AuctionManagementPage />)} />
+      <Route path="/admin/auction"             element={inAdmin(<AuctionManagementPage />)} />
+      <Route path="/admin/auction-real"       element={inAdmin(<BannerAuctionRealPage />)} />
+      <Route path="/admin/wallet"             element={inAdmin(<AdminWalletPage />)} />
+      <Route path="/admin/warehouses-hierarchy" element={inAdmin(<WarehouseHierarchyPage />)} />
       <Route path="/admin/images"             element={inAdmin(<ImageLibraryPage />)} />
     </Route>
 
@@ -200,6 +211,7 @@ const Router: React.FC = () => (
         <Route index element={<WarehouseOverviewPage />} />
         <Route path="shipments" element={<AllShipmentsPage />} />
         <Route path="incoming"  element={<IncomingShipmentsPage />} />
+        <Route path="transfers" element={<TransferPage />} />
       </Route>
     </Route>
 

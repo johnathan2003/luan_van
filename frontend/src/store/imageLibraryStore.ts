@@ -43,195 +43,95 @@ function uuid(): string {
 }
 
 // ── Seed data — ảnh đại diện cho 18 sản phẩm trong seed.py ───────────────────
-// Dùng picsum.photos/seed/<từ-khoá>/400/400 — ảnh cố định theo seed, không cần
-// chính xác tuyệt đối, chỉ cần trông đúng danh mục.
+// Dùng placehold.co với text tên sản phẩm — nhìn rõ danh mục khi demo.
+// Book Corner giữ openlibrary.org (bìa sách thật).
+
+// Helper tạo URL placehold.co theo palette danh mục
+function _ph(text: string, palette: [string, string]): string {
+  return `https://placehold.co/400x400/${palette[0]}/${palette[1]}?text=${encodeURIComponent(text)}`
+}
+const BLUE  : [string, string] = ['dbeafe', '1d4ed8']  // điện tử
+const PINK  : [string, string] = ['fce7f3', '9d174d']  // thời trang
+const GREEN : [string, string] = ['dcfce7', '15803d']  // sách
 
 const SEED_IMAGES: Omit<ImageEntry, 'id' | 'addedAt'>[] = [
   // ── TechWorld (electronics) ─────────────────────────────────────────────────
-  {
-    source: 'seed', productName: 'Tai nghe Sony WH-1000XM5', shopName: 'TechWorld',
-    label: 'Sony WH-1000XM5 chính diện',
-    url: 'https://picsum.photos/seed/headphone-sony/400/400',
-  },
-  {
-    source: 'seed', productName: 'Tai nghe Sony WH-1000XM5', shopName: 'TechWorld',
-    label: 'Sony WH-1000XM5 nghiêng',
-    url: 'https://picsum.photos/seed/headphone-side/400/400',
-  },
-  {
-    source: 'seed', productName: 'Cap USB-C 100W', shopName: 'TechWorld',
-    label: 'Cáp USB-C 100W',
-    url: 'https://picsum.photos/seed/usbc-cable/400/400',
-  },
-  {
-    source: 'seed', productName: 'Cap USB-C 100W', shopName: 'TechWorld',
-    label: 'Cáp USB-C đầu nối',
-    url: 'https://picsum.photos/seed/cable-connector/400/400',
-  },
-  {
-    source: 'seed', productName: 'Chuot gaming Logitech G502', shopName: 'TechWorld',
-    label: 'Logitech G502 chính diện',
-    url: 'https://picsum.photos/seed/gaming-mouse/400/400',
-  },
-  {
-    source: 'seed', productName: 'Chuot gaming Logitech G502', shopName: 'TechWorld',
-    label: 'Logitech G502 góc nghiêng',
-    url: 'https://picsum.photos/seed/mouse-rgb/400/400',
-  },
-  {
-    source: 'seed', productName: 'Ban phim co Keychron K2', shopName: 'TechWorld',
-    label: 'Keychron K2 toàn cảnh',
-    url: 'https://picsum.photos/seed/mechanical-keyboard/400/400',
-  },
-  {
-    source: 'seed', productName: 'Ban phim co Keychron K2', shopName: 'TechWorld',
-    label: 'Keychron K2 close-up phím',
-    url: 'https://picsum.photos/seed/keycap-closeup/400/400',
-  },
-  {
-    source: 'seed', productName: 'Man hinh LG 27inch 4K', shopName: 'TechWorld',
-    label: 'LG 27inch 4K chính diện',
-    url: 'https://picsum.photos/seed/monitor-lg/400/400',
-  },
-  {
-    source: 'seed', productName: 'Man hinh LG 27inch 4K', shopName: 'TechWorld',
-    label: 'LG 27inch 4K setup desk',
-    url: 'https://picsum.photos/seed/monitor-desk/400/400',
-  },
-  {
-    source: 'seed', productName: 'Webcam Logitech C920', shopName: 'TechWorld',
-    label: 'Logitech C920 webcam',
-    url: 'https://picsum.photos/seed/webcam-logitech/400/400',
-  },
-  {
-    source: 'seed', productName: 'Webcam Logitech C920', shopName: 'TechWorld',
-    label: 'Logitech C920 gắn màn hình',
-    url: 'https://picsum.photos/seed/webcam-mounted/400/400',
-  },
-  {
-    source: 'seed', productName: 'Sac du phong 20000mAh', shopName: 'TechWorld',
-    label: 'Pin dự phòng 20000mAh',
-    url: 'https://picsum.photos/seed/powerbank/400/400',
-  },
-  {
-    source: 'seed', productName: 'Sac du phong 20000mAh', shopName: 'TechWorld',
-    label: 'Pin dự phòng đang sạc',
-    url: 'https://picsum.photos/seed/powerbank-charging/400/400',
-  },
+  { source: 'seed', productName: 'Tai nghe Sony WH-1000XM5', shopName: 'TechWorld',
+    label: 'Sony WH-1000XM5 chính diện', url: _ph('Sony WH-1000XM5', BLUE) },
+  { source: 'seed', productName: 'Tai nghe Sony WH-1000XM5', shopName: 'TechWorld',
+    label: 'Sony WH-1000XM5 nghiêng', url: _ph('WH-1000XM5 Side', BLUE) },
+  { source: 'seed', productName: 'Cáp USB-C 100W', shopName: 'TechWorld',
+    label: 'Cáp USB-C 100W', url: _ph('USB-C 100W', BLUE) },
+  { source: 'seed', productName: 'Cáp USB-C 100W', shopName: 'TechWorld',
+    label: 'Cáp USB-C đầu nối', url: _ph('USB-C Connector', BLUE) },
+  { source: 'seed', productName: 'Chuột gaming Logitech G502', shopName: 'TechWorld',
+    label: 'Logitech G502 chính diện', url: _ph('Logitech G502', BLUE) },
+  { source: 'seed', productName: 'Chuột gaming Logitech G502', shopName: 'TechWorld',
+    label: 'Logitech G502 RGB', url: _ph('G502 RGB', BLUE) },
+  { source: 'seed', productName: 'Bàn phím cơ Keychron K2', shopName: 'TechWorld',
+    label: 'Keychron K2 toàn cảnh', url: _ph('Keychron K2', BLUE) },
+  { source: 'seed', productName: 'Bàn phím cơ Keychron K2', shopName: 'TechWorld',
+    label: 'Keychron K2 close-up', url: _ph('K2 Keycap', BLUE) },
+  { source: 'seed', productName: 'Màn hình LG 27inch 4K', shopName: 'TechWorld',
+    label: 'LG 27inch 4K chính diện', url: _ph('LG 27" 4K', BLUE) },
+  { source: 'seed', productName: 'Màn hình LG 27inch 4K', shopName: 'TechWorld',
+    label: 'LG 27inch 4K setup desk', url: _ph('LG Monitor Desk', BLUE) },
+  { source: 'seed', productName: 'Webcam Logitech C920', shopName: 'TechWorld',
+    label: 'Logitech C920 webcam', url: _ph('Logitech C920', BLUE) },
+  { source: 'seed', productName: 'Webcam Logitech C920', shopName: 'TechWorld',
+    label: 'Logitech C920 gắn màn hình', url: _ph('C920 Mounted', BLUE) },
+  { source: 'seed', productName: 'Sạc dự phòng 20000mAh', shopName: 'TechWorld',
+    label: 'Pin dự phòng 20000mAh', url: _ph('Powerbank 20000', BLUE) },
+  { source: 'seed', productName: 'Sạc dự phòng 20000mAh', shopName: 'TechWorld',
+    label: 'Pin dự phòng đang sạc', url: _ph('Powerbank Charging', BLUE) },
 
   // ── Fashion Hub (fashion) ───────────────────────────────────────────────────
-  {
-    source: 'seed', productName: 'Ao thun Oversize Unisex', shopName: 'Fashion Hub',
-    label: 'Áo thun oversize trắng',
-    url: 'https://picsum.photos/seed/tshirt-oversize/400/400',
-  },
-  {
-    source: 'seed', productName: 'Ao thun Oversize Unisex', shopName: 'Fashion Hub',
-    label: 'Áo thun oversize đen',
-    url: 'https://picsum.photos/seed/tshirt-black/400/400',
-  },
-  {
-    source: 'seed', productName: 'Quan jeans skinny nam', shopName: 'Fashion Hub',
-    label: 'Quần jeans skinny xanh',
-    url: 'https://picsum.photos/seed/jeans-skinny/400/400',
-  },
-  {
-    source: 'seed', productName: 'Quan jeans skinny nam', shopName: 'Fashion Hub',
-    label: 'Quần jeans skinny đen',
-    url: 'https://picsum.photos/seed/jeans-black/400/400',
-  },
-  {
-    source: 'seed', productName: 'Dam midi hoa tiet nu', shopName: 'Fashion Hub',
-    label: 'Đầm midi hoa tiết pastel',
-    url: 'https://picsum.photos/seed/midi-dress-floral/400/400',
-  },
-  {
-    source: 'seed', productName: 'Dam midi hoa tiet nu', shopName: 'Fashion Hub',
-    label: 'Đầm midi hoa tiết navy',
-    url: 'https://picsum.photos/seed/midi-dress-navy/400/400',
-  },
-  {
-    source: 'seed', productName: 'Ao so mi lin trang nam', shopName: 'Fashion Hub',
-    label: 'Áo sơ mi trắng công sở',
-    url: 'https://picsum.photos/seed/white-shirt-office/400/400',
-  },
-  {
-    source: 'seed', productName: 'Ao so mi lin trang nam', shopName: 'Fashion Hub',
-    label: 'Áo sơ mi trắng slim fit',
-    url: 'https://picsum.photos/seed/white-shirt-slim/400/400',
-  },
-  {
-    source: 'seed', productName: 'Giáy sneaker trang basic', shopName: 'Fashion Hub',
-    label: 'Sneaker trắng cổ thấp',
-    url: 'https://picsum.photos/seed/white-sneaker/400/400',
-  },
-  {
-    source: 'seed', productName: 'Giáy sneaker trang basic', shopName: 'Fashion Hub',
-    label: 'Sneaker trắng on-foot',
-    url: 'https://picsum.photos/seed/sneaker-onfoot/400/400',
-  },
-  {
-    source: 'seed', productName: 'Tui tote vai canvas', shopName: 'Fashion Hub',
-    label: 'Túi tote canvas tự nhiên',
-    url: 'https://picsum.photos/seed/tote-canvas/400/400',
-  },
-  {
-    source: 'seed', productName: 'Tui tote vai canvas', shopName: 'Fashion Hub',
-    label: 'Túi tote canvas đeo vai',
-    url: 'https://picsum.photos/seed/tote-bag-shoulder/400/400',
-  },
+  { source: 'seed', productName: 'Áo thun Oversize Unisex', shopName: 'Fashion Hub',
+    label: 'Áo thun oversize trắng', url: _ph('Oversize Tshirt', PINK) },
+  { source: 'seed', productName: 'Áo thun Oversize Unisex', shopName: 'Fashion Hub',
+    label: 'Áo thun oversize đen', url: _ph('Oversize Black', PINK) },
+  { source: 'seed', productName: 'Quần jeans skinny nam', shopName: 'Fashion Hub',
+    label: 'Quần jeans skinny xanh', url: _ph('Skinny Jeans', PINK) },
+  { source: 'seed', productName: 'Quần jeans skinny nam', shopName: 'Fashion Hub',
+    label: 'Quần jeans skinny đen', url: _ph('Jeans Black', PINK) },
+  { source: 'seed', productName: 'Đầm midi hoa tiết nữ', shopName: 'Fashion Hub',
+    label: 'Đầm midi hoa tiết pastel', url: _ph('Midi Dress Floral', PINK) },
+  { source: 'seed', productName: 'Đầm midi hoa tiết nữ', shopName: 'Fashion Hub',
+    label: 'Đầm midi hoa tiết navy', url: _ph('Midi Dress Navy', PINK) },
+  { source: 'seed', productName: 'Áo sơ mi linen trắng nam', shopName: 'Fashion Hub',
+    label: 'Áo sơ mi trắng công sở', url: _ph('White Linen Shirt', PINK) },
+  { source: 'seed', productName: 'Áo sơ mi linen trắng nam', shopName: 'Fashion Hub',
+    label: 'Áo sơ mi trắng slim fit', url: _ph('Slim Fit Shirt', PINK) },
+  { source: 'seed', productName: 'Giày sneaker trắng basic', shopName: 'Fashion Hub',
+    label: 'Sneaker trắng cổ thấp', url: _ph('White Sneaker', PINK) },
+  { source: 'seed', productName: 'Giày sneaker trắng basic', shopName: 'Fashion Hub',
+    label: 'Sneaker trắng on-foot', url: _ph('Sneaker On Foot', PINK) },
+  { source: 'seed', productName: 'Túi tote vải canvas', shopName: 'Fashion Hub',
+    label: 'Túi tote canvas tự nhiên', url: _ph('Canvas Tote', PINK) },
+  { source: 'seed', productName: 'Túi tote vải canvas', shopName: 'Fashion Hub',
+    label: 'Túi tote canvas đeo vai', url: _ph('Tote Bag Shoulder', PINK) },
 
-  // ── Book Corner (books) ─────────────────────────────────────────────────────
-  {
-    source: 'seed', productName: 'Clean Code - Robert Martin', shopName: 'Book Corner',
-    label: 'Bìa Clean Code',
-    url: 'https://covers.openlibrary.org/b/id/8091016-L.jpg',
-  },
-  {
-    source: 'seed', productName: 'Clean Code - Robert Martin', shopName: 'Book Corner',
-    label: 'Nội dung Clean Code',
-    url: 'https://picsum.photos/seed/book-code/400/400',
-  },
-  {
-    source: 'seed', productName: 'Atomic Habits - James Clear', shopName: 'Book Corner',
-    label: 'Bìa Atomic Habits',
-    url: 'https://covers.openlibrary.org/b/id/10521270-L.jpg',
-  },
-  {
-    source: 'seed', productName: 'Atomic Habits - James Clear', shopName: 'Book Corner',
-    label: 'Atomic Habits gáy sách',
-    url: 'https://picsum.photos/seed/atomic-habits/400/400',
-  },
-  {
-    source: 'seed', productName: 'Dac Nhan Tam', shopName: 'Book Corner',
-    label: 'Bìa Đắc Nhân Tâm',
-    url: 'https://covers.openlibrary.org/b/id/7222246-L.jpg',
-  },
-  {
-    source: 'seed', productName: 'Dac Nhan Tam', shopName: 'Book Corner',
-    label: 'Đắc Nhân Tâm phiên bản mới',
-    url: 'https://picsum.photos/seed/people-skills-book/400/400',
-  },
-  {
-    source: 'seed', productName: 'The Psychology of Mởney', shopName: 'Book Corner',
-    label: 'Bìa The Psychology of Mởney',
-    url: 'https://covers.openlibrary.org/b/id/10710480-L.jpg',
-  },
-  {
-    source: 'seed', productName: 'The Psychology of Mởney', shopName: 'Book Corner',
-    label: 'Psychology of Mởney nội dung',
-    url: 'https://picsum.photos/seed/money-psychology/400/400',
-  },
-  {
-    source: 'seed', productName: 'Sapiens: Lược sử loài người', shopName: 'Book Corner',
-    label: 'Bìa Sapiens',
-    url: 'https://covers.openlibrary.org/b/id/8739161-L.jpg',
-  },
-  {
-    source: 'seed', productName: 'Sapiens: Lược sử loài người', shopName: 'Book Corner',
-    label: 'Sapiens bản tiếng Việt',
-    url: 'https://picsum.photos/seed/sapiens-book/400/400',
-  },
+  // ── Book Corner (books) — giữ bìa thật từ OpenLibrary ───────────────────────
+  { source: 'seed', productName: 'Clean Code - Robert Martin', shopName: 'Book Corner',
+    label: 'Bìa Clean Code', url: 'https://covers.openlibrary.org/b/id/8091016-L.jpg' },
+  { source: 'seed', productName: 'Clean Code - Robert Martin', shopName: 'Book Corner',
+    label: 'Nội dung Clean Code', url: _ph('Clean Code', GREEN) },
+  { source: 'seed', productName: 'Atomic Habits - James Clear', shopName: 'Book Corner',
+    label: 'Bìa Atomic Habits', url: 'https://covers.openlibrary.org/b/id/10521270-L.jpg' },
+  { source: 'seed', productName: 'Atomic Habits - James Clear', shopName: 'Book Corner',
+    label: 'Atomic Habits gáy sách', url: _ph('Atomic Habits', GREEN) },
+  { source: 'seed', productName: 'Đắc Nhân Tâm', shopName: 'Book Corner',
+    label: 'Bìa Đắc Nhân Tâm', url: 'https://covers.openlibrary.org/b/id/7222246-L.jpg' },
+  { source: 'seed', productName: 'Đắc Nhân Tâm', shopName: 'Book Corner',
+    label: 'Đắc Nhân Tâm phiên bản mới', url: _ph('Dac Nhan Tam', GREEN) },
+  { source: 'seed', productName: 'The Psychology of Money', shopName: 'Book Corner',
+    label: 'Bìa The Psychology of Money', url: 'https://covers.openlibrary.org/b/id/10710480-L.jpg' },
+  { source: 'seed', productName: 'The Psychology of Money', shopName: 'Book Corner',
+    label: 'Psychology of Money nội dung', url: _ph('Psychology of Money', GREEN) },
+  { source: 'seed', productName: 'Sapiens: Lược sử loài người', shopName: 'Book Corner',
+    label: 'Bìa Sapiens', url: 'https://covers.openlibrary.org/b/id/8739161-L.jpg' },
+  { source: 'seed', productName: 'Sapiens: Lược sử loài người', shopName: 'Book Corner',
+    label: 'Sapiens bản tiếng Việt', url: _ph('Sapiens', GREEN) },
 ]
 
 // ── Init: chỉ seed 1 lần nếu chưa có dữ liệu ─────────────────────────────────

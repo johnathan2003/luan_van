@@ -15,7 +15,7 @@ function ProductCard({ product }) {
       onMouseLeave={e => e.currentTarget.style.transform = "none"}>
       <Link to={`/products/${product.id}`} style={{ textDecoration: "none", color: "inherit" }}>
         <div style={{ aspectRatio: "1", overflow: "hidden", background: "#f5f5f5" }}>
-          <img src={product.thumbnail || "/placeholder.png"} alt={product.name}
+          <img src={product.thumbnail || "https://placehold.co/400x400/dbeafe/1d4ed8?text=No+Image"} alt={product.name}
             style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
         <div style={{ padding: "10px 12px" }}>

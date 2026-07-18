@@ -321,14 +321,14 @@ const MallAdBanner: React.FC = () => {
 
 // ─── BuyZo Mall ───────────────────────────────────────────────────────────────
 const MALL_MOCK = [
-  { name: 'LOreal Paris',   promo: 'Ưu đãi đến 50%',   img: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=200&h=200&fit=crop' },
-  { name: 'Unilever',       promo: 'Mua 1 tặng 1',      img: 'https://images.unsplash.com/photo-1526045612212-70caf35c14df?w=200&h=200&fit=crop' },
-  { name: 'Samsung',        promo: 'Giảm đến 30%',      img: 'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=200&h=200&fit=crop' },
-  { name: 'Coolmate',       promo: 'Mua 1 tặng 1',      img: 'https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=200&h=200&fit=crop' },
-  { name: 'Cocoon',         promo: 'Mua 1 tặng 1',      img: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=200&h=200&fit=crop' },
-  { name: 'Vaseline',       promo: 'Combo tiết kiệm',   img: 'https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=200&h=200&fit=crop' },
-  { name: 'La Roche-Posay', promo: 'Mua là có quà',     img: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=200&h=200&fit=crop' },
-  { name: 'CeraVe',         promo: 'Mua 1 được 6',      img: 'https://images.unsplash.com/photo-1631730486784-74757276baa5?w=200&h=200&fit=crop' },
+  { name: 'LOreal Paris',   promo: 'Ưu đãi đến 50%',   img: 'https://placehold.co/200x200/f0f9ff/0369a1?text=Loreal' },
+  { name: 'Unilever',       promo: 'Mua 1 tặng 1',      img: 'https://placehold.co/200x200/f0f9ff/0369a1?text=Unilever' },
+  { name: 'Samsung',        promo: 'Giảm đến 30%',      img: 'https://placehold.co/200x200/f0f9ff/0369a1?text=Samsung' },
+  { name: 'Coolmate',       promo: 'Mua 1 tặng 1',      img: 'https://placehold.co/200x200/f0f9ff/0369a1?text=Coolmate' },
+  { name: 'Cocoon',         promo: 'Mua 1 tặng 1',      img: 'https://placehold.co/200x200/f0f9ff/0369a1?text=Cocoon' },
+  { name: 'Vaseline',       promo: 'Combo tiết kiệm',   img: 'https://placehold.co/200x200/f0f9ff/0369a1?text=Vaseline' },
+  { name: 'La Roche-Posay', promo: 'Mua là có quà',     img: 'https://placehold.co/200x200/f0f9ff/0369a1?text=Laroche' },
+  { name: 'CeraVe',         promo: 'Mua 1 được 6',      img: 'https://placehold.co/200x200/f0f9ff/0369a1?text=Cerave' },
 ]
 
 
@@ -697,3 +697,4 @@ const Home: React.FC = () => {
 }
 
 export default Home
+                                                                                                                                                                                                                                                                     

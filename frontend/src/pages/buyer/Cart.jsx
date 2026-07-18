@@ -29,7 +29,7 @@ export function Cart() {
           <div style={{ background: "#fff", borderRadius: 8, padding: 20 }}>
             {items.map(item => (
               <div key={item.id} style={{ display: "flex", gap: 16, padding: "16px 0", borderBottom: "1px solid #f5f5f5" }}>
-                <img src={item.product_thumbnail || "/placeholder.png"} alt={item.product_name}
+                <img src={item.product_thumbnail || "https://placehold.co/400x400/dbeafe/1d4ed8?text=No+Image"} alt={item.product_name}
                   style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 6 }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, color: "#333", marginBottom: 4 }}>{item.product_name}</div>
@@ -98,7 +98,7 @@ export function OrderList() {
             </div>
             {order.first_item && (
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <img src={order.first_item.image || "/placeholder.png"} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6 }} />
+                <img src={order.first_item.image || "https://placehold.co/400x400/dbeafe/1d4ed8?text=No+Image"} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6 }} />
                 <div>
                   <div style={{ fontSize: 14 }}>{order.first_item.name}</div>
                   <div style={{ fontSize: 12, color: "#888" }}>x{order.first_item.quantity} {order.item_count > 1 ? `+ ${order.item_count - 1} sản phẩm khác` : ""}</div>
@@ -157,7 +157,7 @@ export function OrderDetail() {
         <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16, color: "#888" }}>SẢN PHẨM</h3>
         {(order.items || []).map(item => (
           <div key={item.id} style={{ display: "flex", gap: 12, marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #f5f5f5" }}>
-            <img src={item.product_image || "/placeholder.png"} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6 }} />
+            <img src={item.product_image || "https://placehold.co/400x400/dbeafe/1d4ed8?text=No+Image"} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6 }} />
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14 }}>{item.product_name}</div>
               <div style={{ fontSize: 12, color: "#888" }}>x{item.quantity} · ₫{new Intl.NumberFormat("vi-VN").format(item.unit_price)}</div>

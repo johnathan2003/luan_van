@@ -5,21 +5,28 @@ from app.database import Base
 
 
 class Warehouse(Base):
-    """Kho hàng theo tỉnh/thành — dùng cho shipper liên tỉnh."""
+    """Kho hàng 3 cấp: tier1=liên vùng, tier2=quận/huyện, tier3=tổ dân phố."""
     __tablename__ = "warehouses"
 
-    warehouse_id   = Column(Integer, primary_key=True, autoincrement=True)
-    name           = Column(String(200), nullable=False)
-    province       = Column(String(100), nullable=False)   # tỉnh/thành
-    address        = Column(String(500))
-    lat            = Column(Numeric(10, 6))
-    lng            = Column(Numeric(10, 6))
-    is_active      = Column(Boolean, default=True)
-    created_at     = Column(DateTime, server_default=func.now())
+    warehouse_id        = Column(Integer, primary_key=True, autoincrement=True)
+    name                = Column(String(200), nullable=False)
+    province            = Column(String(100), nullable=False)
+    district            = Column(String(100))
+    ward                = Column(String(100))
+    address             = Column(String(500))
+    tier                = Column(Integer, nullable=False, server_default='3')  # 1/2/3
+    parent_warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
+    manager_id          = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    lat                 = Column(Numeric(10, 6))
+    lng                 = Column(Numeric(10, 6))
+    is_active           = Column(Boolean, default=True)
+    created_at          = Column(DateTime, server_default=func.now())
 
-    managers       = relationship("WarehouseManager", back_populates="warehouse")
-    outgoing       = relationship("Shipment", foreign_keys="[Shipment.src_warehouse_id]", back_populates="src_warehouse")
-    incoming       = relationship("Shipment", foreign_keys="[Shipment.dest_warehouse_id]", back_populates="dest_warehouse")
+    parent   = relationship("Warehouse", remote_side="Warehouse.warehouse_id", foreign_keys=[parent_warehouse_id], backref="children")
+    manager  = relationship("User", foreign_keys=[manager_id])
+    managers = relationship("WarehouseManager", back_populates="warehouse")
+    outgoing = relationship("Shipment", foreign_keys="[Shipment.src_warehouse_id]", back_populates="src_warehouse")
+    incoming = relationship("Shipment", foreign_keys="[Shipment.dest_warehouse_id]", back_populates="dest_warehouse")
 
 
 class WarehouseManager(Base):

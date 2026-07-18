@@ -121,7 +121,7 @@ export default function Checkout() {
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Tóm tắt đơn hàng</h3>
           {items.map(item => (
             <div key={item.id} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-              <img src={item.product_thumbnail || "/placeholder.png"} alt=""
+              <img src={item.product_thumbnail || "https://placehold.co/400x400/dbeafe/1d4ed8?text=No+Image"} alt=""
                 style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 4 }} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, lineHeight: 1.4 }}>{item.product_name}</div>

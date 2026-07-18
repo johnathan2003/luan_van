@@ -68,7 +68,7 @@ export default function AdminModeration() {
               <div style={{ display: "flex", gap: 16 }}>
                 {/* Thumbnail */}
                 <img
-                  src={product.thumbnail || "/placeholder.png"}
+                  src={product.thumbnail || "https://placehold.co/400x400/dbeafe/1d4ed8?text=No+Image"}
                   alt={product.name}
                   style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
                 />

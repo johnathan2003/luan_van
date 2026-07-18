@@ -1324,7 +1324,7 @@ const BannerAuctionPage: React.FC = () => {
                       {form.productName ? (
                         <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
                           <img src={form.productImage} alt={form.productName}
-                            onError={e => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/80' }}
+                            onError={e => { (e.target as HTMLImageElement).src = 'https://placehold.co/80x80/dbeafe/1d4ed8?text=IMG' }}
                             style={{ width: 80, height: 80, borderRadius: 10, objectFit: 'cover', border: `2px solid ${C.orange}44`, flexShrink: 0 }} />
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b', marginBottom: 4 }}>{form.productName}</div>
@@ -1396,7 +1396,7 @@ const BannerAuctionPage: React.FC = () => {
                                       onMouseEnter={e => { if (!alreadyUsed) (e.currentTarget as HTMLDivElement).style.boxShadow = `0 4px 12px ${C.orange}33` }}
                                       onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}>
                                       <img src={p.image} alt={p.name}
-                                        onError={e => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/160' }}
+                                        onError={e => { (e.target as HTMLImageElement).src = 'https://placehold.co/160x160/dbeafe/1d4ed8?text=IMG' }}
                                         style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }} />
                                       <div style={{ padding: '8px 10px' }}>
                                         <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b', lineHeight: 1.3, marginBottom: 4, overflow: 'hidden', maxHeight: '2.6em' }}>{p.name}</div>
@@ -1583,18 +1583,18 @@ const BannerAuctionPage: React.FC = () => {
                         ))}
                       </div>
                     ) : (
-                      <div style={{ fontSize: 13, color: C.gray }}>Admin khong ghi ro ly do.</div>
+                      <div style={{ fontSize: 13, color: C.gray }}>Admin không ghi rõ lý do.</div>
                     )}
                   </div>
 
                   <div style={{ background: C.primaryLight, borderRadius: 8, padding: '10px 14px', fontSize: 12, color: C.primary }}>
-                    Vui long chinh sua noi dung theo dung chinh sach, sau do vao tab Chuan bi de cap nhat mau va tham gia dau gia lai.
+                    Vui lòng chỉnh sửa nội dung theo đúng chính sách, sau đó vào tab Chuẩn bị để cập nhật mẫu và tham gia đấu giá lại.
                   </div>
                 </div>
               </div>
 
               <div style={{ padding: '14px 20px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: C.gray }} onClick={() => setRejectedModal(null)}>Dong</button>
+                <button style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: C.gray }} onClick={() => setRejectedModal(null)}>Đóng</button>
                 <button style={{ background: C.primary, color: 'white', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
                   onClick={() => { setRejectedModal(null); setTab('prepare') }}>
          Cập nhật mẫu

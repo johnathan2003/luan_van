@@ -9,6 +9,7 @@ import { variantStore, bundleStore } from '../../utils/productBundleStore'
 import { orderService } from '../../services/orderService'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { clearCart } from '../../store/slices/cartSlice'
+import { getImageUrl } from '../../utils/helpers'
 
 // ─── Voucher auto-apply helpers ────────────────────────────────────────────────
 import type { VoucherLite } from '../../types/voucher'
@@ -514,17 +515,17 @@ const CheckoutPage: React.FC = () => {
           <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '0 0 3px', fontWeight: 600 }}>{form.name} — {form.phone}</p>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>{fullAddress}</p>
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Du kien giao hàng</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#16A34A' }}>3 - 5 ngay lam viec</span>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Dự kiến giao hàng</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#16A34A' }}>3 - 5 ngày làm việc</span>
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           <Link to="/orders" className="btn btn-primary" style={{ padding: '11px 24px', borderRadius: 8, fontWeight: 600, textDecoration: 'none' }}>
-            Theo doi don hang
+            Theo dõi đơn hàng
           </Link>
           <Link to="/products" style={{ padding: '11px 24px', borderRadius: 8, fontWeight: 600, textDecoration: 'none', border: '1.5px solid var(--border-subtle)', color: 'var(--text-primary)' }}>
-            Tiep tuc mua sắm
+            Tiếp tục mua sắm
           </Link>
         </div>
 
@@ -533,7 +534,7 @@ const CheckoutPage: React.FC = () => {
           <div style={{ marginBottom: 24, textAlign: 'left' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 16 }}>🎁</span>
-              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>Qua tang hau mai</span>
+              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>Quà tặng hậu mãi</span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -556,7 +557,7 @@ const CheckoutPage: React.FC = () => {
                         <div>
                           <p style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text-primary)' }}>{g.voucher.label}</p>
                           <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2 }}>
-                            {g.type === 'platform_voucher' ? '🏛️ Voucher sàn BuyZo' : `🏪 Qua tang tu shop: ${g.shopName}`}
+                            {g.type === 'platform_voucher' ? '🏛️ Voucher sàn BuyZo' : `🏪 Quà tặng từ shop: ${g.shopName}`}
                           </p>
                         </div>
                         <code style={{ background: 'var(--bg-page)', padding: '2px 8px', borderRadius: 4, fontSize: 10.5, fontWeight: 700, flexShrink: 0 }}>{g.voucher.code}</code>
@@ -767,7 +768,7 @@ const CheckoutPage: React.FC = () => {
 
                     {/* Quan */}
                     <div>
-                      <label style={labelStyle}>Quận / Hủyện <span style={{ color: '#EF4444' }}>*</span></label>
+                      <label style={labelStyle}>Quận / Huyện <span style={{ color: '#EF4444' }}>*</span></label>
                       <select value={form.district} onChange={handleDistrictChange} disabled={!form.province || geoLoading} style={{ ...inputStyle(!!errors.district), cursor: form.province ? 'pointer' : 'not-allowed', opacity: form.province ? 1 : 0.5 }}>
                         <option value="">{geoLoading ? 'Đang tải...' : '-- Chọn quận/huyện --'}</option>
                         {districts.map(d => <option key={d.code} value={d.name} data-code={d.code}>{d.name}</option>)}
@@ -871,7 +872,7 @@ const CheckoutPage: React.FC = () => {
                         {gifts.map((g: any, gi: number) => (
                           <div key={gi} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: gi < gifts.length - 1 ? 6 : 0 }}>
                             {g.image_urls?.[0]
-                              ? <img src={g.image_urls[0]} alt={g.name} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid #FED7AA' }} />
+                              ? <img src={getImageUrl(g.image_urls[0])} alt={g.name} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid #FED7AA' }} />
                               : <div style={{ width: 36, height: 36, borderRadius: 6, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🎁</div>
                             }
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -986,7 +987,7 @@ const CheckoutPage: React.FC = () => {
                               {gifts2.map((g: any, gi: number) => (
                                 <div key={gi} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: gi < gifts2.length - 1 ? 6 : 0 }}>
                                   {g.image_urls?.[0]
-                                    ? <img src={g.image_urls[0]} alt={g.name} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid #FED7AA' }} />
+                                    ? <img src={getImageUrl(g.image_urls[0])} alt={g.name} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid #FED7AA' }} />
                                     : <div style={{ width: 36, height: 36, borderRadius: 6, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🎁</div>
                                   }
                                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -1033,7 +1034,7 @@ const CheckoutPage: React.FC = () => {
               {/* Payment method */}
               <div className="card" style={{ padding: 20 }}>
                 <h3 style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginBottom: 14, paddingBottom: 10, borderBottom: '1px solid var(--border-subtle)' }}>
-                  💳 Phuong thuc thanh toan
+                  💳 Phương thức thanh toán
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {PAYMENT_METHODS.map(pm => (
@@ -1104,7 +1105,7 @@ const CheckoutPage: React.FC = () => {
                     {allGifts.map((g: any, gi: number) => (
                       <div key={gi} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: gi < allGifts.length - 1 ? 6 : 0 }}>
                         {g.image_urls?.[0]
-                          ? <img src={g.image_urls[0]} alt={g.name} style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid #FED7AA' }} />
+                          ? <img src={getImageUrl(g.image_urls[0])} alt={g.name} style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid #FED7AA' }} />
                           : <div style={{ width: 34, height: 34, borderRadius: 6, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🎁</div>
                         }
                         <div style={{ flex: 1, minWidth: 0 }}>

@@ -16,8 +16,10 @@ const SHOP_NAV = [
   { icon: '\u{1F465}', label: 'Nhân viên',  path: '/shop/employees' },
   { icon: '\u{1F4C8}', label: 'Thống kê',   path: '/shop/analytics' },
   { icon: '\u{1F3AB}', label: 'Voucher',    path: '/shop/vouchers' },
-  { icon: '\u{1F3C6}', label: 'Đấu giá QC', path: '/shop/auction' },
-  { icon: '⚠️',        label: 'Khiếu nại',  path: '/complaints' },
+  { icon: '\u{1F3C6}', label: 'Đấu giá QC',   path: '/shop/auction' },
+  { icon: '🎯',        label: 'Đấu giá Live', path: '/shop/auction-live' },
+  { icon: '💰',        label: 'Ví tiền',      path: '/shop/wallet' },
+  { icon: '⚠️',        label: 'Khiếu nại',   path: '/complaints' },
 ]
 
 const ShopSidebar: React.FC = () => {

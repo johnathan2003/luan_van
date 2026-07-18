@@ -587,12 +587,12 @@ const ShopProfilePage: React.FC = () => {
                 <h1 style={{ fontSize: 24, fontWeight: 800, color: C.navy, margin: 0 }}>{shop.shop_name}</h1>
                 {isVerified && (
                   <span style={{ background: '#DBEAFE', color: C.blue, fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
-                    &#10003; Chinh thuc
+                    &#10003; Chính thức
                   </span>
                 )}
                 {isShopOwner && (
                   <span style={{ background: '#FEF3C7', color: '#D97706', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, border: '1px solid #FDE68A' }}>
-                    ✏️ Che do chinh sua
+                    ✏️ Chế độ chỉnh sửa
                   </span>
                 )}
               </div>
@@ -818,7 +818,7 @@ const ShopProfilePage: React.FC = () => {
                           <span style={{ fontSize: 16, fontWeight: 800, color: '#E11D48' }}>{formatCurrency(p.price)}</span>
                           <span style={{ fontSize: 11, color: C.gray }}>&#11088; {parseFloat(p.rating).toFixed(1)}</span>
                         </div>
-                        <p style={{ fontSize: 11, color: C.gray, marginTop: 4 }}>Da ban {(p.sales_count || 0).toLocaleString('vi-VN')}</p>
+                        <p style={{ fontSize: 11, color: C.gray, marginTop: 4 }}>Đã bán {(p.sales_count || 0).toLocaleString('vi-VN')}</p>
                       </div>
                     </div>
                   </Link>

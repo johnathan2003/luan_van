@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-//import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx'
 import { toast } from 'react-toastify'
 import { shopService } from '../../services/shopService'
 import { productService } from '../../services/productService'
@@ -109,7 +109,7 @@ const ProductManagement: React.FC = () => {
   const seedMockData = () => {
     if (!localStorage.getItem('_shop_mock_seeded')) {
       // Chỉ seed rejection data cho mock products bị từ chối
-      rejectionStore.save({ product_id: 105, rejected_at: new Date(Date.now() - 86400000).toISOString(), reason: 'Hình ảnh không rõ ràng, mô tả thiếu thông số kỹ thuật', violations: [{ label: 'Ảnh sản phẩm', note: 'Ảnh bị mờ, không thể hiện rõ sản phẩm', imageUrl: 'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=400', imgMarkers: [{ x: 35, y: 45 }, { x: 70, y: 30 }] }, { label: 'Mô tả', note: 'Thiếu thông số RAM, dung lượng pin' }] })
+      rejectionStore.save({ product_id: 105, rejected_at: new Date(Date.now() - 86400000).toISOString(), reason: 'Hình ảnh không rõ ràng, mô tả thiếu thông số kỹ thuật', violations: [{ label: 'Ảnh sản phẩm', note: 'Ảnh bị mờ, không thể hiện rõ sản phẩm', imageUrl: 'https://placehold.co/400x400/dbeafe/1d4ed8?text=ipad+pro+m2', imgMarkers: [{ x: 35, y: 45 }, { x: 70, y: 30 }] }, { label: 'Mô tả', note: 'Thiếu thông số RAM, dung lượng pin' }] })
       rejectionStore.save({ product_id: 106, rejected_at: new Date(Date.now() - 172800000).toISOString(), reason: 'Giá không hợp lệ so với thị trường', violations: [{ label: 'Giá bán', note: 'Giá cao hơn 300% so với giá tham chiếu thị trường' }] })
       localStorage.setItem('_shop_mock_seeded', '1')
     }
@@ -117,14 +117,14 @@ const ProductManagement: React.FC = () => {
 
   // ── load ──────────────────────────────────────────────────────
   const MOCK_PRODUCTS = [
-    { product_id: 101, product_name: 'iPhone 15 Pro Max 256GB', shop_id: 1, price: '29000000', stock_quantity: 35, sales_count: 128, status: 'active',   image_urls: ['https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=300'], description: 'iPhone 15 Pro Max chip A17 Pro, camera 48MP, titanium frame' },
-    { product_id: 102, product_name: 'Samsung Galaxy S24 Ultra', shop_id: 1, price: '26000000', stock_quantity: 22, sales_count: 87,  status: 'active',   image_urls: ['https://images.unsplash.com/photo-1706807594948-d7c5d0d22efb?w=300'], description: 'Galaxy S24 Ultra bút S Pen, camera 200MP, AI Galaxy' },
-    { product_id: 103, product_name: 'AirPods Pro (2nd Gen)',    shop_id: 1, price: '6500000',  stock_quantity: 60, sales_count: 214, status: 'active',   image_urls: ['https://images.unsplash.com/photo-1606841837239-c5a1a4a07af7?w=300'], description: 'AirPods Pro 2 chống ồn ANC, chip H2, USB-C' },
-    { product_id: 104, product_name: 'MacBook Air M3 13"',       shop_id: 1, price: '32000000', stock_quantity: 12, sales_count: 0,   status: 'approved', image_urls: ['https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=300'], description: 'MacBook Air chip M3, 8GB RAM, 256GB SSD, màn 13.6"' },
-    { product_id: 107, product_name: 'iPad Air M2 11"',           shop_id: 1, price: '18500000', stock_quantity: 20, sales_count: 0,   status: 'approved', image_urls: ['https://images.unsplash.com/photo-1585771724684-38269d6639fd?w=300'], description: 'iPad Air M2 chip M2, màn 11" Liquid Retina, USB-C' },
-    { product_id: 108, product_name: 'Beats Studio Pro',          shop_id: 1, price: '8900000',  stock_quantity: 15, sales_count: 0,   status: 'pending',  image_urls: ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300'], description: 'Beats Studio Pro Over-Ear, ANC, USB-C, 40h pin' },
-    { product_id: 105, product_name: 'iPad Pro 12.9" M2',         shop_id: 1, price: '24000000', stock_quantity: 8,  sales_count: 0,   status: 'rejected', image_urls: ['https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=300'], description: 'iPad Pro 12.9 chip M2, màn Liquid Retina XDR' },
-    { product_id: 106, product_name: 'Apple Watch Series 9',      shop_id: 1, price: '10500000', stock_quantity: 18, sales_count: 0,   status: 'rejected', image_urls: ['https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=300'], description: 'Apple Watch S9 chip S9, màn Always-On Retina' },
+    { product_id: 101, product_name: 'iPhone 15 Pro Max 256GB', shop_id: 1, price: '29000000', stock_quantity: 35, sales_count: 128, status: 'active',   image_urls: ['https://placehold.co/300x300/dbeafe/1d4ed8?text=iphone15+pro'], description: 'iPhone 15 Pro Max chip A17 Pro, camera 48MP, titanium frame' },
+    { product_id: 102, product_name: 'Samsung Galaxy S24 Ultra', shop_id: 1, price: '26000000', stock_quantity: 22, sales_count: 87,  status: 'active',   image_urls: ['https://placehold.co/300x300/dbeafe/1d4ed8?text=samsung+s24'], description: 'Galaxy S24 Ultra bút S Pen, camera 200MP, AI Galaxy' },
+    { product_id: 103, product_name: 'AirPods Pro (2nd Gen)',    shop_id: 1, price: '6500000',  stock_quantity: 60, sales_count: 214, status: 'active',   image_urls: ['https://placehold.co/300x300/dbeafe/1d4ed8?text=airpods+pro'], description: 'AirPods Pro 2 chống ồn ANC, chip H2, USB-C' },
+    { product_id: 104, product_name: 'MacBook Air M3 13"',       shop_id: 1, price: '32000000', stock_quantity: 12, sales_count: 0,   status: 'approved', image_urls: ['https://placehold.co/300x300/dbeafe/1d4ed8?text=macbook+air+m3'], description: 'MacBook Air chip M3, 8GB RAM, 256GB SSD, màn 13.6"' },
+    { product_id: 107, product_name: 'iPad Air M2 11"',           shop_id: 1, price: '18500000', stock_quantity: 20, sales_count: 0,   status: 'approved', image_urls: ['https://placehold.co/300x300/dbeafe/1d4ed8?text=ipad+air+m2'], description: 'iPad Air M2 chip M2, màn 11" Liquid Retina, USB-C' },
+    { product_id: 108, product_name: 'Beats Studio Pro',          shop_id: 1, price: '8900000',  stock_quantity: 15, sales_count: 0,   status: 'pending',  image_urls: ['https://placehold.co/300x300/dbeafe/1d4ed8?text=beats+studio+pro'], description: 'Beats Studio Pro Over-Ear, ANC, USB-C, 40h pin' },
+    { product_id: 105, product_name: 'iPad Pro 12.9" M2',         shop_id: 1, price: '24000000', stock_quantity: 8,  sales_count: 0,   status: 'rejected', image_urls: ['https://placehold.co/300x300/dbeafe/1d4ed8?text=ipad+pro+m2'], description: 'iPad Pro 12.9 chip M2, màn Liquid Retina XDR' },
+    { product_id: 106, product_name: 'Apple Watch Series 9',      shop_id: 1, price: '10500000', stock_quantity: 18, sales_count: 0,   status: 'rejected', image_urls: ['https://placehold.co/300x300/dbeafe/1d4ed8?text=apple+watch+s9'], description: 'Apple Watch S9 chip S9, màn Always-On Retina' },
   ]
 
   const load = async () => {
@@ -181,24 +181,189 @@ const ProductManagement: React.FC = () => {
     setModalOpen(true)
   }
 
-  const MAX_IMAGES = 5
+  // ── simple add ──────────────────────────────────────────────────────
+  const openSimpleAdd = () => { setSimpleForm({ ...EMPTY_SIMPLE }); setSimplePriceInput(''); setSimpleAttrs([]); setSimpleAttrValueInput({}); setSimpleAttrPriceInput({}); setSimpleModalOpen(true) }
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setLoading(true)
+  const handleSimpleSave = async () => {
+    const rawPrice = Number(simplePriceInput.replace(/\./g, '').replace(/[^0-9]/g, '')) || simpleForm.price
+    if (!simpleForm.product_name.trim()) { toast.error('Nhập tên sản phẩm'); return }
+    if (rawPrice <= 0) { toast.error('Nhập giá sản phẩm'); return }
     try {
-      const res = await productService.uploadImage(file)
-      const url: string = res.data?.url || res.data
-      setForm(f => ({ ...f, image_urls: [url] }))
-    } catch {
-      toast.error('Upload ảnh thất bại')
-    } finally {
-      setLoading(false)
-      e.target.value = ''
-    }
+      const res = await withTimeout(productService.create({ product_name: simpleForm.product_name, category_id: Number(simpleForm.category_id) || undefined, price: rawPrice, stock_quantity: simpleForm.stock_quantity, description: simpleForm.description, image_urls: simpleForm.image_urls, video_url: simpleForm.video_url }))
+      const newId: number = res.data?.product_id || res.data?.id
+      if (newId && simpleAttrs.length > 0) {
+        // Save attrs as legacy format for display in product card
+        attributeStore.save(newId, simpleAttrs.map(a => ({ id: a.id, name: a.name, values: a.values.map(v => v.label) })))
+        // Also save as first variant with attrs
+        variantStore.save(newId, [{ ...newVariant(), price: rawPrice, stock: simpleForm.stock_quantity, image_urls: simpleForm.image_urls, attrs: simpleAttrs }])
+      }
+      toast.success('Đã gửi sản phẩm để admin duyệt!')
+      setSimpleModalOpen(false); load()
+    } catch (err: any) { toast.error(err?.response?.data?.detail || 'Không thể tạo sản phẩm') }
   }
 
+  const handleSimpleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []); if (!files.length) return
+    setSimpleImgUploading(true)
+    try {
+      const urls = await Promise.all(files.map(f => withTimeout(productService.uploadImage(f)).then(r => r.data?.url || r.data)))
+      setSimpleForm(f => ({ ...f, image_urls: [...f.image_urls, ...urls] }))
+    } catch { toast.error('Upload ảnh thất bại') }
+    finally { setSimpleImgUploading(false); e.target.value = '' }
+  }
+
+  const handleSimpleVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []); if (!files.length) return
+    setSimpleVideoUploading(true)
+    try {
+      const urls = await Promise.all(files.map(f => withTimeout(productService.uploadImage(f)).then(r => r.data?.url || r.data)))
+      setSimpleForm(f => ({ ...f, video_url: urls[0] || '' }))
+      toast.success('Upload video OK')
+    } catch { toast.error('Upload video thất bại') }
+    finally { setSimpleVideoUploading(false); e.target.value = '' }
+  }
+
+  // ── variant helpers ──────────────────────────────────────────
+  const updateVariant = (id: string, patch: Partial<VariantLocal>) =>
+    setLocalVariants(p => p.map(v => v.id === id ? { ...v, ...patch } : v))
+
+  const addVariant = () => setLocalVariants(p => [...p, newVariant()])
+  const removeVariant = (id: string) => setLocalVariants(p => p.filter(v => v.id !== id))
+
+  const handleVariantImageChange = async (e: React.ChangeEvent<HTMLInputElement>, varId: string) => {
+    const files = Array.from(e.target.files || []); if (!files.length) return
+    setVariantUploading(varId)
+    try {
+      const results = await Promise.all(files.map(f => withTimeout(productService.uploadImage(f)).then(r => r.data?.url || r.data)))
+      updateVariant(varId, { image_urls: [...(localVariants.find(v => v.id === varId)?.image_urls || []), ...results] })
+    } catch (err: any) { toast.error(err?.message === 'timeout' ? 'Upload quá 15 giây' : 'Upload ảnh thất bại') }
+    finally { setVariantUploading(null); e.target.value = '' }
+  }
+
+  const addVAttr = (varId: string) => {
+    const attr = newVAttr()
+    updateVariant(varId, { attrs: [...(localVariants.find(v => v.id === varId)?.attrs || []), attr] })
+  }
+  const removeVAttr = (varId: string, attrId: string) =>
+    updateVariant(varId, { attrs: localVariants.find(v => v.id === varId)?.attrs.filter(a => a.id !== attrId) || [] })
+
+  const addVAttrValue = (varId: string, attrId: string) => {
+    const k = `${varId}__${attrId}`
+    const label = (vLabelInput[k] || '').trim()
+    if (!label) return
+    const delta = Number((vPriceInput[k] || '0').replace(/\./g, '').replace(/[^0-9\-]/g, '')) || 0
+    updateVariant(varId, {
+      attrs: localVariants.find(v => v.id === varId)?.attrs.map(a => a.id === attrId ? { ...a, values: [...a.values, { label, price_delta: delta }] } : a) || []
+    })
+    setVLabelInput(p => ({ ...p, [k]: '' })); setVPriceInput(p => ({ ...p, [k]: '' }))
+  }
+  const removeVAttrValue = (varId: string, attrId: string, vi: number) =>
+    updateVariant(varId, {
+      attrs: localVariants.find(v => v.id === varId)?.attrs.map(a => a.id === attrId ? { ...a, values: a.values.filter((_, i) => i !== vi) } : a) || []
+    })
+
+  const addVPromo = (varId: string) => {
+    const rule = { id: `pr_${uid()}`, type: 'buy_get_free' as const, buy_qty: 2, bonus_qty: 1 }
+    updateVariant(varId, { promos: [...(localVariants.find(v => v.id === varId)?.promos || []), rule] })
+  }
+  const removeVPromo = (varId: string, ruleId: string) =>
+    updateVariant(varId, { promos: localVariants.find(v => v.id === varId)?.promos.filter(r => r.id !== ruleId) || [] })
+  const updateVPromo = (varId: string, ruleId: string, patch: any) =>
+    updateVariant(varId, { promos: localVariants.find(v => v.id === varId)?.promos.map(r => r.id === ruleId ? { ...r, ...patch } : r) || [] })
+
+  // ── per-variant bundle items ───────────────────────────────
+  const addVBundle = (varId: string) => {
+    const item: BundleItem = { id: `vbi_${uid()}`, name: '', price: 0, stock_quantity: 0, image_urls: [], type: 'gift', attrs: [] }
+    updateVariant(varId, { bundleItems: [...(localVariants.find(v => v.id === varId)?.bundleItems || []), item] })
+  }
+  const removeVBundle = (varId: string, itemId: string) =>
+    updateVariant(varId, { bundleItems: localVariants.find(v => v.id === varId)?.bundleItems?.filter(b => b.id !== itemId) || [] })
+  const updateVBundle = (varId: string, itemId: string, patch: Partial<BundleItem>) =>
+    updateVariant(varId, { bundleItems: localVariants.find(v => v.id === varId)?.bundleItems?.map(b => b.id === itemId ? { ...b, ...patch } : b) || [] })
+
+  const handleVBundleImageChange = async (e: React.ChangeEvent<HTMLInputElement>, varId: string, biId: string) => {
+    const files = Array.from(e.target.files || []); if (!files.length) return
+    const key = `${varId}__${biId}`
+    setVBundleUploading(key)
+    try {
+      const results = await Promise.all(files.map(f => withTimeout(productService.uploadImage(f)).then(r => r.data?.url || r.data)))
+      const v = localVariants.find(v => v.id === varId)
+      const bi = v?.bundleItems?.find(b => b.id === biId)
+      if (bi) updateVBundle(varId, biId, { image_urls: [...(bi.image_urls || []), ...results] })
+    } catch (err: any) { toast.error(err?.message === 'timeout' ? 'Upload quá 15 giây' : 'Upload ảnh thất bại') }
+    finally { setVBundleUploading(null); e.target.value = '' }
+  }
+
+  // ── excel upload ─────────────────────────────────────────────
+  const excelRef = useRef<HTMLInputElement>(null)
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target?.result, { type: 'binary' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' })
+        if (rows.length === 0) { toast.error('File Excel không có dữ liệu'); return }
+        const first = rows[0]
+        // Map common column names
+        const name = first['Tên sản phẩm'] || first['product_name'] || first['name'] || ''
+        const price = Number(String(first['Giá'] || first['price'] || '0').replace(/[^0-9]/g, '')) || 0
+        const stock = Number(first['Tồn kho'] || first['stock'] || 0) || 0
+        const desc  = first['Mô tả'] || first['description'] || ''
+        if (name) setForm(f => ({ ...f, product_name: name, description: desc }))
+        if (price > 0 || stock > 0) {
+          setLocalVariants(p => p.map((v, i) => i === 0 ? { ...v, price, stock } : v))
+        }
+        if (rows.length > 1) {
+          const newVs = rows.slice(1).map(row => ({
+            ...newVariant(),
+            name: row['Phiên bản'] || row['variant'] || '',
+            price: Number(String(row['Giá'] || row['price'] || '0').replace(/[^0-9]/g, '')) || 0,
+            stock: Number(row['Tồn kho'] || row['stock'] || 0) || 0,
+          }))
+          setLocalVariants(p => [p[0], ...newVs])
+        }
+        toast.success(`Đã đọc ${rows.length} dòng từ Excel`)
+      } catch { toast.error('Không đọc được file Excel') }
+    }
+    reader.readAsBinaryString(file)
+    e.target.value = ''
+  }
+
+  const promoLabel = (r: { type: string; buy_qty: number; bonus_qty: number }) =>
+    r.type === 'buy_get_free' ? `Mua ${r.buy_qty} tặng ${r.bonus_qty} miễn phí` : `Mua ${r.buy_qty} tính tiền ${r.bonus_qty}`
+
+  // ── video ────────────────────────────────────────────────────
+  const handleVideoAdd = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []); if (!files.length) return
+    setVideoUploading(true)
+    try {
+      const results = await Promise.all(files.map(f => withTimeout(productService.uploadImage(f)).then(r => r.data?.url || r.data)))
+      setForm(f => ({ ...f, video_urls: [...f.video_urls, ...results] }))
+      toast.success('Đã upload video')
+    } catch (err: any) { toast.error(err?.message === 'timeout' ? 'Upload quá 15 giây' : 'Upload video thất bại') }
+    finally { setVideoUploading(false); e.target.value = '' }
+  }
+
+  // ── bundle ───────────────────────────────────────────────────
+  const addBundleItem    = () => setBundleItems(p => [...p, newBundleItem()])
+  const removeBundleItem = (id: string) => setBundleItems(p => p.filter(b => b.id !== id))
+  const updateBundleItem = (id: string, patch: Partial<BundleItem>) =>
+    setBundleItems(p => p.map(b => b.id === id ? { ...b, ...patch } : b))
+  const handleBundleImageChange = async (e: React.ChangeEvent<HTMLInputElement>, itemId: string) => {
+    const files = Array.from(e.target.files || []); if (!files.length) return
+    setBundleUploading(itemId)
+    try {
+      const results = await Promise.all(files.map(f => withTimeout(productService.uploadImage(f)).then(r => r.data?.url || r.data)))
+      setBundleItems(p => p.map(b => b.id === itemId ? { ...b, image_urls: [...(b.image_urls || []), ...results] } : b))
+    } catch (err: any) { toast.error(err?.message === 'timeout' ? 'Upload quá 15 giây' : 'Upload thất bại') }
+    finally { setBundleUploading(null); e.target.value = '' }
+  }
+  const removeBundleImage = (itemId: string, idx: number) =>
+    setBundleItems(p => p.map(b => b.id === itemId ? { ...b, image_urls: b.image_urls.filter((_, i) => i !== idx) } : b))
+
+  // ── save ─────────────────────────────────────────────────────
   const handleSave = async () => {
     const pv = localVariants[0]
     if (!form.product_name.trim()) { toast.error('Nhập tên sản phẩm'); return }
@@ -355,66 +520,707 @@ const ProductManagement: React.FC = () => {
                     {totalBundleItems > 0 && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#F0FDF4', color: 'var(--success)' }}>🎁 {totalBundleItems} kèm</span>}
                     {rejection && p.status === 'rejected' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#FEE2E2', color: 'var(--error)', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); setExpandedId(p.product_id) }}>🚩 {rejection.violations.length} vi phạm admin</span>}
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {products.length === 0 && <p style={{ textAlign: 'center', padding: 32, color: 'var(--gray-400)' }}>Chưa có sản phẩm nào</p>}
-      </div>
-
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editProduct ? 'Sửa sản phẩm' : 'Thêm sản phẩm'}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-          {/* Ảnh sản phẩm */}
-          <div>
-            <label className="input-label">Ảnh sản phẩm</label>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              {/* Preview */}
-              <div style={{
-                width: 80, height: 80, borderRadius: 8, flexShrink: 0,
-                border: '1.5px dashed var(--border-subtle)',
-                background: 'var(--bg-page)',
-                overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {form.image_urls[0]
-                  ? <img src={getImageUrl(form.image_urls[0])} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : <span style={{ fontSize: 28, color: 'var(--gray-400)' }}>🖼️</span>
-                }
+                  <div style={{ display: 'flex', gap: 16, marginTop: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: 16 }}>{formatCurrency(displayPrice)}</span>
+                    <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>Tồn: <b style={{ color: 'var(--gray-700)' }}>{displayStock}</b></span>
+                    <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>Bán: <b style={{ color: 'var(--gray-700)' }}>{p.sales_count ?? 0}</b></span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                  <button onClick={e => { e.stopPropagation(); handleDelete(p.product_id) }} className="btn btn-danger btn-sm" style={{ fontSize: 12, padding: '5px 14px' }}>🗑️</button>
+                  <span style={{ fontSize: 18, color: 'var(--gray-400)', transition: 'transform 0.2s', display: 'inline-block', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
+                </div>
               </div>
-              {/* Upload controls */}
-              <div style={{ flex: 1 }}>
-                <label style={{
-                  display: 'inline-block', padding: '7px 14px',
-                  background: uploading ? 'var(--gray-200)' : 'var(--primary)',
-                  color: uploading ? 'var(--gray-500)' : '#fff',
-                  borderRadius: 6, fontSize: 13, fontWeight: 600,
-                  cursor: uploading ? 'not-allowed' : 'pointer',
-                }}>
-                  {uploading ? 'Đang tải...' : '📁 Chọn ảnh'}
-                  <input type="file" accept="image/*" style={{ display: 'none' }} disabled={uploading} onChange={handleImageChange} />
-                </label>
-                {form.image_urls[0] && (
-                  <button
-                    onClick={() => setForm(f => ({ ...f, image_urls: [] }))}
-                    style={{ marginLeft: 8, background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', fontSize: 13 }}
-                  >✕ Xóa ảnh</button>
+
+              {/* ── Detail panel ── */}
+              {isExpanded && (
+                <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '16px 20px', background: 'var(--bg-page, #F8FAFC)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                  {/* ── Vi phạm admin ── */}
+                  {rejection && p.status === 'rejected' && (
+                    <div style={{ background: '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: 12, padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                        <span style={{ fontSize: 18 }}>🚩</span>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: '#991B1B' }}>Sản phẩm bị từ chối — Admin ghi nhận {rejection.violations.length} vi phạm</div>
+                          <div style={{ fontSize: 11, color: '#B91C1C' }}>Kiểm tra lúc: {new Date(rejection.rejected_at).toLocaleString('vi-VN')}</div>
+                        </div>
+                      </div>
+                      {rejection.violations.map((v, vi) => (
+                        <div key={vi} style={{ padding: '10px 12px', background: 'white', borderRadius: 8, border: '1px solid #FECACA', marginBottom: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                            <span style={{ fontSize: 13, fontWeight: 800, color: '#DC2626', minWidth: 20 }}>{vi + 1}.</span>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#991B1B' }}>📌 {v.label}</div>
+                              {v.note && <div style={{ fontSize: 12, color: '#7F1D1D', marginTop: 3, fontStyle: 'italic' }}>"{v.note}"</div>}
+                            </div>
+                          </div>
+                          {/* Ảnh bị đánh dấu với vòng tròn */}
+                          {v.imageUrl && v.imgMarkers && v.imgMarkers.length > 0 && (
+                            <div style={{ marginTop: 10, position: 'relative', display: 'inline-block', borderRadius: 10, overflow: 'hidden', border: '2px solid #FECACA' }}>
+                              <img src={getImageUrl(v.imageUrl)} alt="" style={{ display: 'block', maxWidth: '100%', maxHeight: 260, objectFit: 'contain', background: '#F1F5F9' }} />
+                              {v.imgMarkers.map((m, mi) => (
+                                <div key={mi} style={{
+                                  position: 'absolute',
+                                  left: `${m.x}%`, top: `${m.y}%`,
+                                  transform: 'translate(-50%,-50%)',
+                                  width: 36, height: 36, borderRadius: '50%',
+                                  border: '3px solid #DC2626',
+                                  background: 'rgba(220,38,38,0.2)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  color: '#DC2626', fontSize: 12, fontWeight: 800,
+                                  boxShadow: '0 0 0 2px white, 0 2px 6px rgba(0,0,0,0.3)',
+                                  pointerEvents: 'none',
+                                }}>{mi + 1}</div>
+                              ))}
+                              <div style={{ position: 'absolute', bottom: 6, right: 6, background: '#DC2626', color: 'white', fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5 }}>
+                                🚩 {v.imgMarkers.length} điểm vi phạm
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {rejection.reason && (
+                        <div style={{ marginTop: 8, padding: '10px 14px', background: '#7F1D1D', borderRadius: 8 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#FCA5A5', marginBottom: 4 }}>📋 Lý do đầy đủ:</div>
+                          <pre style={{ fontSize: 11, color: 'white', whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', lineHeight: 1.6 }}>{rejection.reason}</pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Mô tả */}
+                  {p.description && (
+                    <div>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--gray-400)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>Mô tả</p>
+                      <p style={{ fontSize: 13, color: 'var(--gray-700)', lineHeight: 1.6 }}>{p.description}</p>
+                    </div>
+                  )}
+
+                  {/* Phiên bản sản phẩm */}
+                  {variants.length > 0 && (
+                    <div>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--gray-400)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>🔀 Phiên bản sản phẩm</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {variants.map((v, vi) => (
+                          <div key={v.id} style={{ background: 'white', borderRadius: 12, border: '1.5px solid var(--border-subtle)', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 14px', background: vi === 0 ? '#F0FDF4' : '#F8FAFC', borderBottom: '1px solid var(--border-subtle)' }}>
+                              <span style={{ fontSize: 12, fontWeight: 800, color: vi === 0 ? 'var(--success)' : 'var(--gray-600)' }}>
+                                📦 {v.name || `Phiên bản ${vi + 1}`}{vi === 0 ? ' (Chính)' : ''}
+                              </span>
+                              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--primary)' }}>{formatCurrency(v.price)}</span>
+                            </div>
+                            <div style={{ padding: '10px 14px' }}>
+                              {/* Images */}
+                              {v.image_urls?.length > 0 && (
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                                  {v.image_urls.map((url, ii) => (
+                                    <div key={ii}
+                                      onMouseEnter={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setHoverImg({ url: getImageUrl(url), x: r.left + r.width / 2, y: r.top }) }}
+                                      onMouseLeave={() => setHoverImg(null)}
+                                      style={{ width: 56, height: 56, borderRadius: 8, overflow: 'hidden', border: '1.5px solid var(--border-subtle)', cursor: 'pointer', flexShrink: 0 }}>
+                                      <img src={getImageUrl(url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Stats */}
+                              <div style={{ display: 'flex', gap: 12, marginBottom: v.attrs.length > 0 || v.promos.length > 0 ? 8 : 0, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 12, color: 'var(--gray-500)' }}>Tồn: <b>{v.stock}</b></span>
+                                {v.promos.length > 0 && <span style={{ fontSize: 12, color: '#D97706' }}>🎯 {v.promos.length} deal</span>}
+                              </div>
+                              {/* Attrs */}
+                              {v.attrs.length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                  {v.attrs.map(attr => (
+                                    <div key={attr.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-600)', minWidth: 80, paddingTop: 3, flexShrink: 0 }}>{attr.name}:</span>
+                                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                                        {attr.values.map((av, avi) => (
+                                          <span key={avi} style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: '#EDE9FE', color: '#6D28D9', border: '1px solid #DDD6FE' }}>
+                                            {av.label}{av.price_delta !== 0 ? ` (${av.price_delta > 0 ? '+' : ''}${formatCurrency(av.price_delta)})` : ''}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Promos */}
+                              {v.promos.length > 0 && (
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                                  {v.promos.map(r => (
+                                    <div key={r.id} style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 8, background: r.type === 'buy_get_free' ? '#FFFBEB' : '#EFF6FF', border: `1px solid ${r.type === 'buy_get_free' ? '#FDE68A' : '#BFDBFE'}`, color: r.type === 'buy_get_free' ? '#92400E' : '#1E40AF' }}>
+                                      {r.type === 'buy_get_free' ? '🎁' : '💰'} {promoLabel(r)}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Per-variant bundle items */}
+                              {(v.bundleItems || []).length > 0 && (
+                                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border-subtle)' }}>
+                                  <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.4, display: 'block', marginBottom: 6 }}>🎁 Hàng tặng kèm phiên bản này</span>
+                                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    {(v.bundleItems || []).map(bi => (
+                                      <div key={bi.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: bi.type === 'gift' ? '#FFFBEB' : 'white', borderRadius: 10, padding: '6px 10px', border: `1.5px solid ${bi.type === 'gift' ? '#FDE68A' : 'var(--border-subtle)'}` }}>
+                                        {(bi.image_urls || []).length > 0
+                                          ? <img src={getImageUrl(bi.image_urls![0])} alt=""
+                                              style={{ width: 40, height: 40, borderRadius: 7, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-subtle)', cursor: 'pointer' }}
+                                              onMouseEnter={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setHoverImg({ url: getImageUrl(bi.image_urls![0]), x: r.left + r.width / 2, y: r.top, name: bi.name, price: bi.price, type: bi.type, stock: bi.stock_quantity }) }}
+                                              onMouseLeave={() => setHoverImg(null)} />
+                                          : <span style={{ fontSize: 22, flexShrink: 0 }}>{bi.type === 'gift' ? '🎁' : '📦'}</span>
+                                        }
+                                        <div>
+                                          <div style={{ fontSize: 12, fontWeight: 600 }}>{bi.name || '—'}</div>
+                                          <div style={{ fontSize: 11, color: bi.type === 'gift' ? '#D97706' : 'var(--success)', fontWeight: 600 }}>{bi.type === 'gift' ? 'Tặng miễn phí' : formatCurrency(bi.price)}</div>
+                                          {(bi.stock_quantity ?? 0) > 0 && <div style={{ fontSize: 10, color: 'var(--gray-400)' }}>SL: {bi.stock_quantity}</div>}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bundle items */}
+                  {items.length > 0 && (
+                    <div>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--gray-400)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>📦 Hàng đi kèm chung (tất cả phiên bản)</p>
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {items.map(b => (
+                          <div key={b.id}
+                            onMouseEnter={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setHoverImg({ url: b.image_urls?.[0] ? getImageUrl(b.image_urls[0]) : '', x: r.left + r.width / 2, y: r.top, name: b.name, price: b.price, type: b.type, stock: b.stock_quantity }) }}
+                            onMouseLeave={() => setHoverImg(null)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, background: b.type === 'gift' ? '#FFF7ED' : 'white', borderRadius: 12, padding: '8px 12px', border: `1.5px solid ${b.type === 'gift' ? '#FED7AA' : 'var(--border-subtle)'}`, cursor: 'default' }}>
+                            {b.image_urls?.[0] ? <img src={getImageUrl(b.image_urls[0])} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} /> : <span style={{ fontSize: 24, flexShrink: 0 }}>{b.type === 'gift' ? '🎁' : '📦'}</span>}
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name || '—'}</div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: b.type === 'gift' ? '#EA580C' : 'var(--success)' }}>{b.type === 'gift' ? '🎁 Tặng kèm' : formatCurrency(b.price)}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
+                    <button onClick={() => openEdit(p)} className="btn btn-primary" style={{ fontSize: 13 }}>✏️ Sửa sản phẩm</button>
+                    <button onClick={() => handleDelete(p.product_id)} className="btn btn-danger" style={{ fontSize: 13 }}>🗑️ Xóa</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+          </>
+        })()}
+      </div>}
+
+      {/* ── Tab: Sản phẩm sẵn sàng bán ── */}
+      {viewMode === 'ready' && (
+        <div>
+          <div style={{ background: 'linear-gradient(135deg, #E0F2FE, #BAE6FD)', borderRadius: 12, padding: '14px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, border: '1px solid #7DD3FC' }}>
+            <span style={{ fontSize: 28 }}>{'✅'}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#0369A1' }}>Sản phẩm đã được admin duyệt</div>
+              <div style={{ fontSize: 12, color: '#0284C7', marginTop: 2 }}>Bấm <strong>Đăng bán ngay</strong> để khách hàng có thể thấy sản phẩm của bạn trên sàn Buyzo.</div>
+            </div>
+          </div>
+          {approvedCount === 0 ? (
+            <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--gray-400)' }}>
+              <div style={{ fontSize: 40, marginBottom: 8 }}>{'📭'}</div>
+              <div style={{ fontSize: 14 }}>Chưa có sản phẩm nào được duyệt sẵn sàng</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>Khi admin duyệt sản phẩm của bạn, chúng sẽ xuất hiện tại đây.</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {products.filter(p => p.status === 'approved').map(p => {
+                const pvariants  = variantStore.get(p.product_id)
+                const pbundles   = [...bundleStore.get(p.product_id), ...pvariants.flatMap((v: any) => v.bundleItems || [])]
+                const pacc       = pbundles.filter((b: any) => b.type === 'accessory')
+                const pgifts     = pbundles.filter((b: any) => b.type === 'gift')
+                const imgs       = pvariants[0]?.image_urls?.length ? pvariants[0].image_urls : (p.image_urls || [])
+                const price      = pvariants[0]?.price || p.price
+                const isExpanded = readyExpandedId === p.product_id
+                return (
+                  <div key={p.product_id} className="card" style={{ overflow: 'hidden', border: '2px solid #7DD3FC', borderRadius: 12, transition: 'box-shadow 0.15s' }}>
+                    {/* ── Compact row ── */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer' }}
+                      onClick={() => setReadyExpandedId(isExpanded ? null : p.product_id)}>
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        {imgs[0]
+                          ? <img src={getImageUrl(imgs[0])} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 10, display: 'block' }} />
+                          : <div style={{ width: 64, height: 64, background: '#F0F9FF', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>{'🛍️'}</div>
+                        }
+                        <div style={{ position: 'absolute', top: -6, right: -6,
+                          width: 22, height: 22, borderRadius: '50%',
+                          background: '#0EA5E9', border: '2px solid white',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 12, fontWeight: 800, color: 'white' }}>{'✓'}</div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.product_name}</div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#0EA5E9' }}>{formatCurrency(price)}</div>
+                        <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 2 }}>
+                          Tồn: {p.stock_quantity}
+                          {pacc.length > 0 && <span style={{ marginLeft: 8 }}>📦 {pacc.length} phụ kiện</span>}
+                          {pgifts.length > 0 && <span style={{ marginLeft: 8 }}>🎁 {pgifts.length} tặng kèm</span>}
+                          {pvariants[0]?.promos?.length > 0 && <span style={{ marginLeft: 8 }}>🎯 {pvariants[0].promos.length} deal</span>}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          onClick={async e => {
+                            e.stopPropagation()
+                            try {
+                              await shopService.activateProduct(p.product_id)
+                            } catch (_) { /* API có thể chưa có — tiếp tục với localStorage */ }
+                            productApprovalStore.setActive(p.product_id)
+                            setProducts(prev => prev.map(x => x.product_id === p.product_id ? { ...x, status: 'active' } : x))
+                            setReadyExpandedId(null)
+                            toast.success(`🚀 Sản phẩm "${p.product_name}" đã được đăng bán!`)
+                          }}
+                          style={{ padding: '8px 18px', background: 'linear-gradient(135deg, #0EA5E9, #0284C7)', color: 'white',
+                            border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                            boxShadow: '0 2px 6px rgba(14,165,233,0.4)', whiteSpace: 'nowrap' }}
+                        >
+                          🚀 Đăng bán
+                        </button>
+                        <span style={{ fontSize: 18, color: 'var(--gray-400)', userSelect: 'none' }}>{isExpanded ? '▲' : '▼'}</span>
+                      </div>
+                    </div>
+
+                    {/* ── Expanded detail ── */}
+                    {isExpanded && (
+                      <div style={{ borderTop: '1px solid #BAE6FD', background: '#F0F9FF', padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {/* Thumbnails */}
+                        {imgs.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: 8 }}>🖼️ Hình ảnh sản phẩm</div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {imgs.map((url: string, i: number) => (
+                                <img key={i} src={getImageUrl(url)} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: '2px solid #7DD3FC' }} />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* Description */}
+                        {p.description && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: 6 }}>📝 Mô tả</div>
+                            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, background: 'white', borderRadius: 8, padding: '10px 12px', border: '1px solid #BAE6FD' }}>{p.description}</div>
+                          </div>
+                        )}
+                        {/* Variants */}
+                        {pvariants.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: 8 }}>🔀 Phiên bản</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {pvariants.map((v: any) => (
+                                <div key={v.id} style={{ background: 'white', borderRadius: 8, padding: '8px 12px', border: '1px solid #BAE6FD', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                  {v.image_urls?.[0] && <img src={getImageUrl(v.image_urls[0])} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6 }} />}
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 600, fontSize: 13 }}>{v.name}</div>
+                                    <div style={{ fontSize: 12, color: '#0EA5E9', fontWeight: 700 }}>{formatCurrency(v.price)} · Tồn: {v.stock}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* Accessories */}
+                        {pacc.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: 8 }}>📦 Phụ kiện đi kèm</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+                              {pacc.map((b: any, bi: number) => (
+                                <div key={bi} style={{ background: 'white', borderRadius: 8, border: '1px solid #BAE6FD', overflow: 'hidden' }}>
+                                  {b.image_urls?.[0] && <img src={getImageUrl(b.image_urls[0])} alt="" style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />}
+                                  <div style={{ padding: '6px 8px' }}>
+                                    <div style={{ fontWeight: 600, fontSize: 12 }}>{b.name}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 700 }}>{formatCurrency(b.price)}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* Gifts */}
+                        {pgifts.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: 8 }}>🎁 Hàng tặng kèm</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+                              {pgifts.map((b: any, bi: number) => (
+                                <div key={bi} style={{ background: '#FFF7ED', borderRadius: 8, border: '1px solid #FED7AA', overflow: 'hidden' }}>
+                                  {b.image_urls?.[0] && <img src={getImageUrl(b.image_urls[0])} alt="" style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />}
+                                  <div style={{ padding: '6px 8px' }}>
+                                    <div style={{ fontWeight: 600, fontSize: 12 }}>{b.name}</div>
+                                    <div style={{ fontSize: 12, color: '#D97706', fontWeight: 700 }}>{b.price > 0 ? formatCurrency(b.price) : '🎁 Miễn phí'}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Danh sách combo ── */}
+      {viewMode === 'combo' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <p style={{ fontSize: 13, color: 'var(--gray-400)', marginBottom: 4 }}>
+            Combo là tập hợp sản phẩm / phụ kiện đi kèm — shop cấu hình riêng cho từng sản phẩm.
+          </p>
+          {products.filter(p => p.status === 'active' || p.status === 'pending').length === 0 && (
+            <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--gray-400)' }}>Chưa có sản phẩm nào đang bán</div>
+          )}
+          {products.filter(p => p.status === 'active' || p.status === 'pending').map(p => {
+            const comboAll = [
+              ...bundleStore.get(p.product_id).filter(b => b.type === 'accessory'),
+              ...variantStore.get(p.product_id).flatMap(v => (v.bundleItems || []).filter(b => b.type === 'accessory')),
+            ]
+            const isOpen = comboExpandedId === p.product_id
+            const imgs = variantStore.get(p.product_id)[0]?.image_urls || p.image_urls || []
+            return (
+              <div key={p.product_id} className="card" style={{ overflow: 'hidden' }}>
+                <div onClick={() => setComboExpandedId(isOpen ? null : p.product_id)}
+                  style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: 'var(--bg-page)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {imgs[0] ? <img src={getImageUrl(imgs[0])} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 22 }}>🛍️</span>}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>{p.product_name}</span>
+                    <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--primary)', fontWeight: 700 }}>{formatCurrency(p.price)}</span>
+                  </div>
+                  <span style={{ fontSize: 12, marginRight: 8 }}>
+                    {comboAll.length > 0
+                      ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>📦 {comboAll.length} combo</span>
+                      : <span style={{ color: 'var(--gray-400)' }}>Chưa có combo</span>}
+                  </span>
+                  <button onClick={e => { e.stopPropagation(); openEdit(p) }} className="btn btn-outline btn-sm" style={{ fontSize: 11, padding: '4px 10px' }}>⚙️ Cài đặt</button>
+                  <span style={{ color: 'var(--gray-400)', fontSize: 16, transform: isOpen ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform 0.2s' }}>▾</span>
+                </div>
+                {isOpen && (
+                  <div style={{ padding: '0 16px 14px 72px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {comboAll.length === 0
+                      ? <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>Chưa cấu hình — nhấn ⚙️ Cài đặt để thêm combo</span>
+                      : comboAll.map((item, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', borderRadius: 8, background: 'var(--bg-page)' }}>
+                          {(item.image_urls || []).length > 0 && (
+                            <img src={getImageUrl(item.image_urls![0])} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                          )}
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>{item.name || 'Không tên'}</div>
+                            <div style={{ fontSize: 12, color: 'var(--gray-400)' }}>Tồn: {item.stock_quantity ?? 0}</div>
+                          </div>
+                          <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: 13 }}>{formatCurrency(item.price)}</span>
+                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: '#EFF6FF', color: '#2563EB' }}>📦 Đi kèm</span>
+                        </div>
+                      ))
+                    }
+                  </div>
                 )}
-                <p style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5 }}>JPG, PNG, WebP — tối đa 5MB</p>
               </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Tab: Sản phẩm tặng kèm ── */}
+      {viewMode === 'gifts' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <p style={{ fontSize: 13, color: 'var(--gray-400)', marginBottom: 4 }}>
+            Sản phẩm tặng kèm là quà miễn phí đi kèm khi mua — cấu hình riêng cho từng sản phẩm.
+          </p>
+          {products.filter(p => p.status === 'active' || p.status === 'pending').length === 0 && (
+            <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--gray-400)' }}>Chưa có sản phẩm nào đang bán</div>
+          )}
+          {products.filter(p => p.status === 'active' || p.status === 'pending').map(p => {
+            const giftsAll = [
+              ...bundleStore.get(p.product_id).filter(b => b.type === 'gift'),
+              ...variantStore.get(p.product_id).flatMap(v => (v.bundleItems || []).filter(b => b.type === 'gift')),
+            ]
+            const isOpen = giftsExpandedId === p.product_id
+            const imgs = variantStore.get(p.product_id)[0]?.image_urls || p.image_urls || []
+            return (
+              <div key={p.product_id} className="card" style={{ overflow: 'hidden' }}>
+                <div onClick={() => setGiftsExpandedId(isOpen ? null : p.product_id)}
+                  style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: 'var(--bg-page)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {imgs[0] ? <img src={getImageUrl(imgs[0])} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 22 }}>🛍️</span>}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>{p.product_name}</span>
+                    <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--primary)', fontWeight: 700 }}>{formatCurrency(p.price)}</span>
+                  </div>
+                  <span style={{ fontSize: 12, marginRight: 8 }}>
+                    {giftsAll.length > 0
+                      ? <span style={{ color: '#EA580C', fontWeight: 700 }}>🎁 {giftsAll.length} quà tặng</span>
+                      : <span style={{ color: 'var(--gray-400)' }}>Chưa có tặng kèm</span>}
+                  </span>
+                  <button onClick={e => { e.stopPropagation(); openEdit(p) }} className="btn btn-outline btn-sm" style={{ fontSize: 11, padding: '4px 10px' }}>⚙️ Cài đặt</button>
+                  <span style={{ color: 'var(--gray-400)', fontSize: 16, transform: isOpen ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform 0.2s' }}>▾</span>
+                </div>
+                {isOpen && (
+                  <div style={{ padding: '0 16px 14px 72px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {giftsAll.length === 0
+                      ? <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>Chưa cấu hình — nhấn ⚙️ Cài đặt để thêm tặng kèm</span>
+                      : giftsAll.map((item, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', borderRadius: 8, background: 'var(--bg-page)' }}>
+                          {(item.image_urls || []).length > 0 && (
+                            <img src={getImageUrl(item.image_urls![0])} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                          )}
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>{item.name || 'Không tên'}</div>
+                            <div style={{ fontSize: 12, color: 'var(--gray-400)' }}>Tồn: {item.stock_quantity ?? 0}</div>
+                          </div>
+                          <span style={{ fontWeight: 700, color: item.price > 0 ? 'var(--primary)' : 'var(--success)', fontSize: 13 }}>
+                            {item.price > 0 ? formatCurrency(item.price) : 'Miễn phí'}
+                          </span>
+                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: '#FFF7ED', color: '#EA580C' }}>🎁 Tặng kèm</span>
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Hover image tooltip ── */}
+      {hoverImg && (
+        <div style={{ position: 'fixed', left: Math.min(hoverImg.x - 160, window.innerWidth - 340), top: Math.max(hoverImg.y - (hoverImg.name !== undefined ? 420 : 340), 10), zIndex: 9000, pointerEvents: 'none', animation: 'fadeInScale 0.15s ease' }}>
+          <style>{`@keyframes fadeInScale{from{opacity:0;transform:scale(0.88)}to{opacity:1;transform:scale(1)}}`}</style>
+          <div style={{ background: 'white', borderRadius: 16, overflow: 'hidden', boxShadow: '0 12px 48px rgba(0,0,0,0.28)', border: '2px solid var(--primary)', width: 320 }}>
+            {hoverImg.url ? <img src={hoverImg.url} alt="" style={{ width: 320, height: 280, objectFit: 'cover', display: 'block' }} /> : <div style={{ width: 320, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F1F5F9', fontSize: 60 }}>🛍️</div>}
+            {hoverImg.name !== undefined && (
+              <div style={{ padding: '12px 16px 14px', borderTop: '1px solid var(--border-subtle)' }}>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{hoverImg.name || '—'}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 12, color: 'var(--gray-500)' }}>
+                  <span>{hoverImg.type === 'gift' ? '🎁 Hàng tặng kèm' : formatCurrency(hoverImg.price ?? 0)}</span>
+                  <span>Tồn: {hoverImg.stock ?? 0}</span>
+                </div>
+                <div style={{ marginTop: 4, fontSize: 11, fontWeight: 600, color: hoverImg.type === 'gift' ? '#EA580C' : 'var(--success)' }}>
+                  {hoverImg.type === 'gift' ? '🎁 Tặng kèm' : '📦 Đi kèm'}
+                </div>
+              </div>
+            )}
+          </div>
+          <div style={{ position: 'absolute', bottom: -10, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '10px solid transparent', borderRight: '10px solid transparent', borderTop: '10px solid var(--primary)' }} />
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════
+          MODAL: Thêm sản phẩm mới (đơn giản → gửi admin duyệt)
+          ════════════════════════════════════════════════════════ */}
+      <Modal open={simpleModalOpen} onClose={() => setSimpleModalOpen(false)} title="Thêm sản phẩm mới" width={620}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: '80vh', overflowY: 'auto', paddingRight: 8 }}>
+
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: '#EFF6FF', border: '1px solid #BFDBFE', fontSize: 13, color: '#1D4ED8', lineHeight: 1.5 }}>
+            📋 Thông tin cơ bản sẽ được gửi đến admin để duyệt. Sau khi duyệt, bạn có thể cài đặt thêm phiên bản, combo và tặng kèm.
+          </div>
+
+          {/* Tên sản phẩm */}
+          <div>
+            <label className="input-label">Tên sản phẩm <span style={{ color: 'var(--error)' }}>*</span></label>
+            <input className="input" type="text" value={simpleForm.product_name}
+              onChange={e => setSimpleForm(f => ({ ...f, product_name: e.target.value }))} placeholder="Nhập tên sản phẩm" />
+          </div>
+
+          {/* Danh mục */}
+          <div>
+            <label className="input-label">Danh mục</label>
+            <select className="input" value={simpleForm.category_id}
+              onChange={e => setSimpleForm(f => ({ ...f, category_id: e.target.value }))}>
+              <option value="">-- Chọn danh mục --</option>
+              {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
+            </select>
+          </div>
+
+          {/* Giá + Tồn kho */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label className="input-label">Giá bán (₫) <span style={{ color: 'var(--error)' }}>*</span></label>
+              <input className="input" type="text" inputMode="numeric" value={simplePriceInput}
+                placeholder="0"
+                onChange={e => {
+                  const digits = e.target.value.replace(/[^0-9]/g, '')
+                  const num = digits === '' ? 0 : Number(digits)
+                  setSimplePriceInput(digits === '' ? '' : num.toLocaleString('vi-VN'))
+                  setSimpleForm(f => ({ ...f, price: num }))
+                }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label className="input-label">Tồn kho</label>
+              <input className="input" type="number" min={0} value={simpleForm.stock_quantity || ''}
+                onChange={e => setSimpleForm(f => ({ ...f, stock_quantity: Number(e.target.value) }))} placeholder="0" />
             </div>
           </div>
 
-          {[
-            { label: 'Tên sản phẩm', key: 'product_name', type: 'text' },
-            { label: 'Giá (VND)', key: 'price', type: 'number' },
-            { label: 'Số lượng tồn kho', key: 'stock_quantity', type: 'number' },
-          ].map(({ label, key, type }) => (
-            <div key={key}>
-              <label className="input-label">{label}</label>
-              <input className="input" type={type} value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: type === 'number' ? Number(e.target.value) : e.target.value }))} />
+          {/* Thuộc tính sản phẩm */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <label className="input-label" style={{ margin: 0 }}>Thuộc tính sản phẩm</label>
+              <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: 12 }}
+                onClick={() => setSimpleAttrs(a => [...a, { id: `sa_${Date.now()}`, name: '', values: [] }])}>
+                + Thêm thuộc tính
+              </button>
             </div>
-          ))}
+            {/* Quick-add chips */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: simpleAttrs.length > 0 ? 10 : 0 }}>
+              {['Màu sắc', 'Kích thước', 'Chất liệu', 'Mẫu mã', 'Xuất xứ'].filter(q => !simpleAttrs.some(a => a.name === q)).map(q => (
+                <button key={q} type="button"
+                  onClick={() => setSimpleAttrs(a => [...a, { id: `sa_${Date.now()}_${q}`, name: q, values: [] }])}
+                  style={{ padding: '3px 10px', borderRadius: 14, fontSize: 12, border: '1px dashed var(--border-subtle)', background: 'transparent', cursor: 'pointer', color: 'var(--gray-500)' }}>
+                  + {q}
+                </button>
+              ))}
+            </div>
+            {/* Attr rows */}
+            {simpleAttrs.map((attr, aIdx) => (
+              <div key={attr.id} style={{ marginBottom: 10, padding: 12, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-page)' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                  <input className="input" style={{ flex: 1, height: 34, fontSize: 13 }} value={attr.name} placeholder="Tên thuộc tính (VD: Màu sắc)"
+                    onChange={e => setSimpleAttrs(a => a.map((x, i) => i === aIdx ? { ...x, name: e.target.value } : x))} />
+                  <button type="button" onClick={() => setSimpleAttrs(a => a.filter((_, i) => i !== aIdx))}
+                    style={{ color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+                </div>
+                {/* Values */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                  {attr.values.map((val, vIdx) => (
+                    <div key={vIdx} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 10px', borderRadius: 14,
+                      background: 'white', border: '1.5px solid var(--border-subtle)', fontSize: 13 }}>
+                      <span>{val.label}</span>
+                      {val.price_delta !== 0 && (
+                        <span style={{ fontSize: 11, color: val.price_delta > 0 ? 'var(--success)' : 'var(--error)', fontWeight: 700 }}>
+                          {val.price_delta > 0 ? '+' : ''}{val.price_delta.toLocaleString('vi-VN')}₫
+                        </span>
+                      )}
+                      <button type="button" onClick={() => setSimpleAttrs(a => a.map((x, i) => i === aIdx ? { ...x, values: x.values.filter((_, j) => j !== vIdx) } : x))}
+                        style={{ color: 'var(--gray-400)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
+                    </div>
+                  ))}
+                </div>
+                {/* Add value row */}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input className="input" style={{ flex: 2, height: 32, fontSize: 12 }}
+                    value={simpleAttrValueInput[attr.id] || ''} placeholder="Tên giá trị (VD: Đỏ)"
+                    onChange={e => setSimpleAttrValueInput(p => ({ ...p, [attr.id]: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const label = (simpleAttrValueInput[attr.id] || '').trim()
+                        if (!label) return
+                        const priceKey = `${attr.id}__new`
+                        const priceDelta = Number((simpleAttrPriceInput[priceKey] || '').replace(/\./g, '')) || 0
+                        setSimpleAttrs(a => a.map((x, i) => i === aIdx ? { ...x, values: [...x.values, { label, price_delta: priceDelta }] } : x))
+                        setSimpleAttrValueInput(p => ({ ...p, [attr.id]: '' }))
+                        setSimpleAttrPriceInput(p => ({ ...p, [priceKey]: '' }))
+                      }
+                    }} />
+                  <input className="input" style={{ flex: 1, height: 32, fontSize: 12 }}
+                    value={simpleAttrPriceInput[`${attr.id}__new`] || ''} placeholder="+/- Giá (₫)"
+                    onChange={e => {
+                      const raw = e.target.value
+                      const sign = raw.startsWith('-') ? '-' : ''
+                      const digits = raw.replace(/[^0-9]/g, '')
+                      const formatted = digits === '' ? '' : Number(digits).toLocaleString('vi-VN')
+                      setSimpleAttrPriceInput(p => ({ ...p, [`${attr.id}__new`]: sign + formatted }))
+                    }} />
+                  <button type="button" className="btn btn-outline btn-sm" style={{ fontSize: 12, height: 32, padding: '0 10px', whiteSpace: 'nowrap' }}
+                    onClick={() => {
+                      const label = (simpleAttrValueInput[attr.id] || '').trim()
+                      if (!label) return
+                      const priceKey = `${attr.id}__new`
+                      const priceDelta = Number((simpleAttrPriceInput[priceKey] || '').replace(/\./g, '')) || 0
+                      setSimpleAttrs(a => a.map((x, i) => i === aIdx ? { ...x, values: [...x.values, { label, price_delta: priceDelta }] } : x))
+                      setSimpleAttrValueInput(p => ({ ...p, [attr.id]: '' }))
+                      setSimpleAttrPriceInput(p => ({ ...p, [priceKey]: '' }))
+                    }}>+ Thêm</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Mô tả */}
+          <div>
+            <label className="input-label">Mô tả sản phẩm</label>
+            <textarea className="input" rows={3} value={simpleForm.description}
+              onChange={e => setSimpleForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Mô tả chi tiết về sản phẩm..." style={{ resize: 'vertical' }} />
+          </div>
+
+          {/* Hình ảnh */}
+          <div>
+            <label className="input-label">Hình ảnh sản phẩm</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              {simpleForm.image_urls.map((url, i) => (
+                <div key={i} style={{ position: 'relative', width: 72, height: 72 }}>
+                  <img src={getImageUrl(url)} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border-subtle)' }} />
+                  <button onClick={() => setSimpleForm(f => ({ ...f, image_urls: f.image_urls.filter((_, j) => j !== i) }))}
+                    style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', background: 'var(--error)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                </div>
+              ))}
+              <label style={{ width: 72, height: 72, borderRadius: 8, border: '2px dashed var(--border-subtle)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, color: 'var(--gray-400)', fontSize: 12, flexShrink: 0 }}>
+                {simpleImgUploading ? '⏳' : <><span style={{ fontSize: 22 }}>📷</span><span>Thêm ảnh</span></>}
+                <input ref={simpleImgRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleSimpleImageChange} />
+              </label>
+            </div>
+          </div>
+
+          {/* Video */}
+          <div>
+            <label className="input-label">Video sản phẩm (tuỳ chọn)</label>
+            {simpleForm.video_url ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'var(--bg-page)', border: '1px solid var(--border-subtle)' }}>
+                <span style={{ fontSize: 20 }}>🎬</span>
+                <span style={{ flex: 1, fontSize: 12, color: 'var(--gray-600)', wordBreak: 'break-all' }}>{simpleForm.video_url.split('/').pop()}</span>
+                <button onClick={() => setSimpleForm(f => ({ ...f, video_url: '' }))} style={{ color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }}>×</button>
+              </div>
+            ) : (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8, border: '2px dashed var(--border-subtle)', cursor: 'pointer', color: 'var(--gray-400)', fontSize: 13 }}>
+                {simpleVideoUploading ? '⏳ Đang upload...' : <><span style={{ fontSize: 20 }}>🎬</span><span>Chọn video (.mp4, .mov...)</span></>}
+                <input ref={simpleVideoRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={handleSimpleVideoChange} />
+              </label>
+            )}
+          </div>
+
+        </div>
+        {/* Footer */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, borderTop: '1px solid var(--border-subtle)', marginTop: 8 }}>
+          <button className="btn btn-ghost" onClick={() => setSimpleModalOpen(false)}>Hủy</button>
+          <button className="btn btn-primary" onClick={handleSimpleSave} disabled={simpleImgUploading || simpleVideoUploading}>
+            📤 Gửi duyệt
+          </button>
+        </div>
+      </Modal>
+
+      {/* ════════════════════════════════════════════════════════
+          MODAL: Thêm / Sửa sản phẩm
+          ════════════════════════════════════════════════════════ */}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editProduct ? 'Sửa sản phẩm' : 'Thêm sản phẩm'} width={800}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: '78vh', overflowY: 'auto', paddingRight: 20 }}>
+
+          {/* Tên sản phẩm */}
+          <div>
+            <label className="input-label">Tên sản phẩm</label>
+            <input className="input" type="text" value={form.product_name} onChange={e => setForm(f => ({ ...f, product_name: e.target.value }))} placeholder="Nhập tên sản phẩm" />
+          </div>
+
+          {/* Mô tả */}
           <div>
             <label className="input-label">Mô tả</label>
             <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: 'vertical' }} />
@@ -736,3 +1542,4 @@ const ProductManagement: React.FC = () => {
 }
 
 export default ProductManagement
+                                                                                                                                                               

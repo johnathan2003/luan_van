@@ -57,13 +57,15 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { icon: '💰', label: 'Doanh thu HT',     path: '/admin/finance' },
       { icon: '🎫', label: 'Mã giảm giá',      path: '/admin/vouchers' },
+      { icon: '💳', label: 'Ví Shop',           path: '/admin/wallet' },
     ],
   },
   {
     group: 'Nội dung',
     items: [
       { icon: '🖼️', label: 'Banner QC',        path: '/admin/banners' },
-      { icon: '🏆', label: 'Đấu giá QC',      path: '/admin/auction' },
+      { icon: '🏆', label: 'Đấu giá QC (mock)', path: '/admin/auction' },
+      { icon: '🎯', label: 'Đấu giá QC (thật)', path: '/admin/auction-real' },
       { icon: '📷', label: 'Thư viện ảnh',    path: '/admin/images' },
       { icon: '📣', label: 'Thông báo HT',     path: '/admin/notifications' },
     ],
@@ -73,6 +75,7 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { icon: '🛵', label: 'Quản lý Shipper',  path: '/admin/shippers' },
       { icon: '🚚', label: 'Cấu hình VC',      path: '/admin/shipping-config' },
+      { icon: '🏭', label: 'Kho 3 tầng',       path: '/admin/warehouses-hierarchy' },
       { icon: '🧑‍💼', label: 'Nhân viên HT',  path: '/admin/system-employees' },
     ],
   },

@@ -1,5 +1,8 @@
+/** Ảnh placeholder mặc định khi sản phẩm chưa có ảnh (placehold.co với text). */
+export const PLACEHOLDER_IMG = 'https://placehold.co/400x400/dbeafe/1d4ed8?text=No+Image'
+
 export const getImageUrl = (url?: string | null): string => {
-  if (!url) return '/images/placeholder.png'
+  if (!url) return PLACEHOLDER_IMG
   if (url.startsWith('http')) return url
   return `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${url}`
 }
