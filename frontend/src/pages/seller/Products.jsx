@@ -52,7 +52,7 @@ export function SellerProducts() {
                 <tr key={p.id} style={{ borderBottom: "1px solid #f5f5f5" }}>
                   <td style={{ padding: "12px 16px" }}>
                     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                      <img src={p.thumbnail || "/placeholder.png"} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 4 }} />
+                      <img src={p.thumbnail || "https://placehold.co/400x400/dbeafe/1d4ed8?text=No+Image"} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 4 }} />
                       <span style={{ fontSize: 13, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
                     </div>
                   </td>
@@ -240,7 +240,7 @@ export function SellerInventory() {
               <tr key={inv.id} style={{ borderBottom: "1px solid #f5f5f5" }}>
                 <td style={{ padding: "12px 16px" }}>
                   <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <img src={inv.product_thumbnail || "/placeholder.png"} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 4 }} />
+                    <img src={inv.product_thumbnail || "https://placehold.co/400x400/dbeafe/1d4ed8?text=No+Image"} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 4 }} />
                     <span style={{ fontSize: 13 }}>{inv.product_name}</span>
                   </div>
                 </td>

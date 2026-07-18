@@ -37,13 +37,17 @@ const EmployeeChatPage: React.FC = () => {
   const [hasMore, setHasMore]             = useState(false)
   const [input, setInput]                 = useState('')
   const [sending, setSending]             = useState(false)
+  const [sendError, setSendError]         = useState<string | null>(null)
   const [assigning, setAssigning]         = useState(false)
   const [loadingConvs, setLoadingConvs]   = useState(true)
   const [loadingMsgs, setLoadingMsgs]     = useState(false)
   const [search, setSearch]               = useState('')
   const [apiError, setApiError]           = useState<string | null>(null)
 
-  const bottomRef  = useRef<HTMLDivElement>(null)
+  const bottomRef             = useRef<HTMLDivElement>(null)
+  const messagesWrapRef       = useRef<HTMLDivElement>(null)
+  const prevMsgLen            = useRef(0)
+  const savedScrollFromBottom = useRef<number | null>(null)
   const activeConv = conversations.find(c => c.conversation_id === activeConvId)
   const uid        = currentUser?.user_id ?? 0
 
@@ -98,7 +102,7 @@ const EmployeeChatPage: React.FC = () => {
 
     sio.on('new_chat_message', onNewChat)
     return () => sio.off('new_chat_message', onNewChat)
-  }, [activeConvId, loadConversations])
+  }, [uid, activeConvId, loadConversations])
 
   // ── Socket: khi conversation được assign ─────────────────────────────────
   useEffect(() => {
@@ -115,7 +119,7 @@ const EmployeeChatPage: React.FC = () => {
     }
     sio.on('conv_assigned', onAssigned)
     return () => sio.off('conv_assigned', onAssigned)
-  }, [])
+  }, [uid])
 
   // ── Join/leave conversation room ──────────────────────────────────────────
   useEffect(() => {
@@ -123,7 +127,7 @@ const EmployeeChatPage: React.FC = () => {
     if (!sio || !activeConvId) return
     sio.emit('join_conversation', { conversation_id: activeConvId })
     return () => sio.emit('leave_conversation', { conversation_id: activeConvId })
-  }, [activeConvId])
+  }, [uid, activeConvId])
 
   // ── Socket: real-time new_message trong conv đang mở ─────────────────────
   useEffect(() => {
@@ -146,11 +150,13 @@ const EmployeeChatPage: React.FC = () => {
     }
     sio.on('new_message', onMsg)
     return () => sio.off('new_message', onMsg)
-  }, [activeConvId])
+  }, [uid, activeConvId])
 
   // ── Load messages ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!activeConvId) return
+    prevMsgLen.current = 0
+    savedScrollFromBottom.current = null
     setMessages([])
     setHasMore(false)
     setLoadingMsgs(true)
@@ -164,7 +170,20 @@ const EmployeeChatPage: React.FC = () => {
     )
   }, [activeConvId])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  useEffect(() => {
+    if (messages.length === 0) return
+    const el = messagesWrapRef.current
+    if (!el) return
+    if (prevMsgLen.current === 0) {
+      el.scrollTop = el.scrollHeight
+    } else if (savedScrollFromBottom.current !== null) {
+      el.scrollTop = el.scrollHeight - savedScrollFromBottom.current
+      savedScrollFromBottom.current = null
+    } else {
+      el.scrollTop = el.scrollHeight
+    }
+    prevMsgLen.current = messages.length
+  }, [messages])
 
   // ── Nhận phụ trách conversation ───────────────────────────────────────────
   const handleAssign = async () => {
@@ -205,7 +224,11 @@ const EmployeeChatPage: React.FC = () => {
             : c
         )
       )
-    } catch { setInput(text) } finally { setSending(false) }
+    } catch (e: any) {
+      setInput(text)
+      const errMsg = e?.response?.data?.detail || 'Gửi tin nhắn thất bại, thử lại'
+      setSendError(errMsg)
+    } finally { setSending(false) }
   }
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -340,10 +363,12 @@ const EmployeeChatPage: React.FC = () => {
               </div>
 
               {/* Messages */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column' }}>
+              <div ref={messagesWrapRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column' }}>
                 {hasMore && (
                   <button
                     onClick={() => {
+                      const el = messagesWrapRef.current
+                      if (el) savedScrollFromBottom.current = el.scrollHeight - el.scrollTop
                       const firstId = messages[0]?.message_id
                       chatService.getMessages(activeConvId!, firstId)
                         .then(r => { setMessages(prev => [...r.data.messages, ...prev]); setHasMore(r.data.has_more) })
@@ -390,22 +415,30 @@ const EmployeeChatPage: React.FC = () => {
 
               {/* Input — chỉ cho phép khi assigned cho mình hoặc chưa assign */}
               {canReply ? (
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--gray-200)', background: 'white' }}>
-                  <textarea
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={handleKey}
-                    placeholder={isUnassigned ? 'Nhắn tin sẽ tự động nhận phụ trách cuộc hội thoại...' : 'Trả lời khách hàng... (Enter để gửi)'}
-                    rows={1}
-                    style={{ flex: 1, resize: 'none', border: '1px solid var(--gray-300)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', fontSize: 14, fontFamily: 'inherit', outline: 'none', maxHeight: 120, overflowY: 'auto' }}
-                  />
-                  <button
-                    onClick={handleSend}
-                    disabled={!input.trim() || sending}
-                    style={{ width: 40, height: 40, borderRadius: '50%', background: '#2563eb', color: 'white', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: (!input.trim() || sending) ? 0.5 : 1 }}
-                  >
-                    {sending ? '...' : '➤'}
-                  </button>
+                <div style={{ borderTop: '1px solid var(--gray-200)', background: 'white' }}>
+                  {sendError && (
+                    <div style={{ padding: '6px 16px', background: '#FEF2F2', fontSize: 12, color: '#DC2626', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>⚠️ {sendError}</span>
+                      <button onClick={() => setSendError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontWeight: 700 }}>✕</button>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '12px 16px' }}>
+                    <textarea
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={handleKey}
+                      placeholder={isUnassigned ? 'Nhắn tin sẽ tự động nhận phụ trách cuộc hội thoại...' : 'Trả lời khách hàng... (Enter để gửi)'}
+                      rows={1}
+                      style={{ flex: 1, resize: 'none', border: '1px solid var(--gray-300)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', fontSize: 14, fontFamily: 'inherit', outline: 'none', maxHeight: 120, overflowY: 'auto' }}
+                    />
+                    <button
+                      onClick={handleSend}
+                      disabled={!input.trim() || sending}
+                      style={{ width: 40, height: 40, borderRadius: '50%', background: '#2563eb', color: 'white', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: (!input.trim() || sending) ? 0.5 : 1 }}
+                    >
+                      {sending ? '...' : '➤'}
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div style={{ padding: '12px 20px', borderTop: '1px solid var(--gray-200)', background: '#f9fafb', textAlign: 'center', fontSize: 13, color: 'var(--gray-500)' }}>
