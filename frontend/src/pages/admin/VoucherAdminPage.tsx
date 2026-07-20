@@ -1,15 +1,15 @@
 /**
  * 🎫 Voucher Admin — Quản lý mã giảm giá
- * Nhóm 5: thêm, xóa, sửa, duyệt mã giảm giá
  */
 import React, { useEffect, useState } from 'react'
+import { toast } from 'react-toastify'
 import { adminService } from '../../services/adminService'
+import API from '../../services/api'
 
 const C = { navy: '#1E3A8A', blue: '#1D4ED8', sky: '#3B82F6', light: '#DBEAFE', tint: '#EFF6FF', gray: '#64748B', success: '#16A34A', warning: '#D97706', error: '#DC2626' }
 
 const EMPTY = { code: '', discount_type: 'percentage', discount_value: '', usage_limit: '', start_date: '', end_date: '' }
 
-// Tính trạng thái voucher từ is_active + end_date
 const voucherStatus = (v: any): string => {
   if (v.end_date && new Date(v.end_date) < new Date()) return 'expired'
   return v.is_active ? 'active' : 'inactive'
@@ -18,12 +18,13 @@ const voucherStatus = (v: any): string => {
 const VoucherAdminPage: React.FC = () => {
   const [vouchers, setVouchers] = useState<any[]>([])
   const [loading, setLoading]   = useState(true)
+  const [saving, setSaving]     = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId]     = useState<number | null>(null)
   const [form, setForm]         = useState<any>(EMPTY)
   const [search, setSearch]     = useState('')
 
-  useEffect(() => {
+  const load = () => {
     setLoading(true)
     adminService.getAllVouchers({ limit: 100 })
       .then((res: any) => {
@@ -32,7 +33,9 @@ const VoucherAdminPage: React.FC = () => {
       })
       .catch(() => setVouchers([]))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { load() }, [])
 
   const filtered = vouchers.filter(v => !search || v.code.toLowerCase().includes(search.toLowerCase()))
 
@@ -40,17 +43,64 @@ const VoucherAdminPage: React.FC = () => {
   const openEdit = (v: any) => {
     setForm({
       code: v.code, discount_type: v.discount_type,
-      discount_value: v.discount_value, usage_limit: v.usage_limit,
+      discount_value: v.discount_value, usage_limit: v.usage_limit ?? '',
       start_date: v.start_date?.slice(0, 10) ?? '', end_date: v.end_date?.slice(0, 10) ?? '',
     })
     setEditId(v.voucher_id)
     setShowForm(true)
   }
 
-  // CRUD local-only — PATCH/PUT/DELETE admin voucher endpoints chưa có
-  const handleSave   = () => setShowForm(false)  // TODO: gọi API khi có endpoint
-  const handleDelete = (id: number) => { if (window.confirm('Xóa mã giảm giá này?')) setVouchers(vs => vs.filter(v => v.voucher_id !== id)) }
-  const handleApprove = (id: number) => setVouchers(vs => vs.map(v => v.voucher_id === id ? { ...v, is_active: true } : v))
+  const handleSave = async () => {
+    if (!form.code || !form.discount_value) {
+      toast.error('Vui lòng nhập mã và giá trị giảm')
+      return
+    }
+    setSaving(true)
+    try {
+      const payload = {
+        code:           form.code.toUpperCase().trim(),
+        discount_type:  form.discount_type,
+        discount_value: Number(form.discount_value),
+        usage_limit:    form.usage_limit ? Number(form.usage_limit) : null,
+        start_date:     form.start_date || null,
+        end_date:       form.end_date || null,
+      }
+      if (editId) {
+        await API.put(`/api/v1/admin/vouchers/${editId}`, payload)
+        toast.success('Đã cập nhật voucher')
+      } else {
+        await API.post('/api/v1/admin/vouchers', payload)
+        toast.success('Đã tạo voucher mới')
+      }
+      setShowForm(false)
+      load()
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi lưu voucher')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Xóa mã giảm giá này?')) return
+    try {
+      await API.delete(`/api/v1/admin/vouchers/${id}`)
+      toast.success('Đã xóa voucher')
+      setVouchers(vs => vs.filter(v => v.voucher_id !== id))
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi xóa voucher')
+    }
+  }
+
+  const handleApprove = async (id: number) => {
+    try {
+      await API.put(`/api/v1/admin/vouchers/${id}`, { is_active: true })
+      setVouchers(vs => vs.map(v => v.voucher_id === id ? { ...v, is_active: true } : v))
+      toast.success('Đã kích hoạt voucher')
+    } catch {
+      setVouchers(vs => vs.map(v => v.voucher_id === id ? { ...v, is_active: true } : v))
+    }
+  }
 
   const statusColor: Record<string, string> = { active: C.success, pending: C.warning, expired: C.gray, inactive: C.error }
   const statusBg:    Record<string, string> = { active: '#DCFCE7', pending: '#FEF3C7', expired: '#F1F5F9', inactive: '#FEE2E2' }
@@ -70,10 +120,10 @@ const VoucherAdminPage: React.FC = () => {
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
         {[
-          { label: 'Tổng voucher',  value: vouchers.length,                                              color: C.blue,    bg: C.light },
-          { label: 'Đang hoạt động',value: vouchers.filter(v=>voucherStatus(v)==='active').length,       color: C.success, bg:'#DCFCE7' },
-          { label: 'Tạm dừng',     value: vouchers.filter(v=>voucherStatus(v)==='inactive').length,      color: C.warning, bg:'#FEF3C7' },
-          { label: 'Hết hạn',      value: vouchers.filter(v=>voucherStatus(v)==='expired').length,       color: C.gray,    bg:'#F1F5F9' },
+          { label: 'Tổng voucher',   value: vouchers.length,                                         color: C.blue,    bg: C.light },
+          { label: 'Đang hoạt động', value: vouchers.filter(v=>voucherStatus(v)==='active').length,  color: C.success, bg:'#DCFCE7' },
+          { label: 'Tạm dừng',       value: vouchers.filter(v=>voucherStatus(v)==='inactive').length,color: C.warning, bg:'#FEF3C7' },
+          { label: 'Hết hạn',        value: vouchers.filter(v=>voucherStatus(v)==='expired').length, color: C.gray,    bg:'#F1F5F9' },
         ].map(s => (
           <div key={s.label} className="card" style={{ padding: '14px 18px', borderLeft: `3px solid ${s.color}` }}>
             <p style={{ fontSize: 11, color: C.gray, fontWeight: 600, textTransform: 'uppercase' }}>{s.label}</p>
@@ -129,7 +179,9 @@ const VoucherAdminPage: React.FC = () => {
                   </td>
                   <td style={{ padding: '12px 14px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      {!v.is_active && st !== 'expired' && <button onClick={() => handleApprove(v.voucher_id)} style={{ padding:'5px 10px', background:'#DCFCE7', color:C.success, border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>✅ Kích hoạt</button>}
+                      {!v.is_active && st !== 'expired' && (
+                        <button onClick={() => handleApprove(v.voucher_id)} style={{ padding:'5px 10px', background:'#DCFCE7', color:C.success, border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>✅ Kích hoạt</button>
+                      )}
                       <button onClick={() => openEdit(v)} style={{ padding:'5px 10px', background:C.light, color:C.blue, border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>✏️ Sửa</button>
                       <button onClick={() => handleDelete(v.voucher_id)} style={{ padding:'5px 10px', background:'#FEE2E2', color:C.error, border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>🗑️</button>
                     </div>
@@ -152,11 +204,11 @@ const VoucherAdminPage: React.FC = () => {
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
               {[
-                { key:'code', label:'Mã voucher', type:'text', placeholder:'VD: SALE50' },
-                { key:'discount_value', label:'Giá trị giảm', type:'number', placeholder: '' },
-                { key:'usage_limit', label:'Số lượng tối đa', type:'number', placeholder: '' },
-                { key:'start_date', label:'Ngày bắt đầu', type:'date', placeholder: '' },
-                { key:'end_date',   label:'Ngày kết thúc', type:'date', placeholder: '' },
+                { key:'code', label:'Mã voucher *', type:'text', placeholder:'VD: SALE50' },
+                { key:'discount_value', label:'Giá trị giảm *', type:'number', placeholder:'VD: 50 (%) hoặc 50000 (₫)' },
+                { key:'usage_limit', label:'Số lượng tối đa', type:'number', placeholder:'Để trống = không giới hạn' },
+                { key:'start_date', label:'Ngày bắt đầu', type:'date', placeholder:'' },
+                { key:'end_date',   label:'Ngày kết thúc', type:'date', placeholder:'' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ fontSize:12, fontWeight:600, color:C.gray, display:'block', marginBottom:4 }}>{f.label}</label>
@@ -176,8 +228,8 @@ const VoucherAdminPage: React.FC = () => {
             </div>
             <div style={{ display:'flex', gap:10, marginTop:20 }}>
               <button onClick={() => setShowForm(false)} style={{ flex:1, padding:'10px', background:C.tint, color:C.gray, border:'none', borderRadius:9, fontWeight:600, cursor:'pointer' }}>Hủy</button>
-              <button onClick={handleSave} style={{ flex:2, padding:'10px', background:C.blue, color:'white', border:'none', borderRadius:9, fontWeight:700, cursor:'pointer' }}>
-                {editId ? 'Lưu thay đổi' : 'Thêm mới'}
+              <button onClick={handleSave} disabled={saving} style={{ flex:2, padding:'10px', background:C.blue, color:'white', border:'none', borderRadius:9, fontWeight:700, cursor:'pointer' }}>
+                {saving ? '⏳ Đang lưu...' : editId ? 'Lưu thay đổi' : 'Thêm mới'}
               </button>
             </div>
           </div>

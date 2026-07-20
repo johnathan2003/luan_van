@@ -19,4 +19,8 @@ export const warehouseService = {
     API.get('/api/v1/warehouses/manager/incoming', { params }),
   markArrived: (shipmentId: number) =>
     API.post(`/api/v1/warehouses/manager/shipments/${shipmentId}/mark-arrived`),
+  getZoneShippers: () =>
+    API.get('/api/v1/warehouses/manager/zone-shippers'),
+  assignShipper: (shipmentId: number, shipperId: number) =>
+    API.post(`/api/v1/warehouses/manager/shipments/${shipmentId}/assign-shipper`, { shipper_id: shipperId }),
 }

@@ -73,6 +73,7 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { icon: '🛵', label: 'Quản Lý Shipper',   path: '/admin/shippers' },
       { icon: '🏭', label: 'Quản Lý Kho',      path: '/admin/warehouse-managers' },
+      { icon: '🗂️', label: 'Phân Cấp Kho',     path: '/admin/warehouse-hierarchy' },
       { icon: '🚚', label: 'Cấu Hình Vận Chuyển',      path: '/admin/shipping-config' },
     ],
   },

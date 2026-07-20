@@ -225,3 +225,60 @@ def _fmt_shipment(s: Shipment) -> dict:
         "phone": s.order.recipient_phone if s.order else None,
         "amount": float(s.order.final_price) if s.order and s.order.final_price else None,
     }
+
+
+@router.get("/manager/zone-shippers")
+def list_zone_shippers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_warehouse_manager),
+):
+    """Danh sách shipper khu vực được gán vào kho này (để phân công giao hàng nội tỉnh)."""
+    mgr = db.query(WarehouseManager).filter(WarehouseManager.manager_id == current_user.user_id).first()
+    if not mgr or not mgr.warehouse_id:
+        return {"shippers": []}
+    warehouse = db.query(Warehouse).filter(Warehouse.warehouse_id == mgr.warehouse_id).first()
+    province = warehouse.province if warehouse else None
+
+    q = db.query(Shipper).filter(Shipper.shipper_type == "zone")
+    if province:
+        q = q.filter(Shipper.zone_province == province)
+    shippers = q.all()
+    return {
+        "shippers": [
+            {
+                "shipper_id": s.shipper_id,
+                "full_name":  s.user.full_name if s.user else "Unknown",
+                "phone":      s.user.phone if s.user else None,
+                "status":     s.status,
+            }
+            for s in shippers
+        ]
+    }
+
+
+@router.post("/manager/shipments/{shipment_id}/assign-shipper")
+def assign_zone_shipper(
+    shipment_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_warehouse_manager),
+):
+    """Quản lý kho gán shipper khu vực cho đơn hàng đang ở trạng thái at_warehouse/pending."""
+    s = db.query(Shipment).filter(Shipment.shipment_id == shipment_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Shipment không tồn tại")
+    if s.status not in ("at_warehouse", "pending", "assigned"):
+        raise HTTPException(status_code=400, detail=f"Không thể gán shipper khi đơn đang ở trạng thái {s.status}")
+
+    shipper_id = data.get("shipper_id")
+    if not shipper_id:
+        raise HTTPException(status_code=400, detail="Thiếu shipper_id")
+
+    shipper = db.query(Shipper).filter(Shipper.shipper_id == shipper_id).first()
+    if not shipper:
+        raise HTTPException(status_code=404, detail="Shipper không tồn tại")
+
+    s.shipper_id = shipper.shipper_id
+    s.status = "assigned"
+    db.commit()
+    return {"message": f"Đã gán shipper {shipper.user.full_name if shipper.user else shipper_id} cho đơn #{shipment_id}"}

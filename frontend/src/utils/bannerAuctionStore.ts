@@ -447,13 +447,25 @@ export function cancelSubmissionExpired(id: string): boolean {
 // ── Image ref system: lưu ảnh lớn ở key riêng, tránh vượt quota ─────────────
 const IMG_KEY_PREFIX = 'buyzo_img_'
 
-/** Lưu ảnh vào key riêng, trả về ref string 'ref:<key>' */
+/** Lưu ảnh vào key riêng, trả về ref string 'ref:<key>'.
+ * ⚠️ DEPRECATED: dùng idbSave() từ imageDB.ts thay thế (không giới hạn quota).
+ * Hàm này chỉ còn dùng để fallback cho legacy code — KHÔNG lưu base64 mới vào đây.
+ */
 export function saveImage(dataUrl: string): string {
+  // Guard: không lưu raw base64 vào localStorage (sẽ vượt quota 5MB)
+  if (dataUrl.startsWith('data:')) {
+    console.warn('[bannerAuctionStore] saveImage() called with raw base64 — use idbSave() instead. Returning original.')
+    return dataUrl // trả về raw URL để không mất dữ liệu, nhưng không lưu vào localStorage
+  }
   const key = IMG_KEY_PREFIX + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
-  // First try to free space by migrating old raw-embedded images
   migrateRawImages()
-  localStorage.setItem(key, dataUrl) // throws if quota exceeded — caller handles
-  return 'ref:' + key
+  try {
+    localStorage.setItem(key, dataUrl)
+    return 'ref:' + key
+  } catch {
+    console.warn('[bannerAuctionStore] localStorage quota exceeded in saveImage()')
+    return dataUrl
+  }
 }
 
 /** Migrate ảnh raw base64 nhúng trong main store → key riêng (giải phóng quota) */

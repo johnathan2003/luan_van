@@ -45,3 +45,21 @@ class NotificationPreference(Base):
 
     # Relationships
     user = relationship("User", foreign_keys=[user_id])
+
+
+class SystemNotification(Base):
+    """Thông báo hệ thống do admin tạo — gửi tới các nhóm người dùng."""
+    __tablename__ = "system_notifications"
+
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    title      = Column(String(255), nullable=False)
+    content    = Column(Text, nullable=False)
+    type       = Column(String(50), nullable=False, default="info")
+    audience   = Column(String(50), nullable=False, default="all")   # all / user / shop / shipper
+    send_at    = Column(DateTime)
+    sent       = Column(Boolean, default=False)
+    created_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    creator = relationship("User", foreign_keys=[created_by])

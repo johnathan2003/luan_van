@@ -6,18 +6,12 @@
 import React, { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
 import API from '../../services/api'
+import { warehouseService } from '../../services/warehouseService'
 
 const C = {
   navy: '#1E3A8A', teal: '#0D9488', amber: '#D97706',
   success: '#16A34A', error: '#DC2626', gray: '#64748B', purple: '#7C3AED',
 }
-
-const WAREHOUSES = [
-  { id: 1, name: 'Kho HCM',     province: 'TP. Hồ Chí Minh' },
-  { id: 2, name: 'Kho Hà Nội',  province: 'Hà Nội' },
-  { id: 3, name: 'Kho Đà Nẵng', province: 'Đà Nẵng' },
-  { id: 4, name: 'Kho Cần Thơ', province: 'Cần Thơ' },
-]
 
 interface WM {
   user_id: number
@@ -30,11 +24,18 @@ interface WM {
   status: string
 }
 
+interface Warehouse {
+  warehouse_id: number
+  name: string
+  province: string
+}
+
 const EMPTY_FORM = { full_name: '', email: '', phone: '', password: '', warehouse_id: '' }
 
 const WarehouseManagerAdminPage: React.FC = () => {
-  const [managers, setManagers] = useState<WM[]>([])
-  const [loading, setLoading]   = useState(true)
+  const [managers, setManagers]     = useState<WM[]>([])
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([])
+  const [loading, setLoading]       = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm]   = useState({ ...EMPTY_FORM })
   const [saving, setSaving] = useState(false)
@@ -43,9 +44,15 @@ const WarehouseManagerAdminPage: React.FC = () => {
 
   const load = () => {
     setLoading(true)
-    API.get('/api/v1/admin/warehouse-managers')
-      .then((r: any) => setManagers(r.data?.managers ?? []))
-      .catch(() => setManagers(MOCK_MANAGERS))
+    Promise.all([
+      API.get('/api/v1/admin/warehouse-managers'),
+      warehouseService.listWarehouses(),
+    ])
+      .then(([mr, wr]: any[]) => {
+        setManagers(mr.data?.managers ?? [])
+        setWarehouses(wr.data ?? [])
+      })
+      .catch(() => {})
       .finally(() => setLoading(false))
   }
 
@@ -91,7 +98,7 @@ const WarehouseManagerAdminPage: React.FC = () => {
     }
   }
 
-  const wh = (id: number | null) => WAREHOUSES.find(w => w.id === id)
+  const getWh = (id: number | null) => warehouses.find(w => w.warehouse_id === id)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '0 4px' }}>
@@ -107,12 +114,12 @@ const WarehouseManagerAdminPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Warehouse overview */}
+      {/* Warehouse overview — from real data */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-        {WAREHOUSES.map(w => {
-          const count = managers.filter(m => m.warehouse_id === w.id).length
+        {warehouses.map(w => {
+          const count = managers.filter(m => m.warehouse_id === w.warehouse_id).length
           return (
-            <div key={w.id} style={{ background: 'var(--bg-card)', borderRadius: 14, padding: '16px 20px', borderLeft: '4px solid ' + C.teal, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+            <div key={w.warehouse_id} style={{ background: 'var(--bg-card)', borderRadius: 14, padding: '16px 20px', borderLeft: '4px solid ' + C.teal, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
               <p style={{ fontWeight: 800, color: C.navy, margin: '0 0 4px', fontSize: 15 }}>🏭 {w.name}</p>
               <p style={{ color: C.gray, fontSize: 12, margin: '0 0 8px' }}>📍 {w.province}</p>
               <p style={{ color: count > 0 ? C.success : C.error, fontWeight: 700, fontSize: 13, margin: 0 }}>
@@ -141,7 +148,7 @@ const WarehouseManagerAdminPage: React.FC = () => {
             ) : managers.length === 0 ? (
               <tr><td colSpan={6} style={{ padding: 48, textAlign: 'center', color: C.gray }}>Chưa có quản lý kho nào. Nhấn "+ Thêm" để tạo.</td></tr>
             ) : managers.map(m => {
-              const warehouse = wh(m.warehouse_id)
+              const warehouse = getWh(m.warehouse_id)
               return (
                 <tr key={m.user_id} style={{ borderBottom: '1px solid #F1F5F9' }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
@@ -163,6 +170,10 @@ const WarehouseManagerAdminPage: React.FC = () => {
                     {warehouse ? (
                       <span style={{ background: '#CCFBF1', color: C.teal, borderRadius: 8, padding: '4px 12px', fontSize: 13, fontWeight: 700 }}>
                         🏭 {warehouse.name}
+                      </span>
+                    ) : m.warehouse_name ? (
+                      <span style={{ background: '#CCFBF1', color: C.teal, borderRadius: 8, padding: '4px 12px', fontSize: 13, fontWeight: 700 }}>
+                        🏭 {m.warehouse_name}
                       </span>
                     ) : (
                       <span style={{ color: C.error, fontSize: 12 }}>⚠️ Chưa gán kho</span>
@@ -232,8 +243,8 @@ const WarehouseManagerAdminPage: React.FC = () => {
                   onChange={e => setForm(f => ({ ...f, warehouse_id: e.target.value }))}
                   style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #E2E8F0', fontSize: 14, outline: 'none' }}>
                   <option value="">-- Chọn kho --</option>
-                  {WAREHOUSES.map(w => (
-                    <option key={w.id} value={w.id}>{w.name} — {w.province}</option>
+                  {warehouses.map(w => (
+                    <option key={w.warehouse_id} value={w.warehouse_id}>{w.name} — {w.province}</option>
                   ))}
                 </select>
               </div>
@@ -271,8 +282,8 @@ const WarehouseManagerAdminPage: React.FC = () => {
               ['Họ tên', selected.full_name],
               ['Email', selected.email],
               ['Điện thoại', selected.phone || '—'],
-              ['Kho phụ trách', wh(selected.warehouse_id)?.name ?? '—'],
-              ['Tỉnh/Thành phố', wh(selected.warehouse_id)?.province ?? '—'],
+              ['Kho phụ trách', getWh(selected.warehouse_id)?.name ?? selected.warehouse_name ?? '—'],
+              ['Tỉnh/Thành phố', getWh(selected.warehouse_id)?.province ?? selected.province ?? '—'],
               ['URL đăng nhập', '/warehouse'],
               ['Trạng thái', selected.status === 'active' ? '✓ Hoạt động' : '✗ Vô hiệu'],
             ].map(([k, v]) => (
@@ -287,11 +298,5 @@ const WarehouseManagerAdminPage: React.FC = () => {
     </div>
   )
 }
-
-// ── Mock data ──────────────────────────────────────────────────────────────────
-const MOCK_MANAGERS: WM[] = [
-  { user_id: 108, full_name: 'Nguyen Van Kho', email: 'warehouse@example.com', phone: '0908000001', warehouse_id: 1, warehouse_name: 'Kho HCM', province: 'TP. Hồ Chí Minh', status: 'active' },
-  { user_id: 109, full_name: 'Trần Thị Hà',   email: 'manager.hanoi@kho.vn', phone: '0912000002', warehouse_id: 2, warehouse_name: 'Kho Hà Nội', province: 'Hà Nội', status: 'active' },
-]
 
 export default WarehouseManagerAdminPage

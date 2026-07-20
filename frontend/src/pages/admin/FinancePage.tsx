@@ -24,24 +24,24 @@ const TXN_TYPE: Record<string, { label: string; color: string; bg: string }> = {
 }
 
 const FinancePage: React.FC = () => {
-  const [monthly, setMonthly]       = useState<any[]>([])
-  const [transactions, setTransactions] = useState<any[]>([])
-  const [loading, setLoading]       = useState(true)
-  const [period, setPeriod]         = useState<'week' | 'month' | 'year'>('month')
+  const [monthly, setMonthly]         = useState<any[]>([])
+  const [shopRevenue, setShopRevenue] = useState<any[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [period, setPeriod]           = useState<'week' | 'month' | 'year'>('month')
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [revRes, txnRes] = await Promise.all([
+        const [revRes, shopRes] = await Promise.all([
           adminService.getRevenueMonthly(6),
-          adminService.getFinanceTransactions({ limit: 20 }),
+          adminService.getShopRevenueSummary(20),
         ])
         const raw = revRes.data?.monthly ?? revRes.data ?? []
         setMonthly(raw.map((r: any) => ({ ...r, month: monthLabel(r.period) })))
-        setTransactions(txnRes.data?.transactions ?? txnRes.data ?? [])
+        setShopRevenue(shopRes.data?.shops ?? [])
       } catch {
         setMonthly([])
-        setTransactions([])
+        setShopRevenue([])
       } finally {
         setLoading(false)
       }
@@ -149,44 +149,62 @@ const FinancePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Transaction table */}
+      {/* Shop revenue summary */}
       <div className="card" style={{ overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.light}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>Lịch sử giao dịch</h3>
-          <button onClick={() => alert('Xuất giao dịch...')} style={{ padding: '6px 14px', background: C.tint, color: C.blue, border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Xuất CSV</button>
+          <div>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>🏪 Doanh thu theo shop</h3>
+            <p style={{ fontSize: 11, color: C.gray, marginTop: 2 }}>Tổng kết từ đơn hàng hoàn thành · Admin nhận 25% (15% + VAT 10%) · Shipper 5% · Shop 70%</p>
+          </div>
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: C.tint }}>
-              {['Mã TXN', 'Loại', 'Shop', 'Đơn hàng', 'Số tiền', 'Thời gián', 'Trạng thái'].map(h => (
-                <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: C.navy }}>{h}</th>
+              {['#', 'Tên shop', 'Doanh thu (GMV)', 'Shop (70%)', 'Phí sàn (25%)'].map(h => (
+                <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: C.navy, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {transactions.length === 0 ? (
-              <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: C.gray }}>Chưa có giao dịch nào</td></tr>
-            ) : transactions.map(t => {
-              const tp = TXN_TYPE[t.type] ?? { label: t.type, color: C.gray, bg: '#F1F5F9' }
-              const amt = parseFloat(t.amount)
+            {shopRevenue.length === 0 ? (
+              <tr><td colSpan={5} style={{ padding: 32, textAlign: 'center', color: C.gray }}>Chưa có dữ liệu doanh thu theo shop</td></tr>
+            ) : shopRevenue.map((s, idx) => {
+              const totalRev    = Math.round(s.total_revenue || 0)
+              const adminIncome = Math.round((s.admin_fee || 0) + (s.vat_fee || 0))   // 15% + 10% = 25%
+              const admin       = Math.round(s.admin_fee   || 0)
+              const vat         = Math.round(s.vat_fee     || 0)
+              const shipper     = Math.round(s.shipper_fee || 0)
+              const profit      = Math.round(s.shop_profit || 0)
               return (
-                <tr key={t.txn_id} style={{ borderBottom: `1px solid ${C.tint}` }}
+                <tr key={s.shop_id} style={{ borderBottom: `1px solid ${C.tint}` }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFF')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                  <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: C.blue }}>TXN-{String(t.txn_id).padStart(3, '0')}</td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: tp.bg, color: tp.color }}>{tp.label}</span>
+                  {/* Rank */}
+                  <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: idx < 3 ? C.warning : C.gray }}>
+                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
                   </td>
-                  <td style={{ padding: '12px 16px', fontSize: 13 }}>{t.shop_name || '—'}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 13, color: C.gray }}>{t.order_id ? `#${t.order_id}` : '—'}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 14, fontWeight: 700, color: amt >= 0 ? C.success : C.error }}>
-                    {amt >= 0 ? '+' : ''}{fmt(amt)}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: 12, color: C.gray }}>{(t.created_at || '').slice(0, 16).replace('T', ' ')}</td>
+                  {/* Tên shop */}
                   <td style={{ padding: '12px 16px' }}>
-                    <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: t.status === 'completed' ? '#DCFCE7' : '#FEF3C7', color: t.status === 'completed' ? C.success : C.warning, fontWeight: 700 }}>
-                      {t.status === 'completed' ? 'Hoàn thành' : t.status === 'cancelled' ? 'Đã hủy' : 'Đang xử lý'}
-                    </span>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: C.navy }}>{s.shop_name}</div>
+                    <div style={{ fontSize: 11, color: C.gray }}>ID: {s.shop_id}</div>
+                  </td>
+                  {/* Doanh thu */}
+                  <td style={{ padding: '12px 16px', fontSize: 14, fontWeight: 700, color: C.blue }}>
+                    {fmt(totalRev)}
+                  </td>
+                  {/* Shop 70% */}
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: '#7C3AED' }}>+{fmt(profit)}</div>
+                    <div style={{ fontSize: 10, color: C.gray, marginTop: 2 }}>70% doanh thu</div>
+                  </td>
+                  {/* Admin nhận 25% */}
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: C.success }}>+{fmt(adminIncome)}</div>
+                    <div style={{ fontSize: 10, color: C.gray, marginTop: 2 }}>
+                      <span title="Phí admin 15%">🏢 {fmt(admin)}</span>
+                      {' · '}
+                      <span title="VAT 10%">🧾 {fmt(vat)}</span>
+                    </div>
                   </td>
                 </tr>
               )
@@ -194,6 +212,7 @@ const FinancePage: React.FC = () => {
           </tbody>
         </table>
       </div>
+
     </div>
   )
 }

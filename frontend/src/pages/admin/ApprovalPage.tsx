@@ -57,18 +57,17 @@ const ApprovalPage: React.FC = () => {
       tab === 'shop'    ? adminService.getShopRegistrations() :
       tab === 'shipper' ? adminService.getShipperRegistrations() :
                           adminService.getPendingProducts()
-    const useMock = () => {
-      if (tab === 'shop')         setShops(MOCK_SHOPS)
-      else if (tab === 'shipper') setShippers(MOCK_SHIPPERS)
-      else                        setProducts(MOCK_MALL)
-    }
     call
       .then(r => {
         const d = r.data?.[key] ?? r.data
-        if (Array.isArray(d) && d.length > 0) setter(d)
-        else useMock()
+        setter(Array.isArray(d) ? d : [])
       })
-      .catch(useMock)
+      .catch(() => {
+        // API không khả dụng — hiển thị demo data để preview UI
+        if (tab === 'shop')         setShops(MOCK_SHOPS)
+        else if (tab === 'shipper') setShippers(MOCK_SHIPPERS)
+        else                        setProducts(MOCK_MALL)
+      })
       .finally(() => setLoading(false))
   }
 

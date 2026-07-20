@@ -144,7 +144,7 @@ const AllShipmentsPage: React.FC = () => {
     setAssignTarget(s)
     setPickedShipper('')
     // Lấy danh sách shipper khu vực của kho này
-    warehouseService.getZoneShippers?.()
+    warehouseService.getZoneShippers()
       .then((r: any) => setZoneShippers(r.data?.shippers ?? []))
       .catch(() => setZoneShippers(MOCK_ZONE_SHIPPERS))
   }
@@ -153,7 +153,7 @@ const AllShipmentsPage: React.FC = () => {
     if (!assignTarget || !pickedShipper) return
     setAssigning(true)
     try {
-      await warehouseService.assignShipper?.(assignTarget.shipment_id, Number(pickedShipper))
+      await warehouseService.assignShipper(assignTarget.shipment_id, Number(pickedShipper))
       const shipper = zoneShippers.find(z => z.shipper_id === pickedShipper)
       setShipments(ss => ss.map(s =>
         s.shipment_id === assignTarget.shipment_id

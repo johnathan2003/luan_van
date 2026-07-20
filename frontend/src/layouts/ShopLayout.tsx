@@ -8,15 +8,16 @@ import { shopService } from '../services/shopService'
 import { shopFlagStore } from '../utils/shopFlagStore'
 
 const SHOP_NAV = [
-  { icon: '\u{1F4CA}', label: 'Tổng quan',   path: '/shop' },
-  { icon: '\u{1F3F7}️', label: 'Sản phẩm',  path: '/shop/products' },
-  { icon: '\u{1F4E6}', label: 'Đơn hàng',   path: '/shop/orders' },
-  { icon: '\u{1F4AC}', label: 'Tin nhắn',   path: '/shop/chat' },
-  { icon: '\u{1F465}', label: 'Nhân viên',  path: '/shop/employees' },
-  { icon: '\u{1F4C8}', label: 'Thống kê',   path: '/shop/analytics' },
+  { icon: '\u{1F4CA}', label: 'Tổng Quan',   path: '/shop' },
+  { icon: '\u{1F3F7}️', label: 'Sản Phẩm',  path: '/shop/products' },
+  { icon: '\u{1F4E6}', label: 'Đơn Hàng',   path: '/shop/orders' },
+  { icon: '\u{1F4AC}', label: 'Tin Nhắn',   path: '/shop/chat' },
+  { icon: '\u{1F465}', label: 'Nhân Viên',  path: '/shop/employees' },
+  { icon: '\u{1F4C8}', label: 'Doanh Thu',  path: '/shop/revenue' },
   { icon: '\u{1F3AB}', label: 'Voucher',    path: '/shop/vouchers' },
-  { icon: '\u{1F3C6}', label: 'Đấu giá QC', path: '/shop/auction' },
-  { icon: '⚠️',        label: 'Khiếu nại',  path: '/complaints' },
+  { icon: '\u{1F3C6}', label: 'Đấu Giá Quảng Cáo', path: '/shop/auction' },
+  { icon: '💰',        label: 'Ví Tiền',           path: '/shop/wallet' },
+  { icon: '⚠️',        label: 'Khiếu Nại',  path: '/complaints' },
 ]
 
 const ShopSidebar: React.FC = () => {

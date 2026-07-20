@@ -399,7 +399,11 @@ const ProductManagement: React.FC = () => {
         toast.success('Đã thêm sản phẩm, chờ duyệt')
       }
       setModalOpen(false); load()
-    } catch (err: any) { toast.error(err.response?.data?.detail || 'Lỗi khi lưu') }
+    } catch (err: any) {
+      console.error('Save error:', err)
+      const errMsg = err?.response?.data?.detail || err?.message || 'Lỗi khi lưu'
+      toast.error(errMsg)
+    }
   }
 
   const handleDelete = async (id: number) => {
@@ -1076,6 +1080,62 @@ const ProductManagement: React.FC = () => {
                 onChange={e => setSimpleForm(f => ({ ...f, stock_quantity: Number(e.target.value) }))} placeholder="0" />
             </div>
           </div>
+
+          {/* 💰 Lợi nhuận ước tính */}
+          {simpleForm.price > 0 && (() => {
+            const gross    = simpleForm.price
+            const fee      = Math.round(gross * 0.30)
+            const admin    = Math.round(gross * 0.15)
+            const shipper  = Math.round(gross * 0.05)
+            const vat      = Math.round(gross * 0.10)
+            const profit   = gross - fee
+            const fmt      = (n: number) => n.toLocaleString('vi-VN') + '₫'
+            return (
+              <div style={{
+                borderRadius: 10, padding: '12px 14px',
+                background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                border: '1px solid #86efac',
+                fontSize: 13,
+              }}>
+                <div style={{ fontWeight: 700, color: '#15803d', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  💰 Ước tính lợi nhuận / đơn hàng
+                </div>
+                {/* Bar */}
+                <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', height: 10, marginBottom: 10 }}>
+                  <div style={{ width: '70%', background: '#16a34a' }} title="Lợi nhuận shop 70%" />
+                  <div style={{ width: '15%', background: '#f59e0b' }} title="Admin 15%" />
+                  <div style={{ width: '5%',  background: '#3b82f6' }} title="Shipper 5%" />
+                  <div style={{ width: '10%', background: '#94a3b8' }} title="VAT 10%" />
+                </div>
+                {/* Rows */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>💵 Khách thanh toán</span>
+                    <span style={{ fontWeight: 600, color: '#1e293b' }}>{fmt(gross)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>📉 Chi phí sàn (30%)</span>
+                    <span style={{ color: '#dc2626' }}>−{fmt(fee)}</span>
+                  </div>
+                  <div style={{ paddingLeft: 14, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: 12 }}>
+                      <span>└ Admin (15%)</span><span>−{fmt(admin)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: 12 }}>
+                      <span>└ Shipper (5%)</span><span>−{fmt(shipper)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: 12 }}>
+                      <span>└ VAT (10%)</span><span>−{fmt(vat)}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #86efac', paddingTop: 6, marginTop: 2 }}>
+                    <span style={{ fontWeight: 700, color: '#15803d' }}>✅ Shop nhận được (70%)</span>
+                    <span style={{ fontWeight: 800, fontSize: 15, color: '#15803d' }}>{fmt(profit)}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Thuộc tính sản phẩm */}
           <div>

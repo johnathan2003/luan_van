@@ -815,6 +815,56 @@ def finance_revenue_monthly(
     }
 
 
+@router.get("/finance/shop-revenue")
+def finance_shop_revenue(
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Tổng kết doanh thu theo từng shop (completed orders)."""
+    from app.models.order import Order
+    from app.models.shop import Shop
+
+    SHOP_RATE = 0.70   # shop nhận 70%
+    FEE_RATE  = 0.30   # phí sàn 30%
+
+    rows = (
+        db.query(
+            Shop.shop_id,
+            Shop.shop_name,
+            func.count(Order.order_id).label("total_orders"),
+            func.sum(Order.final_price).label("total_revenue"),
+            func.max(Order.created_at).label("last_order_at"),
+        )
+        .join(Order, Order.shop_id == Shop.shop_id)
+        .filter(Order.order_status == "completed")
+        .group_by(Shop.shop_id, Shop.shop_name)
+        .order_by(func.sum(Order.final_price).desc())
+        .limit(limit)
+        .all()
+    )
+
+    result = []
+    for r in rows:
+        rev   = float(r.total_revenue or 0)
+        fee   = round(rev * FEE_RATE,  2)
+        profit = round(rev * SHOP_RATE, 2)
+        result.append({
+            "shop_id":       r.shop_id,
+            "shop_name":     r.shop_name,
+            "total_orders":  int(r.total_orders or 0),
+            "total_revenue": rev,
+            "platform_fee":  fee,
+            "admin_fee":     round(rev * 0.15, 2),
+            "shipper_fee":   round(rev * 0.05, 2),
+            "vat_fee":       round(rev * 0.10, 2),
+            "shop_profit":   profit,
+            "last_order_at": (r.last_order_at or "").isoformat()[:16] if r.last_order_at else None,
+        })
+
+    return {"shops": result, "total": len(result)}
+
+
 @router.get("/finance/transactions")
 def finance_transactions(
     page: int = Query(1, ge=1),
@@ -1120,3 +1170,205 @@ def report_voucher_usage(
             for v in vouchers
         ]
     }
+
+
+@router.put("/vouchers/{voucher_id}")
+def update_voucher(
+    voucher_id: int,
+    data: dict,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin: cập nhật thông tin voucher."""
+    from app.models.voucher import Voucher
+    v = db.query(Voucher).filter(Voucher.voucher_id == voucher_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Voucher không tồn tại")
+    for field in ("code", "discount_type", "discount_value", "usage_limit", "start_date", "end_date", "is_active", "min_order_value", "max_discount"):
+        if field in data and data[field] is not None:
+            setattr(v, field, data[field])
+    db.commit()
+    return {"message": "Đã cập nhật voucher", "voucher_id": voucher_id}
+
+
+@router.delete("/vouchers/{voucher_id}")
+def delete_voucher(
+    voucher_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin: xóa voucher."""
+    from app.models.voucher import Voucher
+    v = db.query(Voucher).filter(Voucher.voucher_id == voucher_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Voucher không tồn tại")
+    db.delete(v)
+    db.commit()
+    return {"message": "Đã xóa voucher"}
+
+
+@router.post("/vouchers")
+def create_voucher(
+    data: dict,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin: tạo voucher mới."""
+    from app.models.voucher import Voucher
+    if not data.get("code") or not data.get("discount_value"):
+        raise HTTPException(status_code=400, detail="Thiếu thông tin bắt buộc (code, discount_value)")
+    existing = db.query(Voucher).filter(Voucher.code == data["code"]).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Mã voucher đã tồn tại")
+    v = Voucher(
+        code=data["code"],
+        discount_type=data.get("discount_type", "percentage"),
+        discount_value=data["discount_value"],
+        usage_limit=data.get("usage_limit"),
+        start_date=data.get("start_date"),
+        end_date=data.get("end_date"),
+        is_active=data.get("is_active", True),
+        min_order_value=data.get("min_order_value"),
+        max_discount=data.get("max_discount"),
+        voucher_type="platform",
+    )
+    db.add(v)
+    db.commit()
+    db.refresh(v)
+    return {"message": "Đã tạo voucher", "voucher_id": v.voucher_id}
+
+
+# ─── System Notifications ────────────────────────────────────────────────────
+
+@router.get("/system-notifications")
+def list_system_notifications(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin: danh sách thông báo hệ thống."""
+    from app.models.notification import SystemNotification
+    from app.utils.helpers import paginate
+    q = db.query(SystemNotification).order_by(SystemNotification.created_at.desc())
+    items, total, pages = paginate(q, page, limit)
+    return {
+        "notifications": [
+            {
+                "id":         n.id,
+                "title":      n.title,
+                "content":    n.content,
+                "type":       n.type,
+                "audience":   n.audience,
+                "send_at":    str(n.send_at) if n.send_at else None,
+                "sent":       n.sent,
+                "created_at": str(n.created_at),
+            }
+            for n in items
+        ],
+        "total": total,
+        "pages": pages,
+    }
+
+
+@router.post("/system-notifications")
+def create_system_notification(
+    data: dict,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin: tạo thông báo hệ thống mới và tùy chọn gửi ngay."""
+    from app.models.notification import SystemNotification
+    if not data.get("title") or not data.get("content"):
+        raise HTTPException(400, "Thiếu tiêu đề hoặc nội dung")
+    sn = SystemNotification(
+        title=data["title"],
+        content=data["content"],
+        type=data.get("type", "info"),
+        audience=data.get("audience", "all"),
+        send_at=data.get("send_at"),
+        created_by=current_user.user_id,
+        sent=False,
+    )
+    db.add(sn)
+    db.commit()
+    db.refresh(sn)
+
+    # Nếu không có send_at → gửi ngay cho tất cả user phù hợp
+    if not sn.send_at:
+        _broadcast_system_notification(db, sn, current_user)
+        sn.sent = True
+        db.commit()
+
+    return {"message": "Đã tạo thông báo", "id": sn.id, "sent": sn.sent}
+
+
+@router.put("/system-notifications/{notif_id}")
+def update_system_notification(
+    notif_id: int,
+    data: dict,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin: cập nhật thông báo hệ thống (chỉ khi chưa gửi)."""
+    from app.models.notification import SystemNotification
+    sn = db.query(SystemNotification).filter(SystemNotification.id == notif_id).first()
+    if not sn:
+        raise HTTPException(404, "Không tìm thấy thông báo")
+    for field in ("title", "content", "type", "audience", "send_at"):
+        if field in data:
+            setattr(sn, field, data[field])
+    db.commit()
+    return {"message": "Đã cập nhật"}
+
+
+@router.delete("/system-notifications/{notif_id}")
+def delete_system_notification(
+    notif_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin: xóa thông báo hệ thống."""
+    from app.models.notification import SystemNotification
+    sn = db.query(SystemNotification).filter(SystemNotification.id == notif_id).first()
+    if not sn:
+        raise HTTPException(404, "Không tìm thấy thông báo")
+    db.delete(sn)
+    db.commit()
+    return {"message": "Đã xóa"}
+
+
+@router.post("/system-notifications/{notif_id}/send")
+def send_system_notification(
+    notif_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin: gửi thông báo hệ thống ngay lập tức."""
+    from app.models.notification import SystemNotification
+    sn = db.query(SystemNotification).filter(SystemNotification.id == notif_id).first()
+    if not sn:
+        raise HTTPException(404, "Không tìm thấy thông báo")
+    _broadcast_system_notification(db, sn, current_user)
+    sn.sent = True
+    db.commit()
+    return {"message": "Đã gửi thông báo"}
+
+
+def _broadcast_system_notification(db, sn, sender):
+    """Tạo notification riêng cho từng user thuộc audience."""
+    from app.models.user import User as UserModel, Role
+    from app.services.notification_service import create_notification
+    q = db.query(UserModel)
+    if sn.audience != "all":
+        role_obj = db.query(Role).filter(Role.role_name == sn.audience).first()
+        if role_obj:
+            from app.models.user import UserRole
+            user_ids = [ur.user_id for ur in db.query(UserRole).filter(UserRole.role_id == role_obj.role_id).all()]
+            q = q.filter(UserModel.user_id.in_(user_ids))
+    users = q.filter(UserModel.is_active == True).all()
+    for u in users[:500]:   # giới hạn 500 để tránh timeout
+        try:
+            create_notification(db, u.user_id, sn.title, sn.content, notif_type=sn.type)
+        except Exception:
+            pass

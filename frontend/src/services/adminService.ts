@@ -60,6 +60,8 @@ export const adminService = {
   getRevenueMonthly: (months = 6) => API.get('/api/v1/admin/finance/revenue-monthly', { params: { months } }),
   getFinanceTransactions: (params: { page?: number; limit?: number; type?: string } = {}) =>
     API.get('/api/v1/admin/finance/transactions', { params }),
+  getShopRevenueSummary: (limit = 20) =>
+    API.get('/api/v1/admin/finance/shop-revenue', { params: { limit } }),
   // Shipping zones
   getShippingZones: () => API.get('/api/v1/admin/shipping-zones'),
   createShippingZone: (data: any) => API.post('/api/v1/admin/shipping-zones', data),

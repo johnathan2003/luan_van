@@ -78,7 +78,7 @@ const ShopOverviewPage: React.FC = () => {
       {analytics && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
           {[
-            { label: 'Doanh thu (30 ngày)', value: formatCurrency(analytics.total_revenue), icon: '💰', color: 'var(--primary)', path: '/shop/analytics' },
+            { label: 'Doanh thu (30 ngày)', value: formatCurrency(analytics.total_revenue), icon: '💰', color: 'var(--primary)', path: '/shop/revenue' },
             { label: 'Tổng đơn hàng',       value: analytics.total_orders,                 icon: '📦', color: 'var(--info)',    path: '/shop/orders' },
             { label: 'Sản phẩm',            value: analytics.total_products,               icon: '🏷️', color: 'var(--success)', path: '/shop/products' },
             { label: 'Khiếu nại đang chờ',  value: pendingDisputes.length,                 icon: '⚠️', color: '#dc2626',        path: '/complaints' },

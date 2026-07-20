@@ -356,23 +356,37 @@ const BannerAuctionPage: React.FC = () => {
     setFlashImgError(''); setFlashForm(f => ({ ...f, image: result.dataUrl! }))
   }
 
-  const handleSubmitBanner = () => {
+  const handleSubmitBanner = async () => {
     if (!submitTarget || submitTarget.kind !== 'banner') return
     if (!bannerForm.title.trim() || !bannerForm.image) { toast.error('Vui lòng nhập tiêu đề và chọn hình ảnh banner đúng yêu cầu.'); return }
     if (bannerImgError) { toast.error(bannerImgError); return }
-    const result = submitBanner(submitTarget.session.id, { title: bannerForm.title.trim(), link: bannerForm.link.trim() || undefined, image: bannerForm.image })
-    if (!result) { toast.error('Không thể đăng banner — vui lòng thử lại.'); return }
-    toast.success('📢 Đã gửi banner cho Admin duyệt!'); setSubmitTarget(null); refresh()
+    try {
+      // Lưu ảnh vào IndexedDB (không bị giới hạn 5MB như localStorage)
+      const { idbSave, isIDBRef } = await import('../../utils/imageDB')
+      const imageRef = isIDBRef(bannerForm.image) ? bannerForm.image : await idbSave(bannerForm.image)
+      const result = submitBanner(submitTarget.session.id, { title: bannerForm.title.trim(), link: bannerForm.link.trim() || undefined, image: imageRef })
+      if (!result) { toast.error('Không thể đăng banner — vui lòng thử lại.'); return }
+      toast.success('📢 Đã gửi banner cho Admin duyệt!'); setSubmitTarget(null); refresh()
+    } catch {
+      toast.error('Lỗi lưu ảnh — vui lòng thử lại.')
+    }
   }
 
-  const handleSubmitFlash = () => {
+  const handleSubmitFlash = async () => {
     if (!submitTarget || submitTarget.kind !== 'flash') return
     const priceNum = Number(flashForm.price.replace(/[^\d]/g, ''))
     if (!flashForm.productName.trim() || !priceNum || priceNum <= 0 || !flashForm.image) { toast.error('Vui lòng nhập đầy đủ tên sản phẩm, giá tiền và hình ảnh đúng yêu cầu.'); return }
     if (flashImgError) { toast.error(flashImgError); return }
-    const result = submitFlashProduct(submitTarget.session.id, { productName: flashForm.productName.trim(), price: priceNum, productImage: flashForm.image })
-    if (!result) { toast.error('Không thể đăng sản phẩm — vui lòng thử lại.'); return }
-    toast.success('📦 Đã gửi sản phẩm cho Admin duyệt!'); setSubmitTarget(null); refreshFlash()
+    try {
+      // Lưu ảnh vào IndexedDB (không bị giới hạn 5MB như localStorage)
+      const { idbSave, isIDBRef } = await import('../../utils/imageDB')
+      const imageRef = isIDBRef(flashForm.image) ? flashForm.image : await idbSave(flashForm.image)
+      const result = submitFlashProduct(submitTarget.session.id, { productName: flashForm.productName.trim(), price: priceNum, productImage: imageRef })
+      if (!result) { toast.error('Không thể đăng sản phẩm — vui lòng thử lại.'); return }
+      toast.success('📦 Đã gửi sản phẩm cho Admin duyệt!'); setSubmitTarget(null); refreshFlash()
+    } catch {
+      toast.error('Lỗi lưu ảnh — vui lòng thử lại.')
+    }
   }
 
   // ── Render helpers ────────────────────────────────────────────────────────

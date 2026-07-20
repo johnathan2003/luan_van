@@ -7,6 +7,7 @@ import { fetchProducts, fetchCategories, setFilters, resetFilters } from '../sto
 import { formatCurrency } from '../utils/formatters'
 import { getAllSubmissions, resolveImage } from '../utils/bannerAuctionStore'
 import { resolveImageAsync } from '../utils/imageDB'
+import API from '../services/api'
 
 // ─── Banner ───────────────────────────────────────────────────────────────────
 type BannerItem = { src: string; link?: string; title?: string }
@@ -151,9 +152,9 @@ const FlashSaleSection: React.FC = () => {
   const scroll = (dir: number) => scrollRef.current?.scrollBy({ left: dir * 220, behavior: 'smooth' })
 
   useEffect(() => {
-    fetch('/api/v1/shop/public/featured/products?limit=12')
-      .then(r => r.ok ? r.json() : { products: [] })
-      .then(d => setItems(d.products ?? []))
+    API.get('/api/v1/products', { params: { limit: 12, sort: 'popular' } })
+      .then(r => setItems(r.data.products ?? []))
+      .catch(() => {})
   }, [])
 
   // Nếu không có sản phẩm thật → không hiện section
@@ -367,9 +368,8 @@ const BuyZoMallSection: React.FC = () => {
   }, [mallBannerAds.length])
 
   useEffect(() => {
-    fetch('/api/v1/shop/public/mall/products?limit=8')
-      .then(r => r.ok ? r.json() : { products: [] })
-      .then(d => { if ((d.products ?? []).length > 0) setApiItems(d.products.slice(0, 8)) })
+    API.get('/api/v1/products', { params: { limit: 8, sort: 'popular' } })
+      .then(r => { const p = r.data.products ?? []; if (p.length > 0) setApiItems(p.slice(0, 8)) })
       .catch(() => {})
   }, [])
 
@@ -471,9 +471,9 @@ const NewProductsSection: React.FC = () => {
   const scroll = (dir: number) => scrollRef.current?.scrollBy({ left: dir * 210, behavior: 'smooth' })
 
   useEffect(() => {
-    fetch('/api/v1/shop/public/new-products?limit=12')
-      .then(r => r.ok ? r.json() : { products: [] })
-      .then(d => setItems(d.products ?? []))
+    API.get('/api/v1/products', { params: { limit: 12, sort: 'newest' } })
+      .then(r => setItems(r.data.products ?? []))
+      .catch(() => {})
   }, [])
 
   if (items.length === 0) return null

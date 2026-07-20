@@ -1,18 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
 import API from '../../services/api'
+import { warehouseService } from '../../services/warehouseService'
 
 const C = {
   amber: '#D97706', navy: '#1E3A8A', gray: '#64748B',
   success: '#16A34A', error: '#DC2626', purple: '#7C3AED', teal: '#0D9488',
 }
-
-const WAREHOUSES = [
-  { id: 1, name: 'Kho HCM',     province: 'TP. Hồ Chí Minh' },
-  { id: 2, name: 'Kho Hà Nội',  province: 'Hà Nội' },
-  { id: 3, name: 'Kho Đà Nẵng', province: 'Đà Nẵng' },
-  { id: 4, name: 'Kho Cần Thơ', province: 'Cần Thơ' },
-]
 
 const TYPE_MAP: Record<string, { label: string; icon: string; color: string; bg: string }> = {
   zone:           { label: 'Khu vực',   icon: '🏍️', color: C.teal,   bg: '#CCFBF1' },
@@ -33,20 +27,33 @@ interface Shipper {
   status: string
 }
 
+interface Warehouse {
+  warehouse_id: number
+  name: string
+  province: string
+}
+
 const ShipperManagementPage: React.FC = () => {
-  const [shippers, setShippers] = useState<Shipper[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [search, setSearch]     = useState('')
+  const [shippers, setShippers]     = useState<Shipper[]>([])
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [search, setSearch]         = useState('')
   const [filterType, setFilterType] = useState('all')
-  const [actingId, setActingId] = useState<number | null>(null)
+  const [actingId, setActingId]     = useState<number | null>(null)
   const [assignModal, setAssignModal] = useState<Shipper | null>(null)
   const [selectedWarehouse, setSelectedWarehouse] = useState<number | ''>('')
 
   const load = () => {
     setLoading(true)
-    API.get('/api/v1/admin/shippers', { params: { limit: 100 } })
-      .then((r: any) => setShippers(r.data?.shippers ?? []))
-      .catch(() => setShippers(MOCK_SHIPPERS))
+    Promise.all([
+      API.get('/api/v1/admin/shippers', { params: { limit: 100 } }),
+      warehouseService.listWarehouses(),
+    ])
+      .then(([sr, wr]: any[]) => {
+        setShippers(sr.data?.shippers ?? [])
+        setWarehouses(wr.data ?? [])
+      })
+      .catch(() => {})
       .finally(() => setLoading(false))
   }
 
@@ -59,7 +66,7 @@ const ShipperManagementPage: React.FC = () => {
       await API.post(`/api/v1/admin/shippers/${assignModal.user_id}/assign-warehouse`, {
         warehouse_id: selectedWarehouse,
       })
-      const wh = WAREHOUSES.find(w => w.id === selectedWarehouse)
+      const wh = warehouses.find(w => w.warehouse_id === selectedWarehouse)
       toast.success(`Đã gán ${assignModal.full_name} vào ${wh?.name}`)
       setShippers(s => s.map(x =>
         x.user_id === assignModal.user_id
@@ -87,6 +94,8 @@ const ShipperManagementPage: React.FC = () => {
     inter: shippers.filter(s => s.shipper_type === 'inter_province').length,
     unassigned: shippers.filter(s => s.shipper_type === 'zone' && !s.home_warehouse_id).length,
   }
+
+  const whName = (id: number | null) => warehouses.find(w => w.warehouse_id === id)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '0 4px' }}>
@@ -150,10 +159,9 @@ const ShipperManagementPage: React.FC = () => {
               <tr><td colSpan={7} style={{ padding: 48, textAlign: 'center', color: C.gray }}>Không tìm thấy shipper</td></tr>
             ) : filtered.map(s => {
               const st = TYPE_MAP[s.shipper_type] ?? TYPE_MAP.zone
-              const wh = WAREHOUSES.find(w => w.id === s.home_warehouse_id)
+              const wh = whName(s.home_warehouse_id)
               return (
                 <tr key={s.user_id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                  {/* Name */}
                   <td style={{ padding: '14px 16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ width: 38, height: 38, borderRadius: '50%', background: st.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
@@ -165,27 +173,19 @@ const ShipperManagementPage: React.FC = () => {
                       </div>
                     </div>
                   </td>
-
-                  {/* Contact */}
                   <td style={{ padding: '14px 16px' }}>
                     <p style={{ fontSize: 13, color: C.navy, margin: 0 }}>{s.email}</p>
                     <p style={{ fontSize: 12, color: C.gray, margin: 0 }}>{s.phone || '—'}</p>
                   </td>
-
-                  {/* Type */}
                   <td style={{ padding: '14px 16px' }}>
                     <span style={{ background: st.bg, color: st.color, borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
                       {st.icon} {st.label}
                     </span>
                   </td>
-
-                  {/* Vehicle */}
                   <td style={{ padding: '14px 16px' }}>
                     <p style={{ fontSize: 13, color: C.navy, margin: 0 }}>{s.vehicle_type}</p>
                     <p style={{ fontSize: 12, color: C.gray, margin: 0 }}>{s.license_plate}</p>
                   </td>
-
-                  {/* Status */}
                   <td style={{ padding: '14px 16px' }}>
                     <span style={{
                       background: s.status === 'available' ? '#DCFCE7' : s.status === 'on_delivery' ? '#DBEAFE' : '#FEE2E2',
@@ -195,8 +195,6 @@ const ShipperManagementPage: React.FC = () => {
                       {s.status === 'available' ? '✓ Sẵn sàng' : s.status === 'on_delivery' ? '🚚 Đang giao' : '✗ Offline'}
                     </span>
                   </td>
-
-                  {/* Warehouse */}
                   <td style={{ padding: '14px 16px' }}>
                     {wh ? (
                       <div>
@@ -209,8 +207,6 @@ const ShipperManagementPage: React.FC = () => {
                       <span style={{ color: C.error, fontSize: 12, fontWeight: 600 }}>⚠️ Chưa gán kho</span>
                     )}
                   </td>
-
-                  {/* Action */}
                   <td style={{ padding: '14px 16px' }}>
                     {s.shipper_type === 'zone' ? (
                       <button
@@ -238,18 +234,16 @@ const ShipperManagementPage: React.FC = () => {
             onClick={e => e.stopPropagation()}>
             <h3 style={{ fontWeight: 800, color: C.navy, marginBottom: 4 }}>🏭 Gán kho cho shipper</h3>
             <p style={{ color: C.gray, fontSize: 14, marginBottom: 20 }}>{assignModal.full_name}</p>
-
             <label style={{ fontSize: 13, fontWeight: 600, color: C.gray, display: 'block', marginBottom: 8 }}>Chọn kho phụ trách</label>
             <select
               value={selectedWarehouse}
               onChange={e => setSelectedWarehouse(Number(e.target.value) || '')}
               style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #E2E8F0', fontSize: 14, marginBottom: 20, outline: 'none' }}>
               <option value="">-- Chọn kho --</option>
-              {WAREHOUSES.map(w => (
-                <option key={w.id} value={w.id}>{w.name} — {w.province}</option>
+              {warehouses.map(w => (
+                <option key={w.warehouse_id} value={w.warehouse_id}>{w.name} — {w.province}</option>
               ))}
             </select>
-
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setAssignModal(null)}
                 style={{ flex: 1, padding: '10px 0', background: '#F1F5F9', color: C.gray, border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
@@ -266,14 +260,5 @@ const ShipperManagementPage: React.FC = () => {
     </div>
   )
 }
-
-// ── Mock data ──────────────────────────────────────────────────────────────────
-const MOCK_SHIPPERS: Shipper[] = [
-  { user_id: 11, shipper_id: 1, full_name: 'Trần Thị B',    email: 'shipper2@demo.vn', phone: '0902222222', vehicle_type: 'motorcycle',   license_plate: '51B-00002', shipper_type: 'zone',           zone_province: 'TP. Hồ Chí Minh', home_warehouse_id: 1, status: 'available' },
-  { user_id: 12, shipper_id: 2, full_name: 'Lê Văn C',      email: 'shipper3@demo.vn', phone: '0903333333', vehicle_type: 'truck_medium', license_plate: '51C-00003', shipper_type: 'inter_province', zone_province: null,               home_warehouse_id: null, status: 'available' },
-  { user_id: 13, shipper_id: 3, full_name: 'Phạm Thị D',    email: 'shipper4@demo.vn', phone: '0904444444', vehicle_type: 'truck_large',  license_plate: '51D-00004', shipper_type: 'inter_province', zone_province: null,               home_warehouse_id: null, status: 'available' },
-  { user_id: 14, shipper_id: 4, full_name: 'Hoàng Văn E',   email: 'shipper5@demo.vn', phone: '0905555555', vehicle_type: 'motorcycle',   license_plate: '51E-00005', shipper_type: 'zone',           zone_province: 'Hà Nội',           home_warehouse_id: 2, status: 'on_delivery' },
-  { user_id: 15, shipper_id: 5, full_name: 'Nguyễn Thị F',  email: 'shipper6@demo.vn', phone: '0906666666', vehicle_type: 'motorcycle',   license_plate: '51F-00006', shipper_type: 'zone',           zone_province: null,               home_warehouse_id: null, status: 'available' },
-]
 
 export default ShipperManagementPage

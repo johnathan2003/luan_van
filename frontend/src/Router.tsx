@@ -36,36 +36,40 @@ import ProductManagementPage    from './pages/shop/ProductManagementPage'
 import OrderManagementPage      from './pages/shop/OrderManagementPage'
 import EmployeeManagementPage   from './pages/shop/EmployeeManagementPage'
 import AnalyticsPage            from './pages/shop/AnalyticsPage'
+import ShopRevenueDetailPage    from './pages/shop/ShopRevenueDetailPage'
 import VoucherManagementPage    from './pages/shop/VoucherManagementPage'
 import BuyZoMallRegisterPage    from './pages/shop/BuyZoMallRegisterPage'
 import VoucherCenterPage        from './pages/VoucherCenterPage'
 
-const BannerAuctionPage     = React.lazy(() => import('./pages/shop/BannerAuctionPage'))
-const AuctionManagementPage = React.lazy(() => import('./pages/admin/AuctionManagementPage'))
+// ── 🏪 Shop lazy pages ────────────────────────────────────────────────────────
+const BannerAuctionPage  = React.lazy(() => import('./pages/shop/BannerAuctionPage'))
+const AuctionLivePage    = React.lazy(() => import('./pages/shop/AuctionLivePage'))
+const WalletPage         = React.lazy(() => import('./pages/shop/WalletPage'))
 
-// ── ⚙️ Admin pages ────────────────────────────────────────────────────────────
-import AdminOverviewPage        from './pages/admin/AdminOverviewPage'
-import UserManagementPage       from './pages/admin/UserManagementPage'
-import ApprovalPage             from './pages/admin/ApprovalPage'
-import DeletionApprovalPage     from './pages/admin/DeletionApprovalPage'
-import DisputeResolutionPage    from './pages/admin/DisputeResolutionPage'
-import SystemEmployeePage       from './pages/admin/SystemEmployeePage'
-import AuditLogsPage            from './pages/admin/AuditLogsPage'
-// ── New admin pages ──────────────────────────────────────────────────────────
-import ShopManagementPage       from './pages/admin/ShopManagementPage'
-import ProductAdminPage         from './pages/admin/ProductAdminPage'
-import OrderAdminPage           from './pages/admin/OrderAdminPage'
-import ShipperManagementPage       from './pages/admin/ShipperManagementPage'
-import WarehouseManagerAdminPage   from './pages/admin/WarehouseManagerAdminPage'
-import VoucherAdminPage         from './pages/admin/VoucherAdminPage'
-import BannerAdminPage          from './pages/admin/BannerAdminPage'
-import FinancePage              from './pages/admin/FinancePage'
-import SystemNotificationPage   from './pages/admin/SystemNotificationPage'
-import ShippingConfigPage       from './pages/admin/ShippingConfigPage'
-import MallRequestsPage         from './pages/admin/MallRequestsPage'
-import ReportsPage              from './pages/admin/ReportsPage'
-import FeedbackPage             from './pages/admin/FeedbackPage'
-import ImageLibraryPage         from './pages/admin/ImageLibraryPage'
+// ── ⚙️ Admin pages (lazy — bundle lớn) ───────────────────────────────────────
+const AdminOverviewPage          = React.lazy(() => import('./pages/admin/AdminOverviewPage'))
+const UserManagementPage         = React.lazy(() => import('./pages/admin/UserManagementPage'))
+const ApprovalPage               = React.lazy(() => import('./pages/admin/ApprovalPage'))
+const DeletionApprovalPage       = React.lazy(() => import('./pages/admin/DeletionApprovalPage'))
+const DisputeResolutionPage      = React.lazy(() => import('./pages/admin/DisputeResolutionPage'))
+const SystemEmployeePage         = React.lazy(() => import('./pages/admin/SystemEmployeePage'))
+const AuditLogsPage              = React.lazy(() => import('./pages/admin/AuditLogsPage'))
+const ShopManagementPage         = React.lazy(() => import('./pages/admin/ShopManagementPage'))
+const ProductAdminPage           = React.lazy(() => import('./pages/admin/ProductAdminPage'))
+const OrderAdminPage             = React.lazy(() => import('./pages/admin/OrderAdminPage'))
+const ShipperManagementPage      = React.lazy(() => import('./pages/admin/ShipperManagementPage'))
+const WarehouseManagerAdminPage  = React.lazy(() => import('./pages/admin/WarehouseManagerAdminPage'))
+const WarehouseHierarchyPage     = React.lazy(() => import('./pages/admin/WarehouseHierarchyPage'))
+const VoucherAdminPage           = React.lazy(() => import('./pages/admin/VoucherAdminPage'))
+const BannerAdminPage            = React.lazy(() => import('./pages/admin/BannerAdminPage'))
+const FinancePage                = React.lazy(() => import('./pages/admin/FinancePage'))
+const SystemNotificationPage     = React.lazy(() => import('./pages/admin/SystemNotificationPage'))
+const ShippingConfigPage         = React.lazy(() => import('./pages/admin/ShippingConfigPage'))
+const MallRequestsPage           = React.lazy(() => import('./pages/admin/MallRequestsPage'))
+const ReportsPage                = React.lazy(() => import('./pages/admin/ReportsPage'))
+const FeedbackPage               = React.lazy(() => import('./pages/admin/FeedbackPage'))
+const ImageLibraryPage           = React.lazy(() => import('./pages/admin/ImageLibraryPage'))
+const AuctionManagementPage      = React.lazy(() => import('./pages/admin/AuctionManagementPage'))
 
 // ── ⚡ Superadmin (nằm ngoài hệ thống, không ghi log) ────────────────────────
 import SuperRouter from '@super/SuperRouter'
@@ -129,51 +133,55 @@ const Router: React.FC = () => (
 
     {/* ── 🏪 Shop ─────────────────────────────────────────────────────────── */}
     <Route element={<ProtectedRoute requiredRole="shop" />}>
-      <Route path="/shop"              element={inShop(<ShopOverviewPage />)} />
-      <Route path="/shop/products"     element={inShop(<ProductManagementPage />)} />
-      <Route path="/shop/orders"       element={inShop(<OrderManagementPage />)} />
-      <Route path="/shop/employees"    element={inShop(<EmployeeManagementPage />)} />
-      <Route path="/shop/analytics"    element={inShop(<AnalyticsPage />)} />
-      <Route path="/shop/vouchers"     element={inShop(<VoucherManagementPage />)} />
-      <Route path="/shop/auction"      element={inShop(<BannerAuctionPage />)} />
-      <Route path="/shop/chat"         element={inShop(<ShopChatPage />)} />
-      <Route path="/shop/mall"         element={inShop(<BuyZoMallRegisterPage />)} />
+      <Route path="/shop"                  element={inShop(<ShopOverviewPage />)} />
+      <Route path="/shop/products"         element={inShop(<ProductManagementPage />)} />
+      <Route path="/shop/orders"           element={inShop(<OrderManagementPage />)} />
+      <Route path="/shop/employees"        element={inShop(<EmployeeManagementPage />)} />
+      <Route path="/shop/analytics"        element={inShop(<AnalyticsPage />)} />
+      <Route path="/shop/revenue"          element={inShop(<ShopRevenueDetailPage />)} />
+      <Route path="/shop/wallet"           element={inShop(<WalletPage />)} />
+      <Route path="/shop/vouchers"         element={inShop(<VoucherManagementPage />)} />
+      <Route path="/shop/auction"          element={inShop(<BannerAuctionPage />)} />
+      <Route path="/shop/auction-live"     element={inShop(<AuctionLivePage />)} />
+      <Route path="/shop/chat"             element={inShop(<ShopChatPage />)} />
+      <Route path="/shop/mall"             element={inShop(<BuyZoMallRegisterPage />)} />
     </Route>
 
     {/* ── ⚙️ Admin ─────────────────────────────────────────────────────────── */}
     <Route element={<ProtectedRoute requiredRole="admin" />}>
       {/* Tổng quan */}
-      <Route path="/admin"                    element={inAdmin(<AdminOverviewPage />)} />
+      <Route path="/admin"                       element={inAdmin(<AdminOverviewPage />)} />
       {/* Người dùng */}
-      <Route path="/admin/users"              element={inAdmin(<UserManagementPage />)} />
-      <Route path="/admin/users/roles"        element={inAdmin(<UserManagementPage />)} />
+      <Route path="/admin/users"                 element={inAdmin(<UserManagementPage />)} />
+      <Route path="/admin/users/roles"           element={inAdmin(<UserManagementPage />)} />
+      <Route path="/admin/system-employees"      element={inAdmin(<SystemEmployeePage />)} />
       {/* Cửa hàng */}
-      <Route path="/admin/shops"              element={inAdmin(<ShopManagementPage />)} />
-      <Route path="/admin/approvals"          element={inAdmin(<ApprovalPage />)} />
+      <Route path="/admin/shops"                 element={inAdmin(<ShopManagementPage />)} />
+      <Route path="/admin/approvals"             element={inAdmin(<ApprovalPage />)} />
+      <Route path="/admin/mall-requests"         element={inAdmin(<MallRequestsPage />)} />
       {/* Sản phẩm */}
-      <Route path="/admin/products"           element={inAdmin(<ProductAdminPage />)} />
-      <Route path="/admin/deletion-requests"  element={inAdmin(<DeletionApprovalPage />)} />
+      <Route path="/admin/products"              element={inAdmin(<ProductAdminPage />)} />
+      <Route path="/admin/deletion-requests"     element={inAdmin(<DeletionApprovalPage />)} />
       {/* Đơn hàng */}
-      <Route path="/admin/orders"             element={inAdmin(<OrderAdminPage />)} />
-      <Route path="/admin/disputes"           element={inAdmin(<DisputeResolutionPage />)} />
+      <Route path="/admin/orders"                element={inAdmin(<OrderAdminPage />)} />
+      <Route path="/admin/disputes"              element={inAdmin(<DisputeResolutionPage />)} />
       {/* Tài chính */}
-      <Route path="/admin/finance"            element={inAdmin(<FinancePage />)} />
-      <Route path="/admin/vouchers"           element={inAdmin(<VoucherAdminPage />)} />
-      {/* Nội dung */}
-      <Route path="/admin/banners"            element={inAdmin(<BannerAdminPage />)} />
-      <Route path="/admin/notifications"      element={inAdmin(<SystemNotificationPage />)} />
+      <Route path="/admin/finance"               element={inAdmin(<FinancePage />)} />
+      <Route path="/admin/vouchers"              element={inAdmin(<VoucherAdminPage />)} />
+      {/* Nội dung / Marketing */}
+      <Route path="/admin/banners"               element={inAdmin(<BannerAdminPage />)} />
+      <Route path="/admin/auction"               element={inAdmin(<AuctionManagementPage />)} />
+      <Route path="/admin/images"                element={inAdmin(<ImageLibraryPage />)} />
+      <Route path="/admin/notifications"         element={inAdmin(<SystemNotificationPage />)} />
       {/* Vận hành */}
-      <Route path="/admin/shippers"            element={inAdmin(<ShipperManagementPage />)} />
-      <Route path="/admin/warehouse-managers" element={inAdmin(<WarehouseManagerAdminPage />)} />
-      <Route path="/admin/shipping-config"    element={inAdmin(<ShippingConfigPage />)} />
-      <Route path="/admin/system-employees"   element={inAdmin(<SystemEmployeePage />)} />
-      <Route path="/admin/mall-requests"      element={inAdmin(<MallRequestsPage />)} />
+      <Route path="/admin/shippers"              element={inAdmin(<ShipperManagementPage />)} />
+      <Route path="/admin/warehouse-managers"    element={inAdmin(<WarehouseManagerAdminPage />)} />
+      <Route path="/admin/warehouse-hierarchy"   element={inAdmin(<WarehouseHierarchyPage />)} />
+      <Route path="/admin/shipping-config"       element={inAdmin(<ShippingConfigPage />)} />
       {/* Báo cáo & Log */}
-      <Route path="/admin/reports"            element={inAdmin(<ReportsPage />)} />
-      <Route path="/admin/feedback"           element={inAdmin(<FeedbackPage />)} />
-      <Route path="/admin/logs"               element={inAdmin(<AuditLogsPage />)} />
-      <Route path="/admin/auction"            element={inAdmin(<AuctionManagementPage />)} />
-      <Route path="/admin/images"             element={inAdmin(<ImageLibraryPage />)} />
+      <Route path="/admin/reports"               element={inAdmin(<ReportsPage />)} />
+      <Route path="/admin/feedback"              element={inAdmin(<FeedbackPage />)} />
+      <Route path="/admin/logs"                  element={inAdmin(<AuditLogsPage />)} />
     </Route>
 
     {/* ── 👷 Employee (nhân viên shop) ────────────────────────────────────── */}
@@ -207,6 +215,8 @@ const Router: React.FC = () => (
     {/* ── ⚡ Superadmin — tách biệt, layout riêng ───────────────────────── */}
     <Route path="/super/*" element={<SuperRouter />} />
 
+    {/* ── 404 ─────────────────────────────────────────────────────────────── */}
+    <Route path="*" element={<NotFoundPage />} />
   </Routes>
   </React.Suspense>
 )
