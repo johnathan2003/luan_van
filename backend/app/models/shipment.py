@@ -5,25 +5,39 @@ from app.database import Base
 
 
 class Warehouse(Base):
-    """Kho hàng theo tỉnh/thành — dùng cho shipper liên tỉnh."""
+    """Kho hàng 3 cấp: tier=1 (city hub), tier=2 (quận/huyện), tier=3 (phường/xã)."""
     __tablename__ = "warehouses"
 
-    warehouse_id   = Column(Integer, primary_key=True, autoincrement=True)
-    name           = Column(String(200), nullable=False)
-    province       = Column(String(100), nullable=False)   # tỉnh/thành
-    address        = Column(String(500))
-    lat            = Column(Numeric(10, 6))
-    lng            = Column(Numeric(10, 6))
-    is_active      = Column(Boolean, default=True)
-    created_at     = Column(DateTime, server_default=func.now())
+    warehouse_id         = Column(Integer, primary_key=True, autoincrement=True)
+    name                 = Column(String(200), nullable=False)
+    province             = Column(String(100), nullable=False)
+    address              = Column(String(500))
+    lat                  = Column(Numeric(10, 6))
+    lng                  = Column(Numeric(10, 6))
+    # Cấp kho: 1=city hub, 2=district, 3=ward
+    tier                 = Column(Integer, nullable=False, server_default='3')
+    # Thành phố: 'hanoi' | 'hcmc'
+    city                 = Column(String(50))
+    district             = Column(String(100))
+    ward                 = Column(String(100))
+    ward_code            = Column(String(20))
+    parent_warehouse_id  = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
+    # Manager mặc định gắn với kho này (1-1 cho ward level)
+    manager_id           = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    is_active            = Column(Boolean, default=True)
+    created_at           = Column(DateTime, server_default=func.now())
 
-    managers       = relationship("WarehouseManager", back_populates="warehouse")
-    outgoing       = relationship("Shipment", foreign_keys="[Shipment.src_warehouse_id]", back_populates="src_warehouse")
-    incoming       = relationship("Shipment", foreign_keys="[Shipment.dest_warehouse_id]", back_populates="dest_warehouse")
+    # Relationships
+    managers        = relationship("WarehouseManager", back_populates="warehouse")
+    ward_shippers   = relationship("WarehouseShipper", back_populates="warehouse")
+    children        = relationship("Warehouse", foreign_keys="[Warehouse.parent_warehouse_id]",
+                                   backref=__import__('sqlalchemy.orm', fromlist=['backref']).backref('parent', remote_side='Warehouse.warehouse_id'))
+    outgoing        = relationship("Shipment", foreign_keys="[Shipment.src_warehouse_id]", back_populates="src_warehouse")
+    incoming        = relationship("Shipment", foreign_keys="[Shipment.dest_warehouse_id]", back_populates="dest_warehouse")
 
 
 class WarehouseManager(Base):
-    """Người quản lý kho — thấy được tất cả đơn hàng."""
+    """Người quản lý kho — gắn 1 user với 1 kho."""
     __tablename__ = "warehouse_managers"
 
     manager_id   = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
@@ -32,6 +46,21 @@ class WarehouseManager(Base):
 
     user      = relationship("User", foreign_keys=[manager_id])
     warehouse = relationship("Warehouse", back_populates="managers")
+
+
+class WarehouseShipper(Base):
+    """Liên kết shipper với kho cấp 3 (phường/xã) — mỗi kho có ít nhất 1 shipper."""
+    __tablename__ = "warehouse_shippers"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=False)
+    shipper_id   = Column(Integer, ForeignKey("shippers.shipper_id"), nullable=False)
+    assigned_by  = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    assigned_at  = Column(DateTime, server_default=func.now())
+    status       = Column(String(20), default='active')   # active | off_duty | suspended
+
+    warehouse = relationship("Warehouse", back_populates="ward_shippers")
+    shipper   = relationship("Shipper", foreign_keys=[shipper_id])
 
 
 class Shipper(Base):

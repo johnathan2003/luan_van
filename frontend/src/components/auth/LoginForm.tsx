@@ -45,9 +45,13 @@ const LoginForm: React.FC = () => {
       toast.success('Đăng nhập thành công!')
 
       if (primary === 'superadmin' || primary === 'admin') navigate('/admin')
-      else if (primary === 'shop')     navigate('/shop')
-      else if (primary === 'shipper')  navigate('/shipper')
-      else if (primary === 'employee') navigate('/employee')
+      else if (primary === 'shop')                        navigate('/shop')
+      else if (primary === 'shipper')                     navigate('/shipper')
+      else if (primary === 'employee')                    navigate('/employee')
+      else if (primary === 'warehouse_hub_manager')       navigate('/hub')
+      else if (primary === 'warehouse_district_manager')  navigate('/district')
+      else if (primary === 'warehouse_ward_manager')      navigate('/ward')
+      else if (primary === 'warehouse_manager')           navigate('/warehouse')
       else navigate('/')
     } else {
       const errMsg = result.payload as string || 'Đăng nhập thất bại'

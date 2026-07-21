@@ -98,8 +98,37 @@ def require_shipper(current_user: User = Depends(get_current_user)) -> User:
 
 
 def require_warehouse_manager(current_user: User = Depends(get_current_user)) -> User:
-    """Quản lý kho — thấy được tất cả đơn, quản lý kho trung chuyển."""
+    """Quản lý kho bất kỳ cấp nào (hoặc admin)."""
     user_roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
-    if "warehouse_manager" not in user_roles and "admin" not in user_roles:
+    allowed = {
+        "warehouse_manager", "warehouse_hub_manager",
+        "warehouse_district_manager", "warehouse_ward_manager",
+        "admin",
+    }
+    if not user_roles & allowed:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Warehouse manager access required")
+    return current_user
+
+
+def require_hub_manager(current_user: User = Depends(get_current_user)) -> User:
+    """Quản lý kho cấp 1 (city hub) hoặc admin."""
+    user_roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
+    if "warehouse_hub_manager" not in user_roles and "admin" not in user_roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Hub manager access required")
+    return current_user
+
+
+def require_district_manager(current_user: User = Depends(get_current_user)) -> User:
+    """Quản lý kho cấp 2 (quận/huyện) hoặc admin."""
+    user_roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
+    if "warehouse_district_manager" not in user_roles and "admin" not in user_roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="District manager access required")
+    return current_user
+
+
+def require_ward_manager(current_user: User = Depends(get_current_user)) -> User:
+    """Quản lý kho cấp 3 (phường/xã) hoặc admin."""
+    user_roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
+    if "warehouse_ward_manager" not in user_roles and "admin" not in user_roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ward manager access required")
     return current_user

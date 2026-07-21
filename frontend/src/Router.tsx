@@ -89,11 +89,29 @@ import IncidentsPage       from './pages/shipper/IncidentsPage'
 import BenefitsPage        from './pages/shipper/BenefitsPage'
 import TrackingPage        from './pages/shipper/TrackingPage'
 
-// ── 🏭 Warehouse Manager pages ───────────────────────────────────────────────
+// ── 🏭 Warehouse Manager pages (cũ — tier tổng hợp) ────────────────────────
 import WarehouseManagerLayout   from './pages/warehouse/WarehouseManagerLayout'
 import WarehouseOverviewPage    from './pages/warehouse/WarehouseOverviewPage'
 import AllShipmentsPage         from './pages/warehouse/AllShipmentsPage'
 import IncomingShipmentsPage    from './pages/warehouse/IncomingShipmentsPage'
+
+// ── 🏢 Hub Manager (cấp 1 — kho tổng) ────────────────────────────────────
+import HubManagerLayout   from './pages/hub/HubManagerLayout'
+import HubDashboardPage   from './pages/hub/HubDashboardPage'
+import HubDistrictsPage   from './pages/hub/HubDistrictsPage'
+import HubShipmentsPage   from './pages/hub/HubShipmentsPage'
+
+// ── 🏘️ District Manager (cấp 2 — kho quận) ──────────────────────────────
+import DistrictManagerLayout from './pages/district/DistrictManagerLayout'
+import DistrictDashboardPage from './pages/district/DistrictDashboardPage'
+import DistrictWardsPage     from './pages/district/DistrictWardsPage'
+import DistrictShipmentsPage from './pages/district/DistrictShipmentsPage'
+
+// ── 🏠 Ward Manager (cấp 3 — kho phường) ─────────────────────────────────
+import WardManagerLayout from './pages/ward/WardManagerLayout'
+import WardDashboardPage from './pages/ward/WardDashboardPage'
+import WardShippersPage  from './pages/ward/WardShippersPage'
+import WardOrdersPage    from './pages/ward/WardOrdersPage'
 
 // ── Helper: bọc page trong layout ─────────────────────────────────────────────
 const inPublic   = (el: React.ReactNode) => <PublicLayout>{el}</PublicLayout>
@@ -203,12 +221,39 @@ const Router: React.FC = () => (
       <Route path="/shipper/tracking/:shipmentId"  element={inShipper(<TrackingPage />)} />
     </Route>
 
-    {/* ── 🏭 Warehouse Manager ──────────────────────────────────────────── */}
+    {/* ── 🏭 Warehouse Manager (cũ — tổng hợp) ────────────────────────── */}
     <Route element={<ProtectedRoute requiredRole="warehouse_manager" />}>
       <Route path="/warehouse" element={<WarehouseManagerLayout />}>
         <Route index element={<WarehouseOverviewPage />} />
         <Route path="shipments" element={<AllShipmentsPage />} />
         <Route path="incoming"  element={<IncomingShipmentsPage />} />
+      </Route>
+    </Route>
+
+    {/* ── 🏢 Hub Manager — kho tổng cấp 1 ──────────────────────────── */}
+    <Route element={<ProtectedRoute requiredRole="warehouse_hub_manager|admin" />}>
+      <Route path="/hub" element={<HubManagerLayout />}>
+        <Route index            element={<HubDashboardPage />} />
+        <Route path="districts" element={<HubDistrictsPage />} />
+        <Route path="shipments" element={<HubShipmentsPage />} />
+      </Route>
+    </Route>
+
+    {/* ── 🏘️ District Manager — kho quận cấp 2 ──────────────────────── */}
+    <Route element={<ProtectedRoute requiredRole="warehouse_district_manager|admin" />}>
+      <Route path="/district" element={<DistrictManagerLayout />}>
+        <Route index            element={<DistrictDashboardPage />} />
+        <Route path="wards"     element={<DistrictWardsPage />} />
+        <Route path="shipments" element={<DistrictShipmentsPage />} />
+      </Route>
+    </Route>
+
+    {/* ── 🏠 Ward Manager — kho phường cấp 3 ───────────────────────── */}
+    <Route element={<ProtectedRoute requiredRole="warehouse_ward_manager|admin" />}>
+      <Route path="/ward" element={<WardManagerLayout />}>
+        <Route index            element={<WardDashboardPage />} />
+        <Route path="shippers"  element={<WardShippersPage />} />
+        <Route path="orders"    element={<WardOrdersPage />} />
       </Route>
     </Route>
 
