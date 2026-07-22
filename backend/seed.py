@@ -24,12 +24,15 @@ from sqlalchemy.orm import sessionmaker
 from app.utils.security import hash_password
 from app.utils.constants import DEFAULT_PERMISSIONS
 from app.models.user import User, Role, UserRole, Permission, RolePermission
-from app.models.shop import Shop, ShopEmployee, EmployeeRolePermission
+from app.models.shop import (Shop, ShopEmployee, EmployeeRolePermission,
+                             SystemEmployee, SystemEmployeePermission)
 from app.models.product import Product, ProductCategory
 from app.models.order import Order, OrderItem
 from app.models.payment import Payment
-from app.models.shipment import Shipment, Shipper
+from app.models.shipment import (Shipment, Shipper, ShipperRegistration,
+                                 WarehouseManager, Warehouse)
 from app.models.voucher import Voucher, VoucherCollection
+from app.models.admin_config import RevenueConfig
 
 
 def get_engine():
@@ -547,6 +550,176 @@ def seed():
 
         db.commit()
 
+        # ── SHIPPER REGISTRATIONS ────────────────────────────────────────────
+        reg_data = [
+            ("reg_pending1@test.com", "Le Van Nhanh",     "0911000001", "Xe may",   "59-A1 11111", "zone",           "Hồ Chí Minh", "pending",  None,                      None),
+            ("reg_pending2@test.com", "Nguyen Thi Hanh",  "0911000002", "Xe may",   "51-B2 22222", "inter_province", "Hà Nội",       "pending",  None,                      None),
+            ("reg_pending3@test.com", "Tran Van Chay",    "0911000003", "O to tai", "51-C3 33333", "inter_province", "Hà Nội",       "pending",  None,                      None),
+            ("reg_pending4@test.com", "Pham Minh Kiet",   "0911000004", "Xe may",   "59-D4 44444", "zone",           "Hồ Chí Minh", "pending",  None,                      None),
+            ("reg_pending5@test.com", "Vo Thi Bay",       "0911000005", "Xe dap",   "N/A",         "zone",           "Hồ Chí Minh", "pending",  None,                      None),
+            ("reg_approved1@test.com","Bui Van Duyet",    "0911000006", "Xe may",   "59-E5 55555", "zone",           "Hồ Chí Minh", "approved", None,                      now - timedelta(days=3)),
+            ("reg_approved2@test.com","Hoang Thi Chap",   "0911000007", "O to tai", "51-F6 66666", "inter_province", "Hà Nội",       "approved", None,                      now - timedelta(days=7)),
+            ("reg_reject1@test.com",  "Nguyen Van Loi",   "0911000008", "Xe may",   "59-G7 77777", "zone",           "Hồ Chí Minh", "rejected", "Ảnh CCCD không rõ nét",   now - timedelta(days=2)),
+            ("reg_reject2@test.com",  "Tran Thi Gian",    "0911000009", "Xe may",   "N/A",         "zone",           "Hồ Chí Minh", "rejected", "Giấy tờ không hợp lệ",    now - timedelta(days=5)),
+        ]
+        conn = db.connection()
+        for email, name, phone, vehicle, plate, stype, zone, status, reject_reason, reviewed_at in reg_data:
+            u, _ = upsert(db, User, {"email": email},
+                password_hash=hash_password("Test@1234"),
+                full_name=name, phone=phone, status="active")
+            db.flush()
+            exists = conn.execute(text(
+                "SELECT 1 FROM shipper_registrations WHERE user_id = :uid"
+            ), {"uid": u.user_id}).first()
+            if not exists:
+                conn.execute(text("""
+                    INSERT INTO shipper_registrations
+                        (user_id, vehicle_type, license_plate, shipper_type, zone_province,
+                         license_url, registration_url, id_card_url,
+                         status, rejection_reason, reviewed_by, reviewed_at, created_at)
+                    VALUES
+                        (:uid, :vehicle, :plate, :stype, :zone,
+                         'https://placehold.co/600x400?text=Bang+lai+xe',
+                         'https://placehold.co/600x400?text=Dang+ky+xe',
+                         'https://placehold.co/600x400?text=CCCD',
+                         :status, :reason, :reviewed_by, :reviewed_at, :created_at)
+                """), {
+                    "uid": u.user_id, "vehicle": vehicle, "plate": plate,
+                    "stype": stype, "zone": zone, "status": status,
+                    "reason": reject_reason,
+                    "reviewed_by": admin.user_id if reviewed_at else None,
+                    "reviewed_at": reviewed_at,
+                    "created_at": now - timedelta(days=7),
+                })
+            if status == "approved":
+                upsert(db, UserRole,
+                    {"user_id": u.user_id, "role_id": roles["shipper"].role_id},
+                    current_role=True, assigned_by=admin.user_id, status="active")
+                conn.execute(text("""
+                    INSERT INTO shippers (shipper_id, vehicle_type, license_plate, shipper_type,
+                                         zone_province, status, rating, total_deliveries, verified_at)
+                    VALUES (:sid, :vehicle, :plate, :stype, :zone, 'available', '5.0', 0, :verified_at)
+                    ON CONFLICT (shipper_id) DO NOTHING
+                """), {
+                    "sid": u.user_id, "vehicle": vehicle, "plate": plate,
+                    "stype": stype, "zone": zone, "verified_at": reviewed_at,
+                })
+        db.commit()
+
+        # ── SYSTEM EMPLOYEES ─────────────────────────────────────────────────
+        PERM_META = {
+            "order_confirm":   "admin", "refund_manage":  "admin",
+            "product_manage":  "admin", "dispute_manage": "admin",
+            "report_view":     "admin", "voucher_manage": "admin",
+            "shipper_support": "admin", "shipper_approve":"admin",
+        }
+        sys_emp_data = [
+            ("sysemp1@test.com", "Nguyen Van Duyet",    ["order_confirm", "refund_manage", "dispute_manage"]),
+            ("sysemp2@test.com", "Tran Thi San Pham",   ["product_manage", "report_view", "voucher_manage"]),
+            ("sysemp3@test.com", "Le Van Shipper",      ["shipper_support", "shipper_approve"]),
+            ("sysemp4@test.com", "Pham Thi Toan Quyen", list(PERM_META.keys())),
+            ("sysemp5@test.com", "Vo Van Bao Cao",      ["report_view"]),
+        ]
+        for email, name, perm_list in sys_emp_data:
+            u, _ = upsert(db, User, {"email": email},
+                password_hash=hash_password("Test@1234"),
+                full_name=name, status="active")
+            db.flush()
+            emp = db.query(SystemEmployee).filter_by(user_id=u.user_id).first()
+            if not emp:
+                emp = SystemEmployee(user_id=u.user_id, emp_name=name,
+                    role_name="system_employee", status="active", created_by=admin.user_id)
+                db.add(emp)
+                db.flush()
+                for pcode in perm_list:
+                    db.add(SystemEmployeePermission(
+                        emp_id=emp.emp_id, permission_code=pcode,
+                        scope=PERM_META[pcode], granted_by=admin.user_id))
+        db.commit()
+
+        # ── WAREHOUSE MANAGERS ───────────────────────────────────────────────
+        TIER_ROLES = {1: "warehouse_hub_manager", 2: "warehouse_district_manager", 3: "warehouse_ward_manager"}
+        for rname in TIER_ROLES.values():
+            upsert(db, Role, {"role_name": rname})
+        db.commit()
+        roles = {r.role_name: r for r in db.query(Role).all()}
+
+        warehouses_by_tier: dict[int, list] = {1: [], 2: [], 3: []}
+        for w in db.query(Warehouse).filter_by(is_active=True).all():
+            if w.tier in warehouses_by_tier:
+                warehouses_by_tier[w.tier].append(w)
+
+        wm_accounts = [
+            ("wm_hub1@test.com",  "Tran Van Hub HCM",  1),
+            ("wm_hub2@test.com",  "Nguyen Thi Hub HN", 1),
+            ("wm_dist1@test.com", "Le Van Quan 1",     2),
+            ("wm_dist2@test.com", "Pham Van Binh Thu", 2),
+            ("wm_dist3@test.com", "Vo Thi Tan Binh",   2),
+            ("wm_ward1@test.com", "Bui Van Phuong 1",  3),
+            ("wm_ward2@test.com", "Hoang Thi P.2",     3),
+            ("wm_ward3@test.com", "Dao Van Phuong 3",  3),
+            ("wm_ward4@test.com", "Ly Thi P.4",        3),
+        ]
+        tier_idx: dict[int, int] = {1: 0, 2: 0, 3: 0}
+        for i, (email, name, tier) in enumerate(wm_accounts):
+            tier_whs = warehouses_by_tier.get(tier, [])
+            idx = tier_idx[tier]
+            if idx >= len(tier_whs):
+                continue
+            wh = tier_whs[idx]
+            tier_idx[tier] += 1
+            u, _ = upsert(db, User, {"email": email},
+                password_hash=hash_password("Test@1234"),
+                full_name=name, status="active", phone=f"0913{i:06d}")
+            db.flush()
+            rname = TIER_ROLES[tier]
+            upsert(db, UserRole,
+                {"user_id": u.user_id, "role_id": roles[rname].role_id},
+                current_role=True, assigned_by=admin.user_id, status="active")
+            upsert(db, Shipper, {"shipper_id": u.user_id},
+                vehicle_type="truck_large", license_plate=f"51-WM-{i+10:04d}",
+                status="available", rating="5.0", total_deliveries=0)
+            upsert(db, WarehouseManager, {"manager_id": u.user_id},
+                warehouse_id=wh.warehouse_id)
+        db.commit()
+
+        # ── SHIPMENTS VỚI PKG DIMENSIONS ─────────────────────────────────────
+        # (length, width, height, weight_kg, tier, extra_fee)
+        pkg_samples = [
+            (15.0, 10.0,  8.0,   0.5,  1,      0),
+            (18.0, 12.0,  9.0,   0.8,  1,      0),
+            (30.0, 22.0, 18.0,   2.0,  2,  15000),
+            (33.0, 24.0, 19.0,   2.8,  2,  15000),
+            (45.0, 35.0, 28.0,   5.5,  3,  25000),
+            (48.0, 38.0, 29.0,   6.8,  3,  25000),
+            (65.0, 50.0, 40.0,  12.0,  4,  50000),
+            (68.0, 52.0, 43.0,  14.5,  4,  50000),
+            (90.0, 75.0, 55.0,  25.0,  5, 100000),
+            (95.0, 78.0, 58.0,  28.0,  5, 100000),
+            (110.0,90.0, 70.0,  35.0,  6, 200000),
+        ]
+        for i, s in enumerate(db.query(Shipment).all()):
+            if s.size_tier is None:
+                l, w, h, k, t, f = pkg_samples[i % len(pkg_samples)]
+                s.pkg_length_cm = l; s.pkg_width_cm = w
+                s.pkg_height_cm = h; s.pkg_weight_kg = k
+                s.size_tier = t;     s.extra_fee = f
+        db.commit()
+
+        # ── REVENUE CONFIG HISTORY ───────────────────────────────────────────
+        for shop_r, admin_r, ship_r, vat_r, note, days_ago in [
+            (Decimal("65"), Decimal("20"), Decimal("5"), Decimal("10"), "Cấu hình khi ra mắt",            90),
+            (Decimal("68"), Decimal("17"), Decimal("5"), Decimal("10"), "Tăng tỷ lệ shop để thu hút merchant", 60),
+            (Decimal("70"), Decimal("15"), Decimal("5"), Decimal("10"), "Điều chỉnh về mức ổn định",      30),
+        ]:
+            if not db.query(RevenueConfig).filter_by(shop_rate=shop_r, admin_rate=admin_r, is_active=False).first():
+                db.add(RevenueConfig(
+                    shop_rate=shop_r, admin_rate=admin_r,
+                    shipper_rate=ship_r, vat_rate=vat_r,
+                    is_active=False, changed_by=admin.user_id,
+                    changed_at=now - timedelta(days=days_ago), note=note))
+        db.commit()
+
         # SUMMARY
         print("SEED DONE!\n")
         print("Core accounts:")
@@ -574,6 +747,26 @@ def seed():
 
         print("\nWarehouse Manager (/warehouse):")
         print("  warehouse@example.com            / Warehouse@123  [warehouse_manager]")
+
+        print("\nĐơn đăng ký shipper (Test@1234):")
+        print("  reg_pending1-5@test.com    → pending  (5 đơn)")
+        print("  reg_approved1-2@test.com   → approved (2 đơn)")
+        print("  reg_reject1-2@test.com     → rejected (2 đơn)")
+
+        print("\nNhân viên hệ thống (Test@1234):")
+        print("  sysemp1@test.com  → order_confirm, refund_manage, dispute_manage")
+        print("  sysemp2@test.com  → product_manage, report_view, voucher_manage")
+        print("  sysemp3@test.com  → shipper_support, shipper_approve")
+        print("  sysemp4@test.com  → ALL 8 quyền")
+        print("  sysemp5@test.com  → report_view")
+
+        print("\nQuản lý kho (Test@1234):")
+        print("  wm_hub1-2@test.com   → Hub manager (tier 1)")
+        print("  wm_dist1-3@test.com  → District manager (tier 2)")
+        print("  wm_ward1-4@test.com  → Ward manager (tier 3)")
+
+        print("\nShipments: đã seed kích thước bậc 1–6 cho tất cả đơn vận chuyển")
+        print("Revenue config: 3 bản ghi lịch sử thay đổi tỷ lệ")
         print()
 
     except Exception:

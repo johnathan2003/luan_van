@@ -12,5 +12,7 @@ export const orderService = {
   confirm: (id: number) => API.post(`/api/v1/orders/${id}/confirm`),
   readyToShip: (id: number) => API.post(`/api/v1/orders/${id}/ready-to-ship`),
   confirmReceived: (id: number) => API.post(`/api/v1/orders/${id}/confirm-received`),
+  confirmPacking: (id: number) => API.post(`/api/v1/orders/${id}/confirm-packing`),
+  getDeliverySlip: (id: number) => API.get(`/api/v1/orders/${id}/delivery-slip`),
   track: (id: number) => API.get(`/api/v1/orders/${id}/tracking`),
 }

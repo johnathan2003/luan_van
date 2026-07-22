@@ -104,10 +104,30 @@ def shipper_regs(
     items, total, pages = get_shipper_registrations(db, page, limit, status)
     return {
         "registrations": [
-            {"reg_id": r.reg_id, "user_id": r.user_id, "vehicle_type": r.vehicle_type, "status": r.status}
+            {
+                "reg_id":           r.reg_id,
+                "user_id":          r.user_id,
+                "full_name":        r.user.full_name if r.user else None,
+                "email":            r.user.email if r.user else None,
+                "phone":            r.user.phone if r.user else None,
+                "vehicle_type":     r.vehicle_type,
+                "license_plate":    r.license_plate,
+                "shipper_type":     r.shipper_type,
+                "zone_province":    r.zone_province,
+                "home_warehouse_id": r.home_warehouse_id,
+                "license_url":      r.license_url,
+                "registration_url": r.registration_url,
+                "id_card_url":      r.id_card_url,
+                "status":           r.status,
+                "rejection_reason": r.rejection_reason,
+                "reviewed_by_name": r.reviewer.full_name if r.reviewer else None,
+                "reviewed_at":      r.reviewed_at.isoformat() if r.reviewed_at else None,
+                "created_at":       r.created_at.isoformat() if r.created_at else None,
+            }
             for r in items
         ],
         "total": total,
+        "pages": pages,
     }
 
 
@@ -434,8 +454,188 @@ def list_sys_employees(current_user: User = Depends(require_admin), db: Session 
     employees = db.query(SystemEmployee).filter(SystemEmployee.status == "active").all()
     return {
         "employees": [
-            {"emp_id": e.emp_id, "user_id": e.user_id, "emp_name": e.emp_name, "role_name": e.role_name}
+            {
+                "emp_id":    e.emp_id,
+                "user_id":   e.user_id,
+                "emp_name":  e.emp_name,
+                "email":     e.user.email if e.user else None,
+                "role_name": e.role_name,
+                "status":    e.status,
+                "created_at": e.created_at.isoformat() if e.created_at else None,
+                "permissions": [p.permission_code for p in e.permissions],
+            }
             for e in employees
+        ]
+    }
+
+
+@router.put("/system-employees/{emp_id}/permissions")
+def update_employee_permissions(
+    emp_id: int, data: dict,
+    current_user: User = Depends(require_admin), db: Session = Depends(get_db),
+):
+    """Cập nhật bộ quyền cho nhân viên (replace all permissions)."""
+    from app.models.shop import SystemEmployee, SystemEmployeePermission
+    emp = db.query(SystemEmployee).filter(SystemEmployee.emp_id == emp_id).first()
+    if not emp:
+        raise HTTPException(404, "Nhân viên không tồn tại")
+    new_perms: list = data.get("permissions", [])
+    # Xóa toàn bộ quyền cũ
+    db.query(SystemEmployeePermission).filter(SystemEmployeePermission.emp_id == emp_id).delete()
+    # Thêm quyền mới
+    for perm_code in new_perms:
+        db.add(SystemEmployeePermission(
+            emp_id=emp_id,
+            permission_code=perm_code,
+            scope="admin",
+            granted_by=current_user.user_id,
+        ))
+    db.commit()
+    return {"message": f"Đã cập nhật {len(new_perms)} quyền cho nhân viên #{emp_id}"}
+
+
+@router.delete("/system-employees/{emp_id}")
+def delete_sys_employee(
+    emp_id: int,
+    current_user: User = Depends(require_admin), db: Session = Depends(get_db),
+):
+    """Xóa (deactivate) nhân viên hệ thống."""
+    from app.models.shop import SystemEmployee
+    emp = db.query(SystemEmployee).filter(SystemEmployee.emp_id == emp_id).first()
+    if not emp:
+        raise HTTPException(404, "Nhân viên không tồn tại")
+    emp.status = "inactive"
+    db.commit()
+    return {"message": f"Đã vô hiệu hóa nhân viên {emp.emp_name}"}
+
+
+# ─── Warehouse Manager Assignment (assign existing user) ──────────────────────
+
+@router.post("/warehouse-managers/assign")
+def assign_warehouse_manager(
+    data: dict,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Gán một user hiện có làm quản lý kho theo tier."""
+    from app.models.user import UserRole, Role
+    from app.models.shipment import WarehouseManager, Warehouse
+
+    user_id      = data.get("user_id")
+    warehouse_id = data.get("warehouse_id")
+    if not user_id or not warehouse_id:
+        raise HTTPException(400, "Thiếu user_id hoặc warehouse_id")
+
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Không tìm thấy người dùng")
+
+    wh = db.query(Warehouse).filter(Warehouse.warehouse_id == warehouse_id).first()
+    if not wh:
+        raise HTTPException(404, "Không tìm thấy kho")
+
+    # Chọn role theo tier
+    TIER_ROLES = {
+        1: "warehouse_hub_manager",
+        2: "warehouse_district_manager",
+        3: "warehouse_ward_manager",
+    }
+    role_name = TIER_ROLES.get(wh.tier, "warehouse_manager")
+
+    # Gỡ kho cũ nếu user đang quản lý kho khác
+    old_wm = db.query(WarehouseManager).filter(WarehouseManager.manager_id == user_id).first()
+    if old_wm:
+        db.delete(old_wm)
+
+    # Gỡ mọi role kho cũ của user này
+    old_role_names = list(TIER_ROLES.values()) + ["warehouse_manager"]
+    for rn in old_role_names:
+        old_role = db.query(Role).filter(Role.role_name == rn).first()
+        if old_role:
+            old_ur = db.query(UserRole).filter(
+                UserRole.user_id == user_id, UserRole.role_id == old_role.role_id
+            ).first()
+            if old_ur:
+                db.delete(old_ur)
+
+    # Gán role mới
+    new_role = db.query(Role).filter(Role.role_name == role_name).first()
+    if not new_role:
+        new_role = Role(role_name=role_name, description=f"Quan ly kho tier {wh.tier}")
+        db.add(new_role)
+        db.flush()
+    db.add(UserRole(
+        user_id=user_id, role_id=new_role.role_id,
+        assigned_by=current_user.user_id, current_role=False, status="active",
+    ))
+
+    # Gỡ kho manager cũ của warehouse này (nếu có)
+    existing_wm = db.query(WarehouseManager).filter(WarehouseManager.warehouse_id == warehouse_id).first()
+    if existing_wm:
+        db.delete(existing_wm)
+
+    # Tạo liên kết mới
+    db.add(WarehouseManager(manager_id=user_id, warehouse_id=warehouse_id))
+    db.commit()
+
+    return {
+        "message": f"Đã gán {user.full_name} làm quản lý {wh.name} (tier {wh.tier})",
+        "role_assigned": role_name,
+        "warehouse_name": wh.name,
+    }
+
+
+@router.delete("/warehouse-managers/{user_id}/unassign")
+def unassign_warehouse_manager(
+    user_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Gỡ quyền quản lý kho của một user."""
+    from app.models.user import UserRole, Role
+    from app.models.shipment import WarehouseManager
+
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Không tìm thấy người dùng")
+
+    # Xóa liên kết kho
+    wm = db.query(WarehouseManager).filter(WarehouseManager.manager_id == user_id).first()
+    if wm:
+        db.delete(wm)
+
+    # Thu hồi mọi role kho
+    TIER_ROLES = ["warehouse_hub_manager", "warehouse_district_manager", "warehouse_ward_manager", "warehouse_manager"]
+    for rn in TIER_ROLES:
+        r = db.query(Role).filter(Role.role_name == rn).first()
+        if r:
+            ur = db.query(UserRole).filter(UserRole.user_id == user_id, UserRole.role_id == r.role_id).first()
+            if ur:
+                db.delete(ur)
+
+    db.commit()
+    return {"message": f"Đã gỡ quyền quản lý kho của {user.full_name}"}
+
+
+# ─── Search users for manager assignment ──────────────────────────────────────
+
+@router.get("/users/search")
+def search_users(
+    q: str = "",
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Tìm kiếm user theo tên/email để gán làm warehouse manager."""
+    if not q or len(q) < 2:
+        return {"users": []}
+    users = db.query(User).filter(
+        (User.full_name.ilike(f"%{q}%")) | (User.email.ilike(f"%{q}%")),
+        User.status == "active",
+    ).limit(10).all()
+    return {
+        "users": [
+            {"user_id": u.user_id, "full_name": u.full_name, "email": u.email, "phone": u.phone}
+            for u in users
         ]
     }
 
@@ -801,13 +1001,15 @@ def finance_revenue_monthly(
         .limit(months)
         .all()
     )
-    COMMISSION_RATE = 0.10
+    from app.models.admin_config import RevenueConfig
+    cfg = db.query(RevenueConfig).filter(RevenueConfig.is_active == True).order_by(RevenueConfig.config_id.desc()).first()
+    admin_rate = float(cfg.admin_rate) / 100 if cfg else 0.15
     return {
         "monthly": [
             {
                 "period":     f"{int(r.year)}-{int(r.month):02d}",
                 "revenue":    float(r.revenue or 0),
-                "commission": round(float(r.revenue or 0) * COMMISSION_RATE, 2),
+                "commission": round(float(r.revenue or 0) * admin_rate, 2),
                 "orders":     int(r.orders),
             }
             for r in rows
@@ -825,8 +1027,13 @@ def finance_shop_revenue(
     from app.models.order import Order
     from app.models.shop import Shop
 
-    SHOP_RATE = 0.70   # shop nhận 70%
-    FEE_RATE  = 0.30   # phí sàn 30%
+    from app.models.admin_config import RevenueConfig
+    _cfg = db.query(RevenueConfig).filter(RevenueConfig.is_active == True).order_by(RevenueConfig.config_id.desc()).first()
+    SHOP_RATE    = float(_cfg.shop_rate)    / 100 if _cfg else 0.70
+    ADMIN_RATE   = float(_cfg.admin_rate)   / 100 if _cfg else 0.15
+    SHIPPER_RATE = float(_cfg.shipper_rate) / 100 if _cfg else 0.05
+    VAT_RATE     = float(_cfg.vat_rate)     / 100 if _cfg else 0.10
+    FEE_RATE = 1 - SHOP_RATE
 
     rows = (
         db.query(
@@ -855,9 +1062,9 @@ def finance_shop_revenue(
             "total_orders":  int(r.total_orders or 0),
             "total_revenue": rev,
             "platform_fee":  fee,
-            "admin_fee":     round(rev * 0.15, 2),
-            "shipper_fee":   round(rev * 0.05, 2),
-            "vat_fee":       round(rev * 0.10, 2),
+            "admin_fee":     round(rev * ADMIN_RATE,   2),
+            "shipper_fee":   round(rev * SHIPPER_RATE, 2),
+            "vat_fee":       round(rev * VAT_RATE,     2),
             "shop_profit":   profit,
             "last_order_at": (r.last_order_at or "").isoformat()[:16] if r.last_order_at else None,
         })
@@ -1021,6 +1228,123 @@ def delete_shipping_method(method_id: int, current_user: User = Depends(require_
     db.delete(method)
     db.commit()
     return {"message": "Đã xóa phương thức vận chuyển"}
+
+
+# ─── Shipping Size Tiers ──────────────────────────────────────────────────────
+
+def _tier_dict(t) -> dict:
+    return {
+        "tier_id":       t.tier_id,
+        "tier_level":    t.tier_level,
+        "label":         t.label,
+        "max_length_cm": t.max_length_cm,
+        "max_width_cm":  t.max_width_cm,
+        "max_height_cm": t.max_height_cm,
+        "max_weight_kg": float(t.max_weight_kg),
+        "extra_fee":     t.extra_fee,
+        "updated_at":    t.updated_at.isoformat() if t.updated_at else None,
+    }
+
+
+@router.get("/shipping/size-tiers")
+def get_size_tiers(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from app.models.admin_config import ShippingSizeTier
+    tiers = db.query(ShippingSizeTier).order_by(ShippingSizeTier.tier_level).all()
+    return {"tiers": [_tier_dict(t) for t in tiers]}
+
+
+@router.put("/shipping/size-tiers")
+def update_size_tiers(data: dict, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Cập nhật toàn bộ 5 bậc. Gửi array tiers với các trường có thể thay đổi."""
+    from app.models.admin_config import ShippingSizeTier
+    rows: list = data.get("tiers", [])
+    if not rows:
+        raise HTTPException(400, "Thiếu dữ liệu tiers")
+    updated = 0
+    for row in rows:
+        tier_level = row.get("tier_level")
+        if not tier_level:
+            continue
+        t = db.query(ShippingSizeTier).filter(ShippingSizeTier.tier_level == tier_level).first()
+        if not t:
+            continue
+        for field in ("max_length_cm", "max_width_cm", "max_height_cm", "max_weight_kg", "extra_fee", "label"):
+            if field in row:
+                setattr(t, field, row[field])
+        t.updated_by = current_user.user_id
+        updated += 1
+    db.commit()
+    tiers = db.query(ShippingSizeTier).order_by(ShippingSizeTier.tier_level).all()
+    return {"message": f"Đã cập nhật {updated} bậc", "tiers": [_tier_dict(t) for t in tiers]}
+
+
+# ─── Revenue Config ────────────────────────────────────────────────────────────
+
+def _get_active_cfg(db):
+    """Trả RevenueConfig đang active, hoặc None."""
+    from app.models.admin_config import RevenueConfig
+    return db.query(RevenueConfig).filter(RevenueConfig.is_active == True).order_by(RevenueConfig.config_id.desc()).first()
+
+
+def _cfg_dict(c) -> dict:
+    return {
+        "config_id":       c.config_id,
+        "shop_rate":       float(c.shop_rate),
+        "admin_rate":      float(c.admin_rate),
+        "shipper_rate":    float(c.shipper_rate),
+        "vat_rate":        float(c.vat_rate),
+        "changed_at":      c.changed_at.isoformat() if c.changed_at else None,
+        "changed_by_name": c.changer.full_name if c.changer else "Hệ thống",
+        "note":            c.note,
+    }
+
+
+@router.get("/revenue-config")
+def get_revenue_config(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from app.models.admin_config import RevenueConfig
+    current = _get_active_cfg(db)
+    history = (
+        db.query(RevenueConfig)
+        .order_by(RevenueConfig.config_id.desc())
+        .limit(10)
+        .all()
+    )
+    return {
+        "current": _cfg_dict(current) if current else None,
+        "history": [_cfg_dict(c) for c in history],
+    }
+
+
+@router.put("/revenue-config")
+def update_revenue_config(data: dict, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Thay đổi % phân chia doanh thu — tạo row mới, deactivate row cũ."""
+    from app.models.admin_config import RevenueConfig
+    shop_rate    = float(data.get("shop_rate",    70))
+    admin_rate   = float(data.get("admin_rate",   15))
+    shipper_rate = float(data.get("shipper_rate",  5))
+    vat_rate     = float(data.get("vat_rate",     10))
+    note         = data.get("note", "")
+
+    total = shop_rate + admin_rate + shipper_rate + vat_rate
+    if abs(total - 100) > 0.01:
+        raise HTTPException(400, f"Tổng các tỷ lệ phải = 100%, hiện tại: {total}%")
+    for name, val in [("shop_rate", shop_rate), ("admin_rate", admin_rate), ("shipper_rate", shipper_rate), ("vat_rate", vat_rate)]:
+        if val <= 0 or val >= 100:
+            raise HTTPException(400, f"{name} phải trong khoảng (0, 100)")
+
+    # Deactivate tất cả config cũ
+    db.query(RevenueConfig).filter(RevenueConfig.is_active == True).update({"is_active": False})
+
+    # Tạo config mới
+    new_cfg = RevenueConfig(
+        shop_rate=shop_rate, admin_rate=admin_rate,
+        shipper_rate=shipper_rate, vat_rate=vat_rate,
+        is_active=True, changed_by=current_user.user_id, note=note,
+    )
+    db.add(new_cfg)
+    db.commit()
+    db.refresh(new_cfg)
+    return {"message": "Đã cập nhật cấu hình doanh thu", "config": _cfg_dict(new_cfg)}
 
 
 # ─── Reports ──────────────────────────────────────────────────────────────────

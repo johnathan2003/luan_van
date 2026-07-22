@@ -62,18 +62,19 @@ const HubShipmentsPage: React.FC = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F0FDFA' }}>
-              {['Mã vận chuyển', 'Đơn #', 'Nguồn → Đích', 'Người nhận', 'Trị giá', 'Shipper', 'Trạng thái'].map(h => (
+              {['Mã vận chuyển', 'Đơn #', 'Nguồn → Đích', 'Người nhận', 'Kích thước', 'Trị giá', 'Shipper', 'Trạng thái'].map(h => (
                 <th key={h} style={{ padding: '11px 14px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: C.navy, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: C.gray }}>Đang tải...</td></tr>
+              <tr><td colSpan={8} style={{ padding: 32, textAlign: 'center', color: C.gray }}>Đang tải...</td></tr>
             ) : shipments.length === 0 ? (
-              <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: C.gray }}>Không có đơn hàng nào</td></tr>
+              <tr><td colSpan={8} style={{ padding: 32, textAlign: 'center', color: C.gray }}>Không có đơn hàng nào</td></tr>
             ) : shipments.map((s: any) => {
               const st = STATUS_MAP[s.status] ?? { label: s.status, color: C.gray, bg: '#F1F5F9' }
+              const TIER_COLOR: Record<number, string> = { 1:'#0D9488',2:'#2563EB',3:'#D97706',4:'#7C3AED',5:'#DC2626',6:'#B45309' }
               return (
                 <tr key={s.shipment_id} style={{ borderBottom: '1px solid #F1F5F9' }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFF')}
@@ -87,6 +88,28 @@ const HubShipmentsPage: React.FC = () => {
                   <td style={{ padding: '12px 14px', fontSize: 13 }}>
                     <div style={{ fontWeight: 600, color: C.navy }}>{s.recipient || '—'}</div>
                     <div style={{ fontSize: 11, color: C.gray }}>{s.phone || ''}</div>
+                  </td>
+                  <td style={{ padding: '12px 14px', fontSize: 12 }}>
+                    {(s.pkg_length_cm || s.pkg_weight_kg || s.size_tier) ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {(s.pkg_length_cm && s.pkg_width_cm && s.pkg_height_cm) && (
+                          <span style={{ color: C.gray }}>📦 {s.pkg_length_cm}×{s.pkg_width_cm}×{s.pkg_height_cm} cm</span>
+                        )}
+                        {s.pkg_weight_kg && (
+                          <span style={{ color: C.gray }}>⚖️ {s.pkg_weight_kg} kg</span>
+                        )}
+                        {s.size_tier && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ fontSize: 10, fontWeight: 800, color: 'white', background: TIER_COLOR[s.size_tier] ?? C.gray, borderRadius: 5, padding: '1px 6px' }}>
+                              Bậc {s.size_tier}
+                            </span>
+                            {s.extra_fee > 0 && (
+                              <span style={{ fontSize: 11, color: C.error, fontWeight: 700 }}>+{(s.extra_fee as number).toLocaleString('vi-VN')}₫</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : <span style={{ color: '#CBD5E1' }}>—</span>}
                   </td>
                   <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 700, color: C.navy }}>
                     {s.amount ? fmt(s.amount) : '—'}

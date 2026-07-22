@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { toast } from 'react-toastify'
 import { shopService } from '../../services/shopService'
@@ -84,6 +84,17 @@ const ProductManagement: React.FC = () => {
 
   // packaging dimensions (product-level)
   const [packaging, setPackaging] = useState({ length: '', width: '', height: '', weight: '' })
+  const [sizeTiers, setSizeTiers] = useState<any[]>([])
+
+  // Fetch size tiers một lần khi mở form
+  useEffect(() => {
+    if (sizeTiers.length > 0) return
+    import('../../services/api').then(({ default: API }) => {
+      API.get('/api/v1/shipping/size-tiers').then((r: any) => {
+        setSizeTiers(r.data?.tiers ?? [])
+      }).catch(() => {})
+    })
+  }, [])
   const setPkg = (field: 'length' | 'width' | 'height' | 'weight', val: string) =>
     setPackaging(prev => ({ ...prev, [field]: val }))
   const [bundleAttrInputs, setBundleAttrInputs] = useState<Record<string, string>>({})
@@ -1637,6 +1648,82 @@ const ProductManagement: React.FC = () => {
                 </div>
               )
             })() : null}
+
+            {/* Bảng phí vận chuyển theo bậc */}
+            {sizeTiers.length > 0 && (() => {
+              const l = parseFloat(packaging.length) || 0
+              const w = parseFloat(packaging.width)  || 0
+              const h = parseFloat(packaging.height) || 0
+              const k = parseFloat(packaging.weight) || 0
+
+              const mainTiers = sizeTiers.filter(t => t.tier_level <= 5).sort((a: any, b: any) => a.tier_level - b.tier_level)
+              const pickTier = (val: number, field: string) => val > 0 ? mainTiers.find((t: any) => val <= t[field]) : mainTiers[0]
+              const tl = pickTier(l, 'max_length_cm')
+              const tw = pickTier(w, 'max_width_cm')
+              const th = pickTier(h, 'max_height_cm')
+              const tk = pickTier(k, 'max_weight_kg')
+              const candidates = [tl, tw, th, tk].filter(Boolean)
+              const oversized = [tl, tw, th, tk].some((v, i) => { const val = [l,w,h,k][i]; return val > 0 && !v })
+              const assigned = oversized ? { tier_level: 6, label: 'Quá khổ', extra_fee: 200000 }
+                : candidates.length > 0 ? candidates.reduce((a: any, b: any) => a.tier_level >= b.tier_level ? a : b) : null
+
+              const tierColors: Record<number, string> = { 1:'#0D9488',2:'#2563EB',3:'#D97706',4:'#7C3AED',5:'#DC2626',6:'#B45309' }
+
+              return (
+                <div style={{ marginTop: 14 }}>
+                  {/* Badge bậc hiện tại */}
+                  {assigned && (
+                    <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10,
+                      background: tierColors[assigned.tier_level] + '15',
+                      border: `2px solid ${tierColors[assigned.tier_level]}`, borderRadius: 10, padding: '10px 14px' }}>
+                      <span style={{ fontSize: 22, fontWeight: 900, color: tierColors[assigned.tier_level] }}>Bậc {assigned.tier_level}</span>
+                      <div>
+                        <p style={{ fontWeight: 800, color: tierColors[assigned.tier_level], margin: 0, fontSize: 14 }}>🚚 {assigned.label}</p>
+                        <p style={{ color: '#64748B', margin: '2px 0 0', fontSize: 12 }}>
+                          Phí thêm: <strong style={{ color: '#DC2626' }}>+{((assigned.extra_fee || 0) as number).toLocaleString('vi-VN')}₫</strong>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {/* Bảng tham khảo */}
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#64748B', margin: '0 0 6px', textTransform: 'uppercase' }}>📋 Bảng phí tham khảo</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {mainTiers.map((t: any) => {
+                      const isActive = assigned && assigned.tier_level === t.tier_level
+                      return (
+                        <div key={t.tier_level} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '5px 10px', borderRadius: 7,
+                          background: isActive ? tierColors[t.tier_level] + '20' : '#F8FAFC',
+                          border: isActive ? `1.5px solid ${tierColors[t.tier_level]}` : '1px solid #F1F5F9',
+                        }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: tierColors[t.tier_level] }}>Bậc {t.tier_level}</span>
+                            <span style={{ fontSize: 11, color: '#64748B' }}>{t.label} · ≤{t.max_length_cm}×{t.max_width_cm}×{t.max_height_cm}cm, ≤{t.max_weight_kg}kg</span>
+                          </div>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: t.extra_fee === 0 ? '#16A34A' : '#DC2626' }}>
+                            {t.extra_fee === 0 ? 'Miễn phí' : `+${(t.extra_fee as number).toLocaleString('vi-VN')}₫`}
+                          </span>
+                        </div>
+                      )
+                    })}
+                    {/* Quá khổ row */}
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '5px 10px', borderRadius: 7,
+                      background: assigned?.tier_level === 6 ? '#B4530920' : '#FEF9C3',
+                      border: assigned?.tier_level === 6 ? '1.5px solid #B45309' : '1px solid #FEF08A',
+                    }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: '#B45309' }}>Bậc 6</span>
+                        <span style={{ fontSize: 11, color: '#92400E' }}>Quá khổ · Vượt bậc 5</span>
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#B45309' }}>+200,000₫</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
 
           {/* Footer buttons */}

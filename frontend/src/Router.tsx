@@ -15,6 +15,7 @@ import NotFoundPage       from './pages/NotFoundPage'
 import ProfilePage        from './pages/ProfilePage'
 import ShopRegistration   from './pages/ShopRegistration'
 import ShipperRegistration from './pages/ShipperRegistration'
+import TrackOrderPage     from './pages/TrackOrderPage'
 
 // ── 👤 User (người mua) pages ─────────────────────────────────────────────────
 import ProductListPage    from './pages/user/ProductListPage'
@@ -100,6 +101,7 @@ import HubManagerLayout   from './pages/hub/HubManagerLayout'
 import HubDashboardPage   from './pages/hub/HubDashboardPage'
 import HubDistrictsPage   from './pages/hub/HubDistrictsPage'
 import HubShipmentsPage   from './pages/hub/HubShipmentsPage'
+import HubBundlesPage     from './pages/hub/HubBundlesPage'
 
 // ── 🏘️ District Manager (cấp 2 — kho quận) ──────────────────────────────
 import DistrictManagerLayout from './pages/district/DistrictManagerLayout'
@@ -126,6 +128,8 @@ const Router: React.FC = () => (
     {/* ── Auth (không layout) ─────────────────────────────────────────────── */}
     <Route path="/login"    element={<AuthLayout title="Đăng nhập"    subtitle="Chào mừng bạn quay trở lại"><Login /></AuthLayout>} />
     <Route path="/register" element={<AuthLayout title="Tạo tài khoản" subtitle="Mua sắm không giới hạn"><Register /></AuthLayout>} />
+    <Route path="/track"    element={<TrackOrderPage />} />
+    <Route path="/track/:code" element={<TrackOrderPage />} />
 
     {/* ── Public ──────────────────────────────────────────────────────────── */}
     <Route path="/"             element={inPublic(<Home />)} />
@@ -235,6 +239,7 @@ const Router: React.FC = () => (
       <Route path="/hub" element={<HubManagerLayout />}>
         <Route index            element={<HubDashboardPage />} />
         <Route path="districts" element={<HubDistrictsPage />} />
+        <Route path="bundles"   element={<HubBundlesPage />} />
         <Route path="shipments" element={<HubShipmentsPage />} />
       </Route>
     </Route>

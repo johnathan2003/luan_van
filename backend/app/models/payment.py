@@ -11,8 +11,8 @@ class Payment(Base):
     order_id = Column(Integer, ForeignKey("orders.order_id"), nullable=False, unique=True)
     trans_id = Column(String(255))
     amount = Column(Numeric(10, 2), nullable=False)   # Prisma: Decimal(10,2)
-    method = Column(Enum("momo", "cod", "vnpay", "credit_card"))
-    status = Column(Enum("pending", "success", "failed"), default="pending", index=True)
+    method = Column(Enum("momo", "cod", "vnpay", "credit_card", native_enum=False))
+    status = Column(Enum("pending", "success", "failed", native_enum=False), default="pending", index=True)
     # Momo fields
     momo_request_id = Column(String(255))
     momo_response = Column(JSON)

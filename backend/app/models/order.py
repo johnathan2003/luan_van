@@ -19,14 +19,15 @@ class Order(Base):
     final_price = Column(Numeric(10, 2), nullable=False)
     shipping_fee = Column(Numeric(10, 2), default=0)       # Prisma: shippingFee (mới)
     # Prisma: PaymentMethod enum — thêm credit_card, bỏ vnpay (hoặc giữ cả)
-    payment_method = Column(Enum("momo", "cod", "vnpay", "credit_card"), default="cod")
-    payment_status = Column(Enum("unpaid", "paid", "failed", "refunded"), default="unpaid")
+    payment_method = Column(Enum("momo", "cod", "vnpay", "credit_card", native_enum=False), default="cod")
+    payment_status = Column(Enum("unpaid", "paid", "failed", "refunded", native_enum=False), default="unpaid")
     # Prisma OrderStatus: PENDING,CONFIRMED,PAID,SHIPPED,DELIVERED,CANCELLED,RETURNED
     # Giữ thêm "ready_to_ship" và "completed" để tương thích workflow hiện tại
     order_status = Column(
         Enum(
             "pending", "confirmed", "paid", "ready_to_ship",
-            "shipped", "delivered", "completed", "cancelled", "returned"
+            "shipped", "delivered", "completed", "cancelled", "returned",
+            native_enum=False
         ),
         default="pending",
         index=True,

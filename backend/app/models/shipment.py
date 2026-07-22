@@ -77,7 +77,7 @@ class Shipper(Base):
     home_warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
 
     current_location = Column(JSON)
-    status = Column(Enum("available", "on_delivery", "offline"), default="offline", index=True)
+    status = Column(Enum("available", "on_delivery", "offline", native_enum=False), default="offline", index=True)
     rating = Column(String(5), default="0.00")
     total_deliveries = Column(Integer, default=0)
     verified_at = Column(DateTime)
@@ -103,7 +103,7 @@ class ShipperRegistration(Base):
     license_url      = Column(String(500))
     registration_url = Column(String(500))
     id_card_url      = Column(String(500))
-    status           = Column(Enum("pending", "approved", "rejected"), default="pending", index=True)
+    status           = Column(Enum("pending", "approved", "rejected", native_enum=False), default="pending", index=True)
     rejection_reason = Column(String(500))
     reviewed_by      = Column(Integer, ForeignKey("users.user_id"))
     reviewed_at      = Column(DateTime)
@@ -121,20 +121,39 @@ class Shipment(Base):
     order_id          = Column(Integer, ForeignKey("orders.order_id"), nullable=False)
     shipper_id        = Column(Integer, ForeignKey("shippers.shipper_id"))
 
+    # Mã đơn ship: SD-YYYYMMDD-xxxxxx (unique, sinh khi shop xác nhận đóng gói)
+    delivery_code     = Column(String(30), unique=True, nullable=True, index=True)
+
     # Loại vận chuyển — server_default để không include vào INSERT khi chưa migrate
     shipment_type = Column(String(50), server_default='local', nullable=True)
-    # Kho liên quan (liên tỉnh)
-    src_warehouse_id  = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
-    dest_warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
+
+    # Kho liên quan
+    src_warehouse_id      = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
+    dest_warehouse_id     = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
+    # Kho đang chứa đơn hiện tại (cập nhật mỗi lần scan/chuyển kho)
+    current_warehouse_id  = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
 
     pickup_location   = Column(String(500))
     delivery_location = Column(String(500))
+    # Trạng thái chi tiết theo kế hoạch DELIVERY_CODE_PLAN.md
+    # pending → packed → assigned_pickup → at_ward_warehouse → at_district_warehouse
+    # → at_hub_hanoi → in_transit_interprovincial → at_hub_hcmc
+    # → at_district_hcmc → at_ward_hcmc → out_for_delivery → delivered | failed
     status = Column(String(50), default="pending", index=True)
     pickup_time    = Column(DateTime)
     delivery_time  = Column(DateTime)
     current_location = Column(JSON)
     route          = Column(JSON)
     failure_reason = Column(String(500))
+
+    # Thông tin kích thước & bậc phí (lưu khi shop confirm-packing)
+    pkg_length_cm  = Column(Numeric(6, 1), nullable=True)
+    pkg_width_cm   = Column(Numeric(6, 1), nullable=True)
+    pkg_height_cm  = Column(Numeric(6, 1), nullable=True)
+    pkg_weight_kg  = Column(Numeric(6, 2), nullable=True)
+    size_tier      = Column(Integer, nullable=True)    # 1–5 hoặc 6 (quá khổ)
+    extra_fee      = Column(Integer, default=0, nullable=True)
+
     created_at     = Column(DateTime, server_default=func.now())
     updated_at     = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -144,10 +163,72 @@ class Shipment(Base):
     )
 
     # Relationships
-    order         = relationship("Order", back_populates="shipment")
-    shipper       = relationship("Shipper", back_populates="shipments")
-    src_warehouse  = relationship("Warehouse", foreign_keys=[src_warehouse_id], back_populates="outgoing")
-    dest_warehouse = relationship("Warehouse", foreign_keys=[dest_warehouse_id], back_populates="incoming")
+    order             = relationship("Order", back_populates="shipment")
+    shipper           = relationship("Shipper", back_populates="shipments")
+    src_warehouse     = relationship("Warehouse", foreign_keys=[src_warehouse_id], back_populates="outgoing")
+    dest_warehouse    = relationship("Warehouse", foreign_keys=[dest_warehouse_id], back_populates="incoming")
+    current_warehouse = relationship("Warehouse", foreign_keys=[current_warehouse_id])
+    logs              = relationship("ShipmentLog", back_populates="shipment", order_by="ShipmentLog.created_at")
+    bundle_links      = relationship("BundleShipment", back_populates="shipment")
+
+
+class ShipmentLog(Base):
+    """Lịch sử di chuyển của đơn hàng qua các kho."""
+    __tablename__ = "shipment_logs"
+
+    log_id       = Column(Integer, primary_key=True, autoincrement=True)
+    shipment_id  = Column(Integer, ForeignKey("shipments.shipment_id", ondelete="CASCADE"), nullable=False)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id", ondelete="SET NULL"), nullable=True)
+    status       = Column(String(50), nullable=False)
+    note         = Column(String(300))
+    created_by   = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
+    created_at   = Column(DateTime, server_default=func.now())
+
+    shipment  = relationship("Shipment", back_populates="logs")
+    warehouse = relationship("Warehouse", foreign_keys=[warehouse_id])
+    creator   = relationship("User", foreign_keys=[created_by])
+
+
+class InterProvincialBundle(Base):
+    """Bundle liên tỉnh: mã LT-YYYYMMDD-HN-HCM-xxxx gom nhiều đơn SD."""
+    __tablename__ = "interprovincial_bundles"
+
+    bundle_id    = Column(Integer, primary_key=True, autoincrement=True)
+    bundle_code  = Column(String(40), unique=True, nullable=False, index=True)
+    src_hub_id   = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=False)
+    dest_hub_id  = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=False)
+    # pending → sealed → in_transit → arrived → distributed
+    status       = Column(String(30), nullable=False, default='pending', index=True)
+    total_shipments = Column(Integer, default=0)
+    total_cod    = Column(Numeric(14, 2), default=0)
+
+    created_by   = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    sealed_by    = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    sealed_at    = Column(DateTime, nullable=True)
+    arrived_confirmed_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    arrived_at   = Column(DateTime, nullable=True)
+    created_at   = Column(DateTime, server_default=func.now())
+    updated_at   = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    src_hub   = relationship("Warehouse", foreign_keys=[src_hub_id])
+    dest_hub  = relationship("Warehouse", foreign_keys=[dest_hub_id])
+    creator   = relationship("User", foreign_keys=[created_by])
+    sealer    = relationship("User", foreign_keys=[sealed_by])
+    shipments = relationship("BundleShipment", back_populates="bundle",
+                             cascade="all, delete-orphan")
+
+
+class BundleShipment(Base):
+    """Liên kết N-N giữa bundle liên tỉnh và đơn ship."""
+    __tablename__ = "bundle_shipments"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    bundle_id   = Column(Integer, ForeignKey("interprovincial_bundles.bundle_id", ondelete="CASCADE"), nullable=False)
+    shipment_id = Column(Integer, ForeignKey("shipments.shipment_id", ondelete="CASCADE"), nullable=False)
+    added_at    = Column(DateTime, server_default=func.now())
+
+    bundle   = relationship("InterProvincialBundle", back_populates="shipments")
+    shipment = relationship("Shipment", back_populates="bundle_links")
 
 
 class ShipperBonus(Base):
@@ -172,9 +253,9 @@ class ShipperTransaction(Base):
     txn_id      = Column(Integer, primary_key=True, autoincrement=True)
     shipper_id  = Column(Integer, ForeignKey("shippers.shipper_id"), nullable=False, index=True)
     order_id    = Column(Integer, ForeignKey("orders.order_id"), nullable=True)
-    type        = Column(Enum("delivery_fee", "bonus", "adjustment", "refund"), nullable=False)
+    type        = Column(Enum("delivery_fee", "bonus", "adjustment", "refund", native_enum=False), nullable=False)
     amount      = Column(Numeric(12, 2), nullable=False)
-    status      = Column(Enum("completed", "pending", "cancelled"), default="completed")
+    status      = Column(Enum("completed", "pending", "cancelled", native_enum=False), default="completed")
     note        = Column(String(300))
     created_at  = Column(DateTime, server_default=func.now())
 
@@ -190,7 +271,7 @@ class ShipperWithdrawal(Base):
     bank_name      = Column(String(100), nullable=False)
     account_number = Column(String(50), nullable=False)
     account_holder = Column(String(100))
-    status         = Column(Enum("pending", "completed", "rejected"), default="pending")
+    status         = Column(Enum("pending", "completed", "rejected", native_enum=False), default="pending")
     note           = Column(String(300))
     created_at     = Column(DateTime, server_default=func.now())
     completed_at   = Column(DateTime)
@@ -204,10 +285,10 @@ class ShipperIncident(Base):
     incident_id  = Column(Integer, primary_key=True, autoincrement=True)
     shipper_id   = Column(Integer, ForeignKey("shippers.shipper_id"), nullable=False, index=True)
     order_id     = Column(Integer, ForeignKey("orders.order_id"), nullable=True)
-    type         = Column(Enum("accident", "delay", "complaint", "lost_item", "other"), nullable=False)
+    type         = Column(Enum("accident", "delay", "complaint", "lost_item", "other", native_enum=False), nullable=False)
     title        = Column(String(200), nullable=False)
     description  = Column(Text)
-    status       = Column(Enum("open", "in_review", "resolved", "closed"), default="open")
+    status       = Column(Enum("open", "in_review", "resolved", "closed", native_enum=False), default="open")
     is_violation = Column(Boolean, default=False)
     support_note = Column(String(500))
     created_at   = Column(DateTime, server_default=func.now())

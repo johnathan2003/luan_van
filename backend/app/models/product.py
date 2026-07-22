@@ -30,7 +30,7 @@ class Product(Base):
     cost = Column(Numeric(10, 2))
     stock_quantity = Column(Integer, default=0)
     image_urls = Column(JSON)
-    status = Column(Enum("active", "approved", "pending", "rejected", "archived"), default="pending", index=True)
+    status = Column(Enum("active", "approved", "pending", "rejected", "archived", native_enum=False), default="pending", index=True)
     # rating, reviews — giữ lại cho tính năng reviews
     rating = Column(Numeric(3, 2), default=0.00)
     total_reviews = Column(Integer, default=0)
@@ -117,7 +117,7 @@ class StockReservation(Base):
     quantity = Column(Integer, nullable=False)
     reserved_at = Column(DateTime, server_default=func.now())
     expires_at = Column(DateTime)
-    status = Column(Enum("reserved", "cancelled", "used"), default="reserved", index=True)
+    status = Column(Enum("reserved", "cancelled", "used", native_enum=False), default="reserved", index=True)
 
     # Relationships
     order = relationship("Order")
@@ -132,7 +132,7 @@ class ProductDeletionRequest(Base):
     shop_id = Column(Integer, ForeignKey("users.user_id"))
     requested_by = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     reason = Column(Text)
-    status = Column(Enum("pending", "approved", "rejected"), default="pending", index=True)
+    status = Column(Enum("pending", "approved", "rejected", native_enum=False), default="pending", index=True)
     reviewed_by = Column(Integer, ForeignKey("users.user_id"))
     reviewed_at = Column(DateTime)
     review_reason = Column(Text)
@@ -153,7 +153,7 @@ class ProductDeletionAuditLog(Base):
     product_name = Column(String(255))
     shop_id = Column(Integer, ForeignKey("users.user_id"))
     deleted_by = Column(Integer, ForeignKey("users.user_id"), nullable=False)
-    deletion_type = Column(Enum("direct", "request_approved"), default="direct")
+    deletion_type = Column(Enum("direct", "request_approved", native_enum=False), default="direct")
     reason = Column(Text)
     request_id = Column(Integer, ForeignKey("product_deletion_requests.deletion_req_id"))
     deleted_at = Column(DateTime, server_default=func.now())

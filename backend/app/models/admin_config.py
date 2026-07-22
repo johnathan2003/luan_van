@@ -66,6 +66,39 @@ class ShippingMethod(Base):
     updated_at  = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
+class ShippingSizeTier(Base):
+    """5 bậc kích thước cố định — admin chỉnh extra_fee + limits."""
+    __tablename__ = "shipping_size_tiers"
+
+    tier_id       = Column(Integer, primary_key=True, autoincrement=True)
+    tier_level    = Column(Integer, nullable=False, unique=True)   # 1–5
+    label         = Column(String(50))
+    max_length_cm = Column(Integer, nullable=False)
+    max_width_cm  = Column(Integer, nullable=False)
+    max_height_cm = Column(Integer, nullable=False)
+    max_weight_kg = Column(Numeric(6, 2), nullable=False)
+    extra_fee     = Column(Integer, nullable=False, default=0)
+    updated_by    = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    updated_at    = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class RevenueConfig(Base):
+    """% phân chia doanh thu — mỗi lần thay đổi thêm row mới (lịch sử)."""
+    __tablename__ = "revenue_config"
+
+    config_id    = Column(Integer, primary_key=True, autoincrement=True)
+    shop_rate    = Column(Numeric(5, 2), nullable=False, default=70.00)
+    admin_rate   = Column(Numeric(5, 2), nullable=False, default=15.00)
+    shipper_rate = Column(Numeric(5, 2), nullable=False, default=5.00)
+    vat_rate     = Column(Numeric(5, 2), nullable=False, default=10.00)
+    is_active    = Column(Boolean, default=True)
+    changed_by   = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    changed_at   = Column(DateTime, server_default=func.now())
+    note         = Column(Text)
+
+    changer = relationship("User", foreign_keys=[changed_by])
+
+
 class PlatformTransaction(Base):
     __tablename__ = "platform_transactions"
 

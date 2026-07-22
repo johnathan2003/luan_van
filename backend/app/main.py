@@ -19,6 +19,7 @@ from app.routes import (
     wallet, banners, bot,
 )
 from app.routes.warehouses import router as warehouses_router
+from app.routes.config_public import router as config_public_router
 from app.websocket.connection_manager import sio, init_main_loop
 
 # Superadmin module — nằm ngoài app package, không ghi log
@@ -123,6 +124,7 @@ app.include_router(warehouses_router,                                      tags=
 app.include_router(wallet.router,                                          tags=["Wallet"])
 app.include_router(banners.router,                                         tags=["Banners"])
 app.include_router(bot.router,           prefix="/api/v1/bot",            tags=["Bot"])
+app.include_router(config_public_router, prefix="/api/v1",                tags=["Config"])
 
 # Superadmin — chỉ mount nếu module tồn tại
 if super_router:

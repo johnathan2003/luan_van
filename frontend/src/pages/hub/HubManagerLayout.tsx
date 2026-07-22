@@ -11,6 +11,7 @@ import { logout } from '../../store/slices/authSlice'
 const NAV = [
   { path: '/hub',           icon: '📊', label: 'Tổng quan',    desc: 'Dashboard kho tổng' },
   { path: '/hub/districts', icon: '🏘️', label: 'Kho quận',     desc: 'Quản lý kho cấp 2' },
+  { path: '/hub/bundles',   icon: '📦', label: 'Bundle LT',    desc: 'Mã kiện liên tỉnh LT-...' },
   { path: '/hub/shipments', icon: '🚛', label: 'Đơn liên tỉnh',desc: 'Hàng vào/ra thành phố' },
 ]
 

@@ -126,16 +126,32 @@ def upgrade():
 
     # FK ngược: banner_slots.current_auction_id → banner_auctions.auction_id
     conn.execute(sa.text("""
-        ALTER TABLE banner_slots
-            ADD CONSTRAINT IF NOT EXISTS fk_banner_slots_current_auction
-            FOREIGN KEY (current_auction_id) REFERENCES banner_auctions(auction_id) ON DELETE SET NULL;
+        DO $$ BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.table_constraints
+                WHERE constraint_name = 'fk_banner_slots_current_auction'
+                  AND table_name = 'banner_slots'
+            ) THEN
+                ALTER TABLE banner_slots
+                    ADD CONSTRAINT fk_banner_slots_current_auction
+                    FOREIGN KEY (current_auction_id) REFERENCES banner_auctions(auction_id) ON DELETE SET NULL;
+            END IF;
+        END $$;
     """))
 
     # FK ngược: banner_auctions.winner_bid_id → banner_bids.bid_id
     conn.execute(sa.text("""
-        ALTER TABLE banner_auctions
-            ADD CONSTRAINT IF NOT EXISTS fk_banner_auctions_winner_bid
-            FOREIGN KEY (winner_bid_id) REFERENCES banner_bids(bid_id) ON DELETE SET NULL;
+        DO $$ BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.table_constraints
+                WHERE constraint_name = 'fk_banner_auctions_winner_bid'
+                  AND table_name = 'banner_auctions'
+            ) THEN
+                ALTER TABLE banner_auctions
+                    ADD CONSTRAINT fk_banner_auctions_winner_bid
+                    FOREIGN KEY (winner_bid_id) REFERENCES banner_bids(bid_id) ON DELETE SET NULL;
+            END IF;
+        END $$;
     """))
 
     # ── 9. Role warehouse_chief ───────────────────────────────────────────────
