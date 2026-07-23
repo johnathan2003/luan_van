@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import ProductList from '../components/product/ProductList'
 import ProductFilter from '../components/product/ProductFilter'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
-import { fetchProducts, fetchCategories, setFilters, resetFilters } from '../store/slices/productSlice'
+import { fetchProducts, fetchCategories, setFilters, resetFilters, appendProducts, resetProducts, setLoadingMore, setLoopLoading } from '../store/slices/productSlice'
 import { formatCurrency } from '../utils/formatters'
 import { getAllSubmissions, resolveImage } from '../utils/bannerAuctionStore'
 import { resolveImageAsync } from '../utils/imageDB'
@@ -464,92 +464,114 @@ const BuyZoMallSection: React.FC = () => {
   )
 }
 
-// ─── Sản phẩm mới ────────────────────────────────────────────────────────────
-const NewProductsSection: React.FC = () => {
-  const [items, setItems] = useState<any[]>([])
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const scroll = (dir: number) => scrollRef.current?.scrollBy({ left: dir * 210, behavior: 'smooth' })
-
-  useEffect(() => {
-    API.get('/api/v1/products', { params: { limit: 12, sort: 'newest' } })
-      .then(r => setItems(r.data.products ?? []))
-      .catch(() => {})
-  }, [])
-
-  if (items.length === 0) return null
-
-  return (
-    <div style={{ background: 'var(--bg-page)', padding: '40px 0', borderTop: '1px solid var(--border-subtle)' }}>
-      <div className="container">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
-          <div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(16,185,129,0.1)', borderRadius: 20, padding: '4px 12px', marginBottom: 8 }}>
-              <span style={{ fontSize: 14 }}>🆕</span>
-              <span style={{ color: '#059669', fontWeight: 700, fontSize: 12 }}>VỪA ĐƯỢC DUYỆT</span>
-            </div>
-            <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Sản phẩm mới nhất</h2>
-          </div>
-        </div>
-        <div style={{ position: 'relative' }}>
-          <button onClick={() => scroll(-1)} style={{ position: 'absolute', left: -16, top: '42%', transform: 'translateY(-50%)', zIndex: 5, width: 36, height: 36, borderRadius: '50%', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', cursor: 'pointer', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
-          <button onClick={() => scroll(1)}  style={{ position: 'absolute', right: -16, top: '42%', transform: 'translateY(-50%)', zIndex: 5, width: 36, height: 36, borderRadius: '50%', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', cursor: 'pointer', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
-          <div ref={scrollRef} style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-            {items.map((item: any) => (
-              <Link key={item.product_id} to={`/products/${item.product_id}`} style={{ textDecoration: 'none', flexShrink: 0, width: 180 }}>
-                <div style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border-subtle)', borderRadius: 14, overflow: 'hidden', transition: 'transform 0.2s, box-shadow 0.2s' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 10px 28px rgba(5,150,105,0.14)' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';  (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}>
-                  <div style={{ background: 'var(--bg-highlight, #f3f4f6)', height: 150, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                    {item.image_urls?.[0]
-                      ? <img src={item.image_urls[0]} alt={item.product_name} style={{ width: '100%', height: 150, objectFit: 'cover', display: 'block' }} />
-                      : <span style={{ fontSize: 48 }}>📦</span>
-                    }
-                    <div style={{ position: 'absolute', top: 8, left: 8, background: '#059669', color: '#fff', fontWeight: 800, fontSize: 10, padding: '3px 8px', borderRadius: 20 }}>🆕 MỚI</div>
-                  </div>
-                  <div style={{ padding: '10px 12px 12px' }}>
-                    {item.shop_name && <div style={{ fontSize: 10, color: '#059669', fontWeight: 700, marginBottom: 4 }}>{item.shop_name}</div>}
-                    <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: 6, height: 34, overflow: 'hidden' }}>{item.product_name}</p>
-                    <p style={{ fontSize: 15, fontWeight: 800, color: '#059669', margin: 0 }}>{formatCurrency(parseFloat(item.price))}</p>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Home ─────────────────────────────────────────────────────────────────────
 const Home: React.FC = () => {
   const dispatch = useAppDispatch()
   const [searchParams] = useSearchParams()
-  const { products, categories, filters, loading, total, pages, page } = useAppSelector(s => s.product)
+  const { products, categories, filters, loading, loadingMore, loopLoading, total } = useAppSelector(s => s.product)
 
-  // filterMountedRef: ngăn useEffect[filters] chạy lần render đầu tiên
-  const filterMountedRef = useRef(false)
+  // ── Infinite scroll state ──────────────────────────────────────────────────
+  const infinitePageRef   = useRef(1)   // trang hiện tại đã load
+  const infinitePagesRef  = useRef(1)   // tổng số trang
+  const isFetchingRef     = useRef(false)
+  const isPausedRef       = useRef(false)   // tạm dừng khi hover vùng features/footer
+  const cancelLoopRef     = useRef(false)   // hủy sleep đang chạy khi hover features
+  const sentinelRef       = useRef<HTMLDivElement>(null)
+  const productSectionRef = useRef<HTMLDivElement>(null)
 
-  // On mount: luôn fetch trực tiếp + sync lại Redux filters
+  // ── Mount: load trang đầu ──────────────────────────────────────────────────
   useEffect(() => {
     dispatch(fetchCategories())
     const search = searchParams.get('search')
-    const params = { page: 1, limit: 12, sort: 'popular' as const, ...(search ? { search } : {}) }
-    dispatch(resetFilters(search ? { search } : undefined))  // sync filters state
-    dispatch(fetchProducts(params))                          // luôn fetch, không phụ thuộc cascade
+    const initFilters = { page: 1, limit: 12, sort: 'popular' as const, ...(search ? { search } : {}) }
+    dispatch(resetFilters(search ? { search } : undefined))
+    dispatch(resetProducts())
+    infinitePageRef.current  = 1
+    infinitePagesRef.current = 1
+
+    dispatch(fetchProducts(initFilters)).then((res: any) => {
+      if (res.payload) {
+        infinitePageRef.current  = res.payload.page  ?? 1
+        infinitePagesRef.current = res.payload.pages ?? 1
+      }
+    })
   }, [])
 
-  // Fetch khi filter thay đổi SAU lần mount đầu
+  // ── Helper sleep ──────────────────────────────────────────────────────────
+  const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+  // ── Fetch thêm trang kế tiếp (append) ─────────────────────────────────────
+  const loadMore = useCallback(async () => {
+    if (isFetchingRef.current || isPausedRef.current) return
+    isFetchingRef.current = true
+
+    const isLoop = infinitePageRef.current >= infinitePagesRef.current
+    const nextPage = isLoop ? 1 : infinitePageRef.current + 1
+
+    try {
+      if (isLoop) {
+        // Hết trang → hiệu ứng chờ 5s rồi mới load lại từ đầu
+        cancelLoopRef.current = false
+        dispatch(setLoopLoading(true))
+        dispatch(setLoadingMore(false))
+        await sleep(5000)
+        // Nếu user hover vào features trong lúc chờ → hủy, không fetch
+        if (cancelLoopRef.current) {
+          cancelLoopRef.current = false
+          isFetchingRef.current = false
+          return
+        }
+        dispatch(setLoopLoading(false))
+      } else {
+        // Load trang kế bình thường → spinner nhỏ
+        dispatch(setLoadingMore(true))
+      }
+
+      const params = new URLSearchParams()
+      const merged = { ...filters, page: nextPage, limit: 12 }
+      Object.entries(merged).forEach(([k, v]) => { if (v !== undefined && v !== null) params.set(k, String(v)) })
+      const res = await API.get(`/api/v1/products?${params}`)
+      const data = res.data
+      dispatch(appendProducts({ products: data.products ?? [], total: data.total, page: data.page, pages: data.pages }))
+      infinitePageRef.current  = data.page  ?? nextPage
+      infinitePagesRef.current = data.pages ?? 1
+    } catch {
+      dispatch(setLoadingMore(false))
+      dispatch(setLoopLoading(false))
+    } finally {
+      isFetchingRef.current = false
+    }
+  }, [dispatch, filters])
+
+  // ── IntersectionObserver gắn sentinel ──────────────────────────────────────
   useEffect(() => {
-    if (!filterMountedRef.current) { filterMountedRef.current = true; return }
-    dispatch(fetchProducts(filters))
-  }, [filters, dispatch])
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMore() },
+      { threshold: 0.1 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadMore])
 
+  // ── Khi filter thay đổi: reset list rồi fetch lại ─────────────────────────
+  const filterChangedRef = useRef(false)
   const handleFilterChange = (key: string, value: any) => {
+    filterChangedRef.current = true
     dispatch(setFilters({ [key]: value, page: 1 }))
-  }
+    dispatch(resetProducts())
+    infinitePageRef.current  = 1
+    infinitePagesRef.current = 1
 
-  const productSectionRef = useRef<HTMLDivElement>(null)
+    const newFilters = { ...filters, [key]: value, page: 1, limit: 12 }
+    dispatch(fetchProducts(newFilters)).then((res: any) => {
+      if (res.payload) {
+        infinitePageRef.current  = res.payload.page  ?? 1
+        infinitePagesRef.current = res.payload.pages ?? 1
+      }
+    })
+  }
 
   const scrollToProducts = () => {
     productSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -562,18 +584,18 @@ const Home: React.FC = () => {
         <div className="container"><BannerSlider /></div>
       </div>
 
-      {/* Category quick-filter (lọc tại chỗ) */}
+      {/* Category quick-filter */}
       <div className="section-surface" style={{ padding: '20px 0', borderBottom: '1px solid var(--border-subtle)' }}>
         <div className="container">
           <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
             <button type="button" className="btn btn-primary btn-sm"
-              onClick={() => { dispatch(setFilters({ category_id: undefined })); scrollToProducts() }}
+              onClick={() => { handleFilterChange('category_id', undefined); scrollToProducts() }}
               style={{ borderRadius: 'var(--radius-full)', flexShrink: 0 }}>
               Tất cả
             </button>
             {categories.map(cat => (
               <button key={cat.category_id} type="button"
-                onClick={() => { dispatch(setFilters({ category_id: cat.category_id, page: 1 })); scrollToProducts() }}
+                onClick={() => { handleFilterChange('category_id', cat.category_id); scrollToProducts() }}
                 style={{ flexShrink: 0, padding: '10px 20px', borderRadius: 'var(--radius-full)', border: '1.5px solid var(--border-subtle)', background: filters.category_id === cat.category_id ? 'var(--primary, #7C3AED)' : 'var(--bg-highlight, var(--bg-page))', color: filters.category_id === cat.category_id ? '#fff' : 'var(--text-primary)', cursor: 'pointer', fontSize: 14, whiteSpace: 'nowrap', transition: 'all 0.2s' }}
                 onMouseEnter={e => { if (filters.category_id !== cat.category_id) { e.currentTarget.style.borderColor = 'var(--border-accent)'; e.currentTarget.style.background = 'var(--bg-card)' } }}
                 onMouseLeave={e => { if (filters.category_id !== cat.category_id) { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.background = 'var(--bg-highlight, var(--bg-page))' } }}>
@@ -587,24 +609,19 @@ const Home: React.FC = () => {
       {/* Flash Sale */}
       <FlashSaleSection />
 
-      {/* Banner quảng cáo trên BuyZo Mall */}
+      {/* Banner quảng cáo BuyZo Mall */}
       <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '20px 0 0' }}>
         <div className="container"><MallAdBanner /></div>
       </div>
 
       {/* BuyZo Mall */}
-      <div style={{ background: 'var(--bg-page)', padding: '24px 0 32px' }}>
-        <div className="container">
-          <BuyZoMallSection />
-        </div>
+      <div style={{ background: 'var(--bg-page)', padding: '24px 0 40px' }}>
+        <div className="container"><BuyZoMallSection /></div>
       </div>
 
-      {/* Sản phẩm mới nhất */}
-      <NewProductsSection />
-
-      {/* Sản phẩm nổi bật + Bộ lọc — cùng 1 section */}
+      {/* ── Sản phẩm nổi bật + Infinite scroll ── */}
       <div ref={productSectionRef} id="products-section" style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-page)' }}>
-        <div className="container" style={{ paddingTop: 48, paddingBottom: 56 }}>
+        <div className="container" style={{ paddingTop: 0, paddingBottom: 24 }}>
 
           {/* Section header */}
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 28 }}>
@@ -617,7 +634,7 @@ const Home: React.FC = () => {
             </div>
             {total > 0 && (
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>
-                Tìm thấy <strong style={{ color: 'var(--text-primary)' }}>{total}</strong> sản phẩm
+                <strong style={{ color: 'var(--text-primary)' }}>{total}</strong> sản phẩm
               </p>
             )}
           </div>
@@ -625,7 +642,7 @@ const Home: React.FC = () => {
           {/* Filter sidebar + Product grid */}
           <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start' }}>
 
-            {/* Filter sidebar */}
+            {/* Filter sidebar — sticky */}
             <div style={{ width: 230, flexShrink: 0, position: 'sticky', top: 80 }}>
               <ProductFilter
                 categories={categories}
@@ -634,59 +651,47 @@ const Home: React.FC = () => {
               />
             </div>
 
-            {/* Products + pagination */}
+            {/* Products — infinite scroll */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <ProductList products={products} loading={loading} />
+              <ProductList products={products} loading={loading} loadingMore={loadingMore} loopLoading={loopLoading} />
 
-              {/* Pagination */}
-              {pages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 32, flexWrap: 'wrap' }}>
-                  <button
-                    disabled={page <= 1}
-                    onClick={() => dispatch(setFilters({ page: page - 1 }))}
-                    style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid var(--border-subtle)', background: 'var(--bg-card)', color: page <= 1 ? 'var(--text-secondary)' : 'var(--text-primary)', cursor: page <= 1 ? 'not-allowed' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}>
-                    ← Truoc
-                  </button>
-                  {Array.from({ length: Math.min(pages, 7) }, (_, i) => {
-                    const p = pages <= 7 ? i + 1 : page <= 4 ? i + 1 : page >= pages - 3 ? pages - 6 + i : page - 3 + i
-                    return (
-                      <button key={p}
-                        onClick={() => dispatch(setFilters({ page: p }))}
-                        style={{ width: 38, height: 38, borderRadius: 8, border: page === p ? 'none' : '1.5px solid var(--border-subtle)', background: page === p ? 'var(--primary, #7C3AED)' : 'var(--bg-card)', color: page === p ? '#fff' : 'var(--text-primary)', cursor: 'pointer', fontWeight: page === p ? 700 : 400, fontSize: 14 }}>
-                        {p}
-                      </button>
-                    )
-                  })}
-                  <button
-                    disabled={page >= pages}
-                    onClick={() => dispatch(setFilters({ page: page + 1 }))}
-                    style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid var(--border-subtle)', background: 'var(--bg-card)', color: page >= pages ? 'var(--text-secondary)' : 'var(--text-primary)', cursor: page >= pages ? 'not-allowed' : 'pointer', opacity: page >= pages ? 0.5 : 1 }}>
-                    Sau →
-                  </button>
-                </div>
-              )}
+              {/* Sentinel div — IntersectionObserver bắt sự kiện này */}
+              <div ref={sentinelRef} style={{ height: 1 }} />
             </div>
 
           </div>
+
         </div>
       </div>
 
-      {/* Features */}
-      <div className="section-surface" style={{ padding: '48px 0', marginBottom: 32, borderTop: '1px solid var(--border-subtle)' }}>
+      {/* ── Features — cuối trang — hover → tạm dừng infinite scroll ── */}
+      <div className="section-surface"
+        style={{ padding: '28px 0', borderTop: '1px solid var(--border-subtle)' }}
+        onMouseEnter={() => {
+          isPausedRef.current  = true
+          cancelLoopRef.current = true          // hủy sleep đang chạy
+          dispatch(setLoopLoading(false))       // ẩn spinner ngay lập tức
+        }}
+        onMouseLeave={() => {
+          isPausedRef.current   = false
+          cancelLoopRef.current = false
+        }}>
         <div className="container">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24, textAlign: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, textAlign: 'center' }}>
             {[
-              { icon: '🚚', title: 'Giao hàng nhanh',    desc: 'Vận chuyển toàn quốc, giao trong 2-5 ngày' },
-              { icon: '🔒', title: 'Thanh toán an toàn', desc: 'MoMo, VNPay, Chuyển khoản, COD' },
-              { icon: '🔄', title: 'Đổi trả dễ dàng',    desc: '7 ngày đổi trả nếu sản phẩm lỗi' },
-              { icon: '🎧', title: 'Hỗ trợ 24/7',        desc: 'CSKH sẵn sàng hỗ trợ bạn mọi lúc' },
+              { icon: '🚚', title: 'Giao hàng nhanh',    desc: 'Toàn quốc, 2-5 ngày',        bg: 'linear-gradient(135deg,#eff6ff,#dbeafe)', iconBg: '#3b82f6', border: '#bfdbfe' },
+              { icon: '🔒', title: 'Thanh toán an toàn', desc: 'MoMo, VNPay, COD',            bg: 'linear-gradient(135deg,#f0fdf4,#dcfce7)', iconBg: '#22c55e', border: '#bbf7d0' },
+              { icon: '🔄', title: 'Đổi trả dễ dàng',    desc: '7 ngày nếu sản phẩm lỗi',    bg: 'linear-gradient(135deg,#fff7ed,#fed7aa)', iconBg: '#f97316', border: '#fed7aa' },
+              { icon: '🎧', title: 'Hỗ trợ 24/7',        desc: 'CSKH sẵn sàng mọi lúc',      bg: 'linear-gradient(135deg,#faf5ff,#ede9fe)', iconBg: '#7C3AED', border: '#ddd6fe' },
             ].map(f => (
-              <div key={f.title} style={{ padding: '24px 16px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-highlight, var(--gray-50))', border: '1px solid var(--border-subtle)', transition: 'transform 0.2s, box-shadow 0.2s' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-md)' }}
+              <div key={f.title} style={{ padding: '16px 12px', borderRadius: 14, background: f.bg, border: `1.5px solid ${f.border}`, transition: 'transform 0.2s, box-shadow 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-3px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 6px 20px rgba(0,0,0,0.10)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}>
-                <div style={{ fontSize: 44, marginBottom: 12 }}>{f.icon}</div>
-                <h3 style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>{f.title}</h3>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>{f.desc}</p>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: f.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, boxShadow: `0 4px 12px ${f.iconBg}55` }}>{f.icon}</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text-primary)', marginBottom: 3 }}>{f.title}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{f.desc}</div>
+                </div>
               </div>
             ))}
           </div>

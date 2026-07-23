@@ -9,6 +9,9 @@ class Voucher(Base):
 
     voucher_id = Column(Integer, primary_key=True, autoincrement=True)
     code = Column(String(50), unique=True, nullable=False)
+    # platform = do admin tạo, shop = do shop tạo cho khách hàng của mình
+    voucher_type = Column(Enum("platform", "shop", native_enum=False), default="platform", nullable=False)
+    shop_id = Column(Integer, ForeignKey("shops.shop_id"), nullable=True)  # chỉ có khi voucher_type="shop"
     discount_type = Column(Enum("percentage", "fixed", native_enum=False), default="percentage")
     # Prisma: Decimal(10,2) — đổi từ String sang Numeric
     discount_value = Column(Numeric(10, 2), nullable=False)
@@ -29,6 +32,7 @@ class Voucher(Base):
 
     # Relationships
     creator = relationship("User", foreign_keys=[created_by])
+    shop = relationship("Shop", foreign_keys=[shop_id])
     orders = relationship("Order", back_populates="voucher", foreign_keys="Order.voucher_id")
     collections = relationship("VoucherCollection", back_populates="voucher")
 

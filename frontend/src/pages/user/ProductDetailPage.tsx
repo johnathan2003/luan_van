@@ -300,6 +300,15 @@ const ProductDetailPage: React.FC = () => {
   const [reviewFilter, setReviewFilter] = useState<0|1|2|3|4|5>(0)
   const [shopProducts, setShopProducts] = useState<any[]>([])
   const [recommended, setRecommended] = useState<any[]>([])
+  const [recLoadingMore, setRecLoadingMore] = useState(false)
+  const [recLoopLoading, setRecLoopLoading] = useState(false)
+  const recPageRef      = useRef(1)
+  const recPagesRef     = useRef(1)
+  const recFetchingRef  = useRef(false)
+  const recCancelRef    = useRef(false)
+  const recSentinelRef  = useRef<HTMLDivElement>(null)
+  const recCatIdRef     = useRef<number | null>(null)
+  const recProductIdRef = useRef<number | null>(null)
 
   useEffect(() => { if (id) { dispatch(fetchProductById(Number(id))); trackMissionEvent('view_product') } }, [id, dispatch])
 
@@ -331,12 +340,74 @@ const ProductDetailPage: React.FC = () => {
     }
     const catId = (product as any).category_id
     if (catId) {
-      API.get('/api/v1/products', { params: { category_id: catId, limit: 10, sort: 'top_rated' } }).then(r => {
-        const list: any[] = r.data?.products || r.data?.items || r.data || []
-        setRecommended(list.filter(p => p.product_id !== product.product_id).slice(0, 8))
+      // Reset infinite scroll state
+      recCatIdRef.current     = catId
+      recProductIdRef.current = product.product_id
+      recPageRef.current      = 1
+      recPagesRef.current     = 1
+      recFetchingRef.current  = false
+      setRecommended([])
+      setRecLoadingMore(false)
+      setRecLoopLoading(false)
+
+      API.get('/api/v1/products', { params: { category_id: catId, limit: 8, sort: 'top_rated', page: 1 } }).then(r => {
+        const list: any[] = r.data?.products || r.data?.items || []
+        setRecommended(list.filter((p: any) => p.product_id !== product.product_id))
+        recPageRef.current  = r.data?.page  ?? 1
+        recPagesRef.current = r.data?.pages ?? 1
       }).catch(() => {})
     }
   }, [product])
+
+  // ── Infinite scroll cho Gợi ý ──────────────────────────────────────────────
+  const recSleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+  const loadMoreRecommended = useCallback(async () => {
+    if (recFetchingRef.current || !recCatIdRef.current) return
+    recFetchingRef.current = true
+
+    const isLoop   = recPageRef.current >= recPagesRef.current
+    const nextPage = isLoop ? 1 : recPageRef.current + 1
+
+    try {
+      if (isLoop) {
+        recCancelRef.current = false
+        setRecLoopLoading(true)
+        setRecLoadingMore(false)
+        await recSleep(3000)
+        if (recCancelRef.current) { recCancelRef.current = false; recFetchingRef.current = false; return }
+        setRecLoopLoading(false)
+      } else {
+        setRecLoadingMore(true)
+      }
+      const res = await API.get('/api/v1/products', {
+        params: { category_id: recCatIdRef.current, limit: 8, sort: 'top_rated', page: nextPage }
+      })
+      const list: any[] = res.data?.products || []
+      const filtered = list.filter((p: any) => p.product_id !== recProductIdRef.current)
+      setRecommended(prev => [...prev, ...filtered])
+      recPageRef.current  = res.data?.page  ?? nextPage
+      recPagesRef.current = res.data?.pages ?? 1
+      setRecLoadingMore(false)
+    } catch {
+      setRecLoadingMore(false)
+      setRecLoopLoading(false)
+    } finally {
+      recFetchingRef.current = false
+    }
+  }, [])
+
+  // Phải phụ thuộc vào recommended.length để effect chạy lại sau khi sentinel xuất hiện trong DOM
+  useEffect(() => {
+    const sentinel = recSentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) loadMoreRecommended() },
+      { threshold: 0.1 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadMoreRecommended, recommended.length])
 
   const handleAddToCart = async () => { if (!isAuthenticated) { navigate('/login'); return }; await add(product!.product_id, qty); setAddedMsg(true); setTimeout(() => setAddedMsg(false), 2000) }
   const handleBuyNow = async () => {
@@ -618,12 +689,36 @@ const ProductDetailPage: React.FC = () => {
         {recommended.length > 0 && (
           <div style={{ background: 'white', border: '1px solid var(--gray-200)', borderRadius: 16, padding: 28 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                          <SectionTitle icon="✨">Gợi ý cho bạn</SectionTitle>
+              <SectionTitle icon="✨">Gợi ý cho bạn</SectionTitle>
               <Link to="/products" style={{ fontSize: 13, color: C.primary, fontWeight: 600, textDecoration: 'none' }}>Xem thêm →</Link>
             </div>
+
+            {/* Grid sản phẩm — key dùng index tránh trùng khi loop */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14 }}>
-              {recommended.map((p: any) => <ProductCard key={p.product_id} p={p} onClick={() => navigate(`/products/${p.product_id}`)} />)}
+              {recommended.map((p: any, idx) => (
+                <ProductCard key={`${p.product_id}-${idx}`} p={p} onClick={() => navigate(`/products/${p.product_id}`)} />
+              ))}
             </div>
+
+            {/* Loop loading (hết trang → chuẩn bị load lại) */}
+            {recLoopLoading && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, padding: '24px 0', color: C.gray }}>
+                <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: C.primary, animation: 'recSpin 0.7s linear infinite' }} />
+                <span style={{ fontSize: 13 }}>Đang làm mới danh sách…</span>
+                <style>{`@keyframes recSpin { to { transform: rotate(360deg) } }`}</style>
+              </div>
+            )}
+
+            {/* Load trang kế bình thường */}
+            {recLoadingMore && !recLoopLoading && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, padding: '20px 0', color: C.gray }}>
+                <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: C.primary, animation: 'recSpin 0.7s linear infinite' }} />
+                <span style={{ fontSize: 13 }}>Đang tải thêm gợi ý…</span>
+              </div>
+            )}
+
+            {/* Sentinel — IntersectionObserver kích hoạt khi kéo đến đây */}
+            <div ref={recSentinelRef} style={{ height: 1 }} />
           </div>
         )}
 

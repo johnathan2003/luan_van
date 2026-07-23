@@ -20,6 +20,34 @@ from app.services.notification_service import create_notification
 router = APIRouter()
 
 
+# ─── [S-3] Admin action logger ────────────────────────────────────────────────
+
+def log_admin_action(
+    db: Session,
+    admin_id: int,
+    action: str,
+    target_type: str = None,
+    target_id: int = None,
+    details: dict = None,
+):
+    """
+    Ghi lại hành động của admin vào bảng admin_logs.
+    Dùng try/except để không block nếu log thất bại.
+    """
+    try:
+        from app.models.logs import AdminLog
+        db.add(AdminLog(
+            admin_id=admin_id,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            details=details or {},
+        ))
+        # Không commit riêng — để caller commit cùng action chính
+    except Exception:
+        pass
+
+
 @router.get("/dashboard")
 def dashboard(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     return get_admin_dashboard(db)
@@ -56,12 +84,16 @@ def list_users(
 @router.put("/users/{user_id}/ban")
 def ban(user_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     user = ban_user(db, current_user.user_id, user_id)
+    log_admin_action(db, current_user.user_id, "ban_user", "user", user_id)  # [S-3]
+    db.commit()
     return {"message": "User banned", "user_id": user.user_id}
 
 
 @router.put("/users/{user_id}/unban")
 def unban(user_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     user = unban_user(db, current_user.user_id, user_id)
+    log_admin_action(db, current_user.user_id, "unban_user", "user", user_id)  # [S-3]
+    db.commit()
     return {"message": "User unbanned", "user_id": user.user_id}
 
 
@@ -85,12 +117,16 @@ def shop_regs(
 @router.put("/shop-registrations/{reg_id}/approve")
 def approve_shop(reg_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     shop = approve_shop_registration(db, current_user.user_id, reg_id)
+    log_admin_action(db, current_user.user_id, "approve_shop", "shop_registration", reg_id)  # [S-3]
+    db.commit()
     return {"message": "Shop approved", "shop_id": shop.shop_id}
 
 
 @router.put("/shop-registrations/{reg_id}/reject")
 def reject_shop(reg_id: int, data: dict, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     reject_shop_registration(db, current_user.user_id, reg_id, data.get("reason", ""))
+    log_admin_action(db, current_user.user_id, "reject_shop", "shop_registration", reg_id, {"reason": data.get("reason")})  # [S-3]
+    db.commit()
     return {"message": "Shop registration rejected"}
 
 
@@ -134,12 +170,16 @@ def shipper_regs(
 @router.put("/shipper-registrations/{reg_id}/approve")
 def approve_shipper(reg_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     shipper = approve_shipper_registration(db, current_user.user_id, reg_id)
+    log_admin_action(db, current_user.user_id, "approve_shipper", "shipper_registration", reg_id)  # [S-3]
+    db.commit()
     return {"message": "Shipper approved", "shipper_id": shipper.shipper_id}
 
 
 @router.put("/shipper-registrations/{reg_id}/reject")
 def reject_shipper(reg_id: int, data: dict, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     reject_shipper_registration(db, current_user.user_id, reg_id, data.get("reason", ""))
+    log_admin_action(db, current_user.user_id, "reject_shipper", "shipper_registration", reg_id, {"reason": data.get("reason")})  # [S-3]
+    db.commit()
     return {"message": "Shipper registration rejected"}
 
 
@@ -171,6 +211,96 @@ def list_shippers(
             "status":             s.status,
         })
     return {"shippers": result, "total": total, "page": page, "pages": -(-total // limit)}
+
+
+# [F-5] Admin tạo bonus cho shipper
+@router.post("/shippers/{shipper_id}/bonus", status_code=201)
+def create_shipper_bonus(
+    shipper_id: int,
+    data: dict,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin tạo bonus thủ công cho shipper."""
+    from app.models.shipment import Shipper, ShipperBonus
+    s = db.query(Shipper).filter(Shipper.shipper_id == shipper_id).first()
+    if not s:
+        raise HTTPException(404, "Không tìm thấy shipper")
+    if not data.get("title") or not data.get("reward"):
+        raise HTTPException(400, "Thiếu title hoặc reward")
+    bonus = ShipperBonus(
+        shipper_id=shipper_id,
+        type=data.get("type", "manual"),   # manual | performance | milestone
+        title=data["title"],
+        reward=data["reward"],
+        period=data.get("period"),
+        status="received",
+    )
+    db.add(bonus)
+    db.commit()
+    return {"message": "Đã tạo bonus", "bonus_id": bonus.bonus_id}
+
+
+# [F-6] Admin xem incidents của shipper
+@router.get("/shipper-incidents")
+def list_shipper_incidents(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    status: Optional[str] = None,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin xem toàn bộ sự cố shipper."""
+    from app.models.shipment import ShipperIncident
+    from app.utils.helpers import paginate
+    q = db.query(ShipperIncident)
+    if status and status != "all":
+        q = q.filter(ShipperIncident.status == status)
+    q = q.order_by(ShipperIncident.created_at.desc())
+    items, total, pages = paginate(q, page, limit)
+    return {
+        "incidents": [
+            {
+                "incident_id":  i.incident_id,
+                "shipper_id":   i.shipper_id,
+                "order_id":     i.order_id,
+                "type":         i.type,
+                "title":        i.title,
+                "description":  i.description,
+                "status":       i.status,
+                "is_violation": i.is_violation,
+                "support_note": i.support_note,
+                "created_at":   str(i.created_at),
+            }
+            for i in items
+        ],
+        "total": total,
+        "pages": pages,
+    }
+
+
+@router.patch("/shipper-incidents/{incident_id}")
+def resolve_shipper_incident(
+    incident_id: int,
+    data: dict,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin xử lý (resolve/close) sự cố shipper."""
+    from app.models.shipment import ShipperIncident
+    from datetime import datetime, timezone
+    inc = db.query(ShipperIncident).filter(ShipperIncident.incident_id == incident_id).first()
+    if not inc:
+        raise HTTPException(404, "Không tìm thấy sự cố")
+    new_status = data.get("status")
+    if new_status:
+        inc.status = new_status
+    if "support_note" in data:
+        inc.support_note = data["support_note"]
+    if "is_violation" in data:
+        inc.is_violation = bool(data["is_violation"])
+    db.commit()
+    return {"message": "Đã cập nhật sự cố"}
 
 
 @router.post("/shippers/{user_id}/assign-warehouse")
@@ -835,11 +965,11 @@ def admin_vouchers(
                 "discount_value": float(v.discount_value or 0),
                 "min_order_value":float(v.min_order_value or 0),
                 "max_discount":   float(v.max_discount) if v.max_discount else None,
-                "usage_limit":    v.usage_limit,
-                "used_count":     v.used_count,
-                "start_date":     str(v.start_date) if v.start_date else None,
-                "end_date":       str(v.end_date) if v.end_date else None,
-                "is_active":      v.is_active,
+                "usage_limit":    v.max_uses,           # model dùng max_uses
+                "used_count":     v.current_uses,       # model dùng current_uses
+                "start_date":     str(v.valid_from) if v.valid_from else None,   # model dùng valid_from
+                "end_date":       str(v.valid_to) if v.valid_to else None,       # model dùng valid_to
+                "is_active":      v.status == "active",  # model dùng status
                 "shop_id":        v.shop_id,
             }
             for v in items
@@ -988,16 +1118,19 @@ def finance_revenue_monthly(
 ):
     """Doanh thu platform theo tháng — tổng hợp từ bảng orders."""
     from app.models.order import Order
+    # [S-2] GROUP BY expression thay vì alias string — PostgreSQL không hỗ trợ GROUP BY alias
+    _yr  = extract("year",  Order.created_at)
+    _mo  = extract("month", Order.created_at)
     rows = (
         db.query(
-            extract("year",  Order.created_at).label("year"),
-            extract("month", Order.created_at).label("month"),
+            _yr.label("year"),
+            _mo.label("month"),
             func.sum(Order.final_price).label("revenue"),
             func.count(Order.order_id).label("orders"),
         )
         .filter(Order.order_status.notin_(["cancelled", "returned"]))
-        .group_by("year", "month")
-        .order_by("year", "month")
+        .group_by(_yr, _mo)
+        .order_by(_yr, _mo)
         .limit(months)
         .all()
     )
@@ -1356,26 +1489,31 @@ def report_user_growth(
     db: Session = Depends(get_db),
 ):
     """Tăng trưởng người dùng theo tháng."""
+    # [S-2] GROUP BY expression, không dùng string alias
+    _u_yr = extract("year",  User.created_at)
+    _u_mo = extract("month", User.created_at)
     rows_new = (
         db.query(
-            extract("year",  User.created_at).label("year"),
-            extract("month", User.created_at).label("month"),
+            _u_yr.label("year"),
+            _u_mo.label("month"),
             func.count(User.user_id).label("new_users"),
         )
-        .group_by("year", "month")
-        .order_by("year", "month")
+        .group_by(_u_yr, _u_mo)
+        .order_by(_u_yr, _u_mo)
         .limit(months)
         .all()
     )
     from app.models.order import Order
+    _o_yr = extract("year",  Order.created_at)
+    _o_mo = extract("month", Order.created_at)
     rows_active = (
         db.query(
-            extract("year",  Order.created_at).label("year"),
-            extract("month", Order.created_at).label("month"),
+            _o_yr.label("year"),
+            _o_mo.label("month"),
             func.count(func.distinct(Order.user_id)).label("active_users"),
         )
-        .group_by("year", "month")
-        .order_by("year", "month")
+        .group_by(_o_yr, _o_mo)
+        .order_by(_o_yr, _o_mo)
         .limit(months)
         .all()
     )
@@ -1474,10 +1612,11 @@ def report_voucher_usage(
 ):
     """Top voucher theo lượt dùng."""
     from app.models.voucher import Voucher
+    # [S-1/V-1] dùng current_uses (đúng tên cột), không phải used_count
     vouchers = (
         db.query(Voucher)
-        .filter(Voucher.used_count > 0)
-        .order_by(Voucher.used_count.desc())
+        .filter(Voucher.current_uses > 0)
+        .order_by(Voucher.current_uses.desc())
         .limit(limit)
         .all()
     )
@@ -1486,10 +1625,10 @@ def report_voucher_usage(
             {
                 "voucher_id":    v.voucher_id,
                 "code":          v.code,
-                "uses":          v.used_count,
+                "uses":          v.current_uses,
                 "discount_type": v.discount_type,
                 "discount_value":float(v.discount_value or 0),
-                "discount":      float((v.discount_value or 0) * v.used_count) if v.discount_type == "fixed" else 0,
+                "discount":      float((v.discount_value or 0) * v.current_uses) if v.discount_type == "fixed" else 0,
             }
             for v in vouchers
         ]
@@ -1546,15 +1685,17 @@ def create_voucher(
         raise HTTPException(status_code=400, detail="Mã voucher đã tồn tại")
     v = Voucher(
         code=data["code"],
+        voucher_type="platform",
         discount_type=data.get("discount_type", "percentage"),
         discount_value=data["discount_value"],
-        usage_limit=data.get("usage_limit"),
-        start_date=data.get("start_date"),
-        end_date=data.get("end_date"),
-        is_active=data.get("is_active", True),
         min_order_value=data.get("min_order_value"),
         max_discount=data.get("max_discount"),
-        voucher_type="platform",
+        max_uses=data.get("usage_limit"),            # frontend gửi usage_limit → map sang max_uses
+        current_uses=0,
+        valid_from=data.get("start_date"),           # frontend gửi start_date → map sang valid_from
+        valid_to=data.get("end_date"),               # frontend gửi end_date → map sang valid_to
+        status="active" if data.get("is_active", True) else "inactive",  # frontend gửi is_active
+        created_by=current_user.user_id,
     )
     db.add(v)
     db.commit()
@@ -1690,7 +1831,7 @@ def _broadcast_system_notification(db, sn, sender):
             from app.models.user import UserRole
             user_ids = [ur.user_id for ur in db.query(UserRole).filter(UserRole.role_id == role_obj.role_id).all()]
             q = q.filter(UserModel.user_id.in_(user_ids))
-    users = q.filter(UserModel.is_active == True).all()
+    users = q.filter(UserModel.status == "active").all()
     for u in users[:500]:   # giới hạn 500 để tránh timeout
         try:
             create_notification(db, u.user_id, sn.title, sn.content, notif_type=sn.type)

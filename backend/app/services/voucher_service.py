@@ -38,7 +38,12 @@ def _to_public(voucher: Voucher, source: str, collected_ids: set, db: Session) -
 def _active_vouchers(db: Session):
     now = datetime.utcnow()
     q = db.query(Voucher).filter(Voucher.status == "active")
-    return [v for v in q.all() if v.valid_to is None or v.valid_to >= now]
+    # [V-6] phải kiểm tra cả valid_from lẫn valid_to
+    return [
+        v for v in q.all()
+        if (v.valid_from is None or v.valid_from <= now)
+        and (v.valid_to is None or v.valid_to >= now)
+    ]
 
 
 def _collected_ids(db: Session, user_id: int) -> set:
@@ -47,20 +52,21 @@ def _collected_ids(db: Session, user_id: int) -> set:
 
 
 def list_platform_vouchers(db: Session, user_id: int) -> list:
+    # [V-4] dùng voucher_type thay vì kiểm tra role của creator
     collected = _collected_ids(db, user_id)
     result = []
     for v in _active_vouchers(db):
-        if "admin" in _creator_roles(v):
+        if v.voucher_type == "platform":
             result.append(_to_public(v, "platform", collected, db))
     return result
 
 
 def list_shop_vouchers(db: Session, user_id: int) -> list:
+    # [V-4] dùng voucher_type thay vì kiểm tra role của creator
     collected = _collected_ids(db, user_id)
     result = []
     for v in _active_vouchers(db):
-        roles = _creator_roles(v)
-        if "shop" in roles and "admin" not in roles:
+        if v.voucher_type == "shop":
             result.append(_to_public(v, "shop", collected, db))
     return result
 

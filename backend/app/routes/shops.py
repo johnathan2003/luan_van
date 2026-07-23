@@ -355,18 +355,76 @@ def add_voucher(
 @router.get("/vouchers")
 def list_vouchers(current_user: User = Depends(require_shop_owner), db: Session = Depends(get_db)):
     from app.models.voucher import Voucher
-    vouchers = db.query(Voucher).filter(Voucher.created_by == current_user.user_id).all()
+    # [V-4] filter theo shop_id, không phải created_by (owner đổi → vẫn thấy voucher)
+    vouchers = db.query(Voucher).filter(
+        Voucher.shop_id == current_user.user_id,
+        Voucher.voucher_type == "shop",
+    ).all()
     return {
         "vouchers": [
             {
-                "voucher_id": v.voucher_id,
-                "code": v.code,
-                "discount_type": v.discount_type,
-                "discount_value": v.discount_value,
-                "status": v.status,
-                "current_uses": v.current_uses,
-                "max_uses": v.max_uses,
+                "voucher_id":     v.voucher_id,
+                "code":           v.code,
+                "discount_type":  v.discount_type,
+                "discount_value": float(v.discount_value or 0),
+                "min_order_value":float(v.min_order_value or 0) if v.min_order_value else None,
+                "max_discount":   float(v.max_discount) if v.max_discount else None,
+                "status":         v.status,
+                "current_uses":   v.current_uses,
+                "max_uses":       v.max_uses,
+                "valid_from":     str(v.valid_from) if v.valid_from else None,
+                "valid_to":       str(v.valid_to) if v.valid_to else None,
             }
             for v in vouchers
         ]
     }
+
+
+# [V-7] Shop sửa voucher của mình
+@router.put("/vouchers/{voucher_id}")
+def update_voucher(
+    voucher_id: int,
+    data: dict,
+    current_user: User = Depends(require_shop_owner),
+    db: Session = Depends(get_db),
+):
+    from app.models.voucher import Voucher
+    v = db.query(Voucher).filter(
+        Voucher.voucher_id == voucher_id,
+        Voucher.shop_id == current_user.user_id,
+        Voucher.voucher_type == "shop",
+    ).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Voucher không tìm thấy hoặc không thuộc shop này")
+    allowed = {"discount_type", "discount_value", "min_order_value", "max_discount",
+               "max_uses", "valid_from", "valid_to", "status"}
+    for key, val in data.items():
+        if key in allowed:
+            setattr(v, key, val)
+    db.commit()
+    return {"message": "Đã cập nhật voucher"}
+
+
+# [V-7] Shop xóa voucher của mình
+@router.delete("/vouchers/{voucher_id}")
+def delete_voucher(
+    voucher_id: int,
+    current_user: User = Depends(require_shop_owner),
+    db: Session = Depends(get_db),
+):
+    from app.models.voucher import Voucher
+    v = db.query(Voucher).filter(
+        Voucher.voucher_id == voucher_id,
+        Voucher.shop_id == current_user.user_id,
+        Voucher.voucher_type == "shop",
+    ).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Voucher không tìm thấy hoặc không thuộc shop này")
+    if v.current_uses > 0:
+        # Không xóa nếu đã có người dùng — chỉ vô hiệu hóa
+        v.status = "inactive"
+        db.commit()
+        return {"message": "Voucher đã được sử dụng, đã chuyển sang trạng thái inactive"}
+    db.delete(v)
+    db.commit()
+    return {"message": "Đã xóa voucher"}

@@ -23,7 +23,7 @@ def create_order(db: Session, user_id: int, data: OrderCreate) -> Order:
     for item_data in data.items:
         product = db.query(Product).filter(
             Product.product_id == item_data.product_id,
-            Product.status == "active",
+            Product.status.in_(["active", "approved"]),
             Product.deleted_at.is_(None),
         ).first()
         if not product:
@@ -56,7 +56,8 @@ def create_order(db: Session, user_id: int, data: OrderCreate) -> Order:
                     discount = float(voucher.discount_value)
                 voucher.current_uses += 1
 
-    final_price = max(0.0, total_price - discount)
+    shipping_fee = float(data.shipping_fee or 0)  # [I-1] phí ship từ frontend
+    final_price = max(0.0, total_price - discount + shipping_fee)
 
     # COD: payment_status bắt đầu là "unpaid" (thanh toán khi nhận)
     # Online: "unpaid" chờ gateway xác nhận
@@ -68,6 +69,7 @@ def create_order(db: Session, user_id: int, data: OrderCreate) -> Order:
         total_price=total_price,
         discount_amount=discount,
         final_price=final_price,
+        shipping_fee=shipping_fee,           # [I-1] lưu riêng để hiển thị
         payment_method=data.payment_method,
         payment_status="unpaid",
         order_status="pending",
@@ -225,6 +227,12 @@ def cancel_order(db: Session, order_id: int, user_id: int) -> Order:
             product.stock_quantity += item.quantity
             product.sales_count -= item.quantity
 
+    # Hoàn lại current_uses của voucher
+    if order.voucher_code:
+        voucher = db.query(Voucher).filter(Voucher.code == order.voucher_code).first()
+        if voucher and voucher.current_uses > 0:
+            voucher.current_uses -= 1
+
     order.order_status = "cancelled"
     db.commit()
     db.refresh(order)
@@ -241,6 +249,14 @@ def confirm_received(db: Session, order_id: int, user_id: int) -> Order:
     if order.payment and order.payment_method == "cod":
         order.payment.status = "success"
         order.payment_status = "paid"
+
+    # [C-3] Phân chia doanh thu sau khi xác nhận nhận hàng
+    try:
+        from app.services.payout_service import process_order_payout
+        process_order_payout(db, order)
+    except Exception:
+        pass  # payout fail không block confirm_received
+
     db.commit()
     db.refresh(order)
     return order

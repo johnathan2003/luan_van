@@ -16,8 +16,10 @@ import type { VoucherLite } from '../../types/voucher'
 const isVoucherEligible = (v: VoucherLite, subtotal: number) => {
   if (subtotal <= 0) return false
   if (v.status !== 'active') return false
-  if (v.valid_to && new Date(v.valid_to) < new Date()) return false
-  if (v.max_uses != null && v.current_uses >= v.max_uses) return false
+  const now = new Date()
+  if (v.valid_from && new Date(v.valid_from) > now) return false  // [V-9] chưa đến ngày bắt đầu
+  if (v.valid_to && new Date(v.valid_to) < now) return false
+  if (v.max_uses != null && v.current_uses >= v.max_uses) return false  // [V-9] hết lượt
   if (v.min_order_value && subtotal < Number(v.min_order_value)) return false
   return true
 }

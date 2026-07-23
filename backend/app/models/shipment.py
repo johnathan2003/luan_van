@@ -240,7 +240,7 @@ class ShipperBonus(Base):
     title       = Column(String(200), nullable=False)
     reward      = Column(Numeric(12, 2), nullable=False)
     period      = Column(String(100))
-    status      = Column(Enum("received", "pending", "cancelled", name="shipper_bonus_status"), default="pending")
+    status      = Column(Enum("received", "pending", "cancelled", native_enum=False), default="pending")
     received_at = Column(DateTime)
     created_at  = Column(DateTime, server_default=func.now())
 

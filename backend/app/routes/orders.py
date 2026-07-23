@@ -132,6 +132,7 @@ def get_order(order_id: int, current_user: User = Depends(get_current_user), db:
             }
             for i in order.items
         ],
+        "shipping_fee":    str(order.shipping_fee or 0),
         "shipment": {
             "shipment_id":       order.shipment.shipment_id,
             "status":            order.shipment.status,
@@ -139,6 +140,14 @@ def get_order(order_id: int, current_user: User = Depends(get_current_user), db:
             "delivery_location": order.shipment.delivery_location,
             "current_location":  order.shipment.current_location,
             "shipper_id":        order.shipment.shipper_id,
+            # [I-3] thêm các trường kích thước và mã giao hàng
+            "delivery_code":     order.shipment.delivery_code,
+            "size_tier":         order.shipment.size_tier,
+            "extra_fee":         float(order.shipment.extra_fee or 0),
+            "pkg_weight_kg":     float(order.shipment.pkg_weight_kg or 0) if order.shipment.pkg_weight_kg else None,
+            "pkg_length_cm":     order.shipment.pkg_length_cm,
+            "pkg_width_cm":      order.shipment.pkg_width_cm,
+            "pkg_height_cm":     order.shipment.pkg_height_cm,
         } if order.shipment else None,
     }
 
@@ -263,7 +272,7 @@ def confirm_packing(
     roles = [r.role_name for r in (current_user.roles or [])]
     is_admin = "admin" in roles or "superadmin" in roles
     if not is_admin:
-        shop = db.query(Shop).filter(Shop.shop_id == order.shop_id, Shop.owner_id == current_user.user_id).first()
+        shop = db.query(Shop).filter(Shop.shop_id == order.shop_id, Shop.shop_id == current_user.user_id).first()
         if not shop:
             raise HTTPException(status_code=403, detail="Không có quyền xác nhận đơn này")
 
@@ -425,7 +434,7 @@ def get_delivery_slip(
 
     # Kiểm tra quyền truy cập phiếu
     shop = db.query(Shop).filter(Shop.shop_id == order.shop_id).first()
-    is_shop_owner = shop and shop.owner_id == current_user.user_id
+    is_shop_owner = shop and shop.shop_id == current_user.user_id
     if not (is_admin or is_warehouse or is_shipper or is_customer or is_shop_owner):
         raise HTTPException(status_code=403, detail="Không có quyền xem phiếu này")
 
@@ -490,3 +499,44 @@ def track_order(order_id: int, current_user: User = Depends(get_current_user), d
             "delivery_time": str(order.shipment.delivery_time) if order.shipment.delivery_time else None,
         } if order.shipment else None,
     }
+
+
+# [F-4] Đánh giá shipper sau khi nhận hàng
+@router.post("/{order_id}/rate-shipper", status_code=201)
+def rate_shipper(
+    order_id: int,
+    data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """User đánh giá shipper sau khi đơn hàng completed."""
+    from app.models.shipment import Shipment, Shipper
+    from sqlalchemy import func as sqlfunc
+    from decimal import Decimal
+
+    order = get_order_by_id(db, order_id)
+    if order.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Không có quyền đánh giá đơn này")
+    if order.order_status != "completed":
+        raise HTTPException(status_code=400, detail="Chỉ có thể đánh giá sau khi đã nhận hàng")
+
+    rating = data.get("rating")
+    if not isinstance(rating, (int, float)) or not (1 <= rating <= 5):
+        raise HTTPException(status_code=400, detail="Rating phải từ 1 đến 5")
+
+    shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
+    if not shipment or not shipment.shipper_id:
+        raise HTTPException(status_code=404, detail="Không có shipper cho đơn này")
+
+    shipper = db.query(Shipper).filter(Shipper.shipper_id == shipment.shipper_id).first()
+    if not shipper:
+        raise HTTPException(status_code=404, detail="Không tìm thấy shipper")
+
+    # Tính avg rating: (current_rating * count + new_rating) / (count + 1)
+    current_rating = float(shipper.rating or 0)
+    count = shipper.total_deliveries or 1
+    new_avg = (current_rating * (count - 1) + float(rating)) / count
+    shipper.rating = str(round(new_avg, 2))
+
+    db.commit()
+    return {"message": "Đã đánh giá shipper", "new_rating": round(new_avg, 2)}
