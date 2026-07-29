@@ -1,0 +1,40 @@
+sequenceDiagram
+    actor KH as Khách Hàng
+    participant GD as Giao Diện<br/>Đăng Ký
+    participant RXT as Router<br/>Xác Thực
+    participant CSDLND as CSDL<br/>Người Dùng
+    participant DVEmail as Dịch Vụ Email
+
+    KH->>GD: Truy cập trang đăng ký
+    GD-->>KH: Hiển thị form đăng ký
+
+    KH->>GD: Nhập thông tin và nhấn "Đăng Ký"
+    GD->>RXT: POST /auth/register {tên, email, mật khẩu}
+    RXT->>CSDLND: Kiểm tra email đã tồn tại?
+    CSDLND-->>RXT: Kết quả kiểm tra
+
+    alt [Email đã được đăng ký]
+        RXT-->>GD: 409 Xung đột
+        GD-->>KH: Thông báo "Email đã được sử dụng"
+    else [Email hợp lệ]
+        RXT->>CSDLND: Tạo tài khoản trạng thái "chờ xác thực"
+        CSDLND-->>RXT: OK
+        RXT->>DVEmail: Gửi mã OTP đến email
+        DVEmail-->>RXT: Gửi thành công / lỗi
+        RXT-->>GD: 200 OK
+        GD-->>KH: Thông báo "Kiểm tra email để xác thực"
+    end
+
+    KH->>GD: Nhập mã OTP
+    GD->>RXT: POST /auth/xac-thuc-otp {email, otp}
+    RXT->>CSDLND: Kiểm tra mã OTP
+
+    alt [Mã hợp lệ]
+        RXT->>CSDLND: Cập nhật trạng thái "đã kích hoạt"
+        CSDLND-->>RXT: OK
+        RXT-->>GD: 200 OK + JWT token
+        GD-->>KH: Xác thực thành công, chuyển hướng trang chủ
+    else [Mã sai / hết hạn]
+        RXT-->>GD: 400 Yêu cầu không hợp lệ
+        GD-->>KH: Hiển thị lỗi, cho phép gửi lại OTP
+    end

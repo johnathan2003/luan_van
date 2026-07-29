@@ -1,0 +1,12 @@
+graph LR
+    SHOP["👤 CHỦ CỬA HÀNG"]
+    CUS["👤 KHÁCH HÀNG"]
+
+    SHOP --- UC1(["QUẢN LÝ\nVOUCHER"])
+    SHOP --- UC2(["TẠO FLASH SALE"])
+    CUS --- UC3(["SỬ DỤNG\nVOUCHER"])
+    CUS --- UC4(["XEM FLASH SALE"])
+
+    UC1 -.->|"<<include>>"| UC1a(["Tạo mã voucher"])
+    UC1 -.->|"<<include>>"| UC1b(["Vô hiệu hóa\nvoucher"])
+    UC3 -.->|"<<include>>"| UC3a(["Kiểm tra điều kiện\náp dụng"])

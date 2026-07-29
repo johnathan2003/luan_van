@@ -1,0 +1,12 @@
+graph LR
+    CUS["👤 KHÁCH HÀNG"]
+
+    CUS --- UC1(["TÌM KIẾM\nSẢN PHẨM"])
+    CUS --- UC2(["XEM CHI TIẾT\nSẢN PHẨM"])
+    CUS --- UC3(["THÊM VÀO\nGIỎ HÀNG"])
+    CUS --- UC4(["ĐẶT HÀNG"])
+
+    UC1 -.->|"<<include>>"| UC1a(["Lọc nâng cao"])
+    UC1 -.->|"<<include>>"| UC1b(["Sắp xếp kết quả"])
+    UC4 -.->|"<<include>>"| UC4a(["Áp dụng voucher"])
+    UC4 -.->|"<<include>>"| UC4b(["Nhập địa chỉ\ngiao hàng"])

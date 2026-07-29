@@ -1,0 +1,25 @@
+flowchart TD
+    S(( )) --> A[Khách hàng nhập từ khóa
+hoặc chọn bộ lọc danh mục]
+    A --> B[Hệ thống truy vấn
+và trả về kết quả]
+    B --> C{Có kết quả?}
+    C -->|Không| D[Thông báo
+'Không tìm thấy sản phẩm phù hợp']
+    D --> A
+    C -->|Có| E[Hiển thị danh sách
+sản phẩm theo trang]
+    E --> F[Khách hàng chọn
+sắp xếp hoặc lọc thêm]
+    F --> B
+    E --> G[Khách hàng nhấp vào
+sản phẩm để xem chi tiết]
+    G --> H[Hiển thị trang chi tiết
+sản phẩm, đánh giá, tồn kho]
+    H --> I{Hành động?}
+    I -->|Thêm vào giỏ| J[Thêm sản phẩm vào giỏ hàng]
+    I -->|Tiếp tục tìm kiếm| A
+    J --> E2(( ))
+
+    style S fill:#000,stroke:#000
+    style E2 fill:#000,stroke:#000,color:#fff

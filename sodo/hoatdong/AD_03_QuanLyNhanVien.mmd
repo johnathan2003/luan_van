@@ -1,0 +1,29 @@
+flowchart TD
+    S(( )) --> A[Chủ cửa hàng truy cập
+mục 'Quản lý Nhân viên']
+    A --> B[Hệ thống hiển thị
+danh sách nhân viên]
+    B --> C{Hành động?}
+    C -->|Thêm nhân viên| D[Nhập thông tin:
+tên, email, vai trò]
+    D --> E{Email đã
+tồn tại trong hệ thống?}
+    E -->|Không| F[Tạo tài khoản nhân viên
+và gửi email mời]
+    E -->|Có| G[Liên kết tài khoản
+vào cửa hàng]
+    F --> H[Lưu vào CSDL]
+    G --> H
+    C -->|Sửa quyền hạn| I[Chọn nhân viên
+và cập nhật vai trò]
+    I --> H
+    C -->|Xóa nhân viên| J[Xác nhận xóa]
+    J --> K{Xác nhận?}
+    K -->|Có| L[Hủy liên kết tài khoản
+và cập nhật CSDL]
+    L --> H
+    K -->|Không| B
+    H --> E2(( ))
+
+    style S fill:#000,stroke:#000
+    style E2 fill:#000,stroke:#000,color:#fff

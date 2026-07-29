@@ -1,0 +1,16 @@
+graph LR
+    CUS["👤 KHÁCH HÀNG"]
+
+    CUS --- UC1(["THÊM VÀO\nGIỎ HÀNG"])
+    CUS --- UC2(["ĐẶT HÀNG"])
+    CUS --- UC3(["CHỌN ĐỊA CHỈ\nGIAO HÀNG"])
+    CUS --- UC4(["ÁP DỤNG\nVOUCHER"])
+    CUS --- UC5(["XÁC NHẬN\nĐẶT HÀNG"])
+
+    UC1 -.->|"<<include>>"| UC1a(["Chọn biến thể\nsản phẩm"])
+    UC1 -.->|"<<include>>"| UC1b(["Kiểm tra\ntồn kho"])
+    UC2 -.->|"<<include>>"| UC3
+    UC2 -.->|"<<include>>"| UC4
+    UC2 -.->|"<<include>>"| UC5
+    UC5 -.->|"<<include>>"| UC5a(["Tạo đơn hàng\n(pending)"])
+    UC5a -.->|"<<include>>"| UC5b(["Thông báo\ncửa hàng"])

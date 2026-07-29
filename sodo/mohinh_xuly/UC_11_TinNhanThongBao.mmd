@@ -1,0 +1,13 @@
+graph LR
+    CUS["👤 KHÁCH HÀNG"]
+    SHOP["👤 CHỦ CỬA HÀNG"]
+    SYS["👤 HỆ THỐNG"]
+
+    CUS --- UC1(["NHẮN TIN\nREAL-TIME"])
+    SHOP --- UC1
+    CUS --- UC2(["KHỞI TẠO\nHỘI THOẠI"])
+    SHOP --- UC2
+    SYS --- UC3(["GỬI THÔNG BÁO\nHỆ THỐNG"])
+
+    UC3 -.->|"<<include>>"| UC3a(["Thông báo\nđơn hàng"])
+    UC3 -.->|"<<include>>"| UC3b(["Thông báo\nvận chuyển"])

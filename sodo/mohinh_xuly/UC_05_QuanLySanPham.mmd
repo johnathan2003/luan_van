@@ -1,0 +1,14 @@
+graph LR
+    STAFF["👤 CHỦ CỬA HÀNG\n/ NHÂN VIÊN"]
+    ADMIN["👤 ADMIN"]
+
+    STAFF --- UC1(["THÊM\nSẢN PHẨM"])
+    STAFF --- UC2(["CẬP NHẬT\nSẢN PHẨM"])
+    STAFF --- UC3(["XÓA\nSẢN PHẨM"])
+    ADMIN --- UC4(["QUẢN LÝ\nDANH MỤC"])
+
+    UC1 -.->|"<<include>>"| UC1a(["Thêm biến thể"])
+    UC1 -.->|"<<include>>"| UC1b(["Upload ảnh\nsản phẩm"])
+    UC1 -.->|"<<include>>"| UC1c(["Lưu bản nháp"])
+    UC4 -.->|"<<include>>"| UC4a(["Thêm / Sửa\ndanh mục"])
+    UC4 -.->|"<<include>>"| UC4b(["Xóa danh mục"])

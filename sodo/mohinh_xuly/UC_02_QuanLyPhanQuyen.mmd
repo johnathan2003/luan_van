@@ -1,0 +1,7 @@
+graph LR
+    ADMIN["👤 ADMIN"]
+
+    ADMIN --- UC1(["QUẢN LÝ\nNGƯỜI DÙNG"])
+    UC1 -.->|"<<include>>"| UC1a(["Xem danh sách\nngười dùng"])
+    UC1 -.->|"<<include>>"| UC1b(["Cập nhật role\ntài khoản"])
+    UC1 -.->|"<<include>>"| UC1c(["Vô hiệu hóa\ntài khoản"])

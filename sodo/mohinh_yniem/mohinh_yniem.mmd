@@ -1,0 +1,514 @@
+%%{init: {'flowchart': {'curve': 'linear'}} }%%
+graph TD
+
+%% ══════════════════════════════
+%% ENTITIES
+%% ══════════════════════════════
+USER[USER]
+SHOP[SHOP]
+EMPLOYEE[EMPLOYEE]
+CATEGORY[CATEGORY]
+PRODUCT[PRODUCT]
+PRODUCT_VARIANT[PRODUCT_VARIANT]
+ORDER[ORDER]
+ORDER_ITEM[ORDER_ITEM]
+PAYMENT[PAYMENT]
+VOUCHER[VOUCHER]
+USER_VOUCHER[USER_VOUCHER]
+REVIEW[REVIEW]
+FLASH_SALE[FLASH_SALE]
+FLASH_SALE_ITEM[FLASH_SALE_ITEM]
+CONVERSATION[CONVERSATION]
+MESSAGE[MESSAGE]
+NOTIFICATION[NOTIFICATION]
+DISPUTE[DISPUTE]
+REFUND[REFUND]
+COMMISSION_SETTING[COMMISSION_SETTING]
+SHIPPER[SHIPPER]
+SHIPMENT[SHIPMENT]
+WAREHOUSE_HUB[WAREHOUSE_HUB]
+WAREHOUSE_DISTRICT[WAREHOUSE_DISTRICT]
+WAREHOUSE_WARD[WAREHOUSE_WARD]
+
+%% ══════════════════════════════
+%% USER attributes
+%% ══════════════════════════════
+A_U_ID([UserID])
+A_U_UN([username])
+A_U_EM([email])
+A_U_PH([phone])
+A_U_PW([password])
+A_U_RL([role])
+A_U_AV([avatar])
+A_U_AD([address])
+USER --- A_U_ID
+USER --- A_U_UN
+USER --- A_U_EM
+USER --- A_U_PH
+USER --- A_U_PW
+USER --- A_U_RL
+USER --- A_U_AV
+USER --- A_U_AD
+
+%% ══════════════════════════════
+%% SHOP attributes
+%% ══════════════════════════════
+A_SH_ID([ShopID])
+A_SH_NM([name])
+A_SH_DS([description])
+A_SH_LG([logo])
+A_SH_RT([rating])
+A_SH_ML([isMall])
+A_SH_ST([status])
+SHOP --- A_SH_ID
+SHOP --- A_SH_NM
+SHOP --- A_SH_DS
+SHOP --- A_SH_LG
+SHOP --- A_SH_RT
+SHOP --- A_SH_ML
+SHOP --- A_SH_ST
+
+%% ══════════════════════════════
+%% EMPLOYEE attributes
+%% ══════════════════════════════
+A_EM_ID([EmployeeID])
+A_EM_RL([role])
+A_EM_ST([status])
+EMPLOYEE --- A_EM_ID
+EMPLOYEE --- A_EM_RL
+EMPLOYEE --- A_EM_ST
+
+%% ══════════════════════════════
+%% CATEGORY attributes
+%% ══════════════════════════════
+A_CA_ID([CategoryID])
+A_CA_NM([name])
+A_CA_IM([image])
+CATEGORY --- A_CA_ID
+CATEGORY --- A_CA_NM
+CATEGORY --- A_CA_IM
+
+%% ══════════════════════════════
+%% PRODUCT attributes
+%% ══════════════════════════════
+A_PR_ID([ProductID])
+A_PR_NM([name])
+A_PR_DS([description])
+A_PR_IM([images])
+A_PR_ST([status])
+PRODUCT --- A_PR_ID
+PRODUCT --- A_PR_NM
+PRODUCT --- A_PR_DS
+PRODUCT --- A_PR_IM
+PRODUCT --- A_PR_ST
+
+%% ══════════════════════════════
+%% PRODUCT_VARIANT attributes
+%% ══════════════════════════════
+A_PV_ID([VariantID])
+A_PV_SZ([size])
+A_PV_CL([color])
+A_PV_PR([price])
+A_PV_SK([stock])
+PRODUCT_VARIANT --- A_PV_ID
+PRODUCT_VARIANT --- A_PV_SZ
+PRODUCT_VARIANT --- A_PV_CL
+PRODUCT_VARIANT --- A_PV_PR
+PRODUCT_VARIANT --- A_PV_SK
+
+%% ══════════════════════════════
+%% ORDER attributes
+%% ══════════════════════════════
+A_OR_ID([OrderID])
+A_OR_TA([totalAmount])
+A_OR_ST([status])
+A_OR_NT([note])
+A_OR_CA([createdAt])
+ORDER --- A_OR_ID
+ORDER --- A_OR_TA
+ORDER --- A_OR_ST
+ORDER --- A_OR_NT
+ORDER --- A_OR_CA
+
+%% ══════════════════════════════
+%% ORDER_ITEM attributes
+%% ══════════════════════════════
+A_OI_ID([ItemID])
+A_OI_QT([quantity])
+A_OI_UP([unitPrice])
+ORDER_ITEM --- A_OI_ID
+ORDER_ITEM --- A_OI_QT
+ORDER_ITEM --- A_OI_UP
+
+%% ══════════════════════════════
+%% PAYMENT attributes
+%% ══════════════════════════════
+A_PA_ID([PaymentID])
+A_PA_MT([method])
+A_PA_AM([amount])
+A_PA_ST([status])
+A_PA_TX([transactionID])
+PAYMENT --- A_PA_ID
+PAYMENT --- A_PA_MT
+PAYMENT --- A_PA_AM
+PAYMENT --- A_PA_ST
+PAYMENT --- A_PA_TX
+
+%% ══════════════════════════════
+%% VOUCHER attributes
+%% ══════════════════════════════
+A_VO_ID([VoucherID])
+A_VO_CD([code])
+A_VO_DT([discountType])
+A_VO_DV([discountValue])
+A_VO_MO([minOrderAmount])
+A_VO_QT([quantity])
+A_VO_EX([expiry])
+A_VO_ST([status])
+VOUCHER --- A_VO_ID
+VOUCHER --- A_VO_CD
+VOUCHER --- A_VO_DT
+VOUCHER --- A_VO_DV
+VOUCHER --- A_VO_MO
+VOUCHER --- A_VO_QT
+VOUCHER --- A_VO_EX
+VOUCHER --- A_VO_ST
+
+%% ══════════════════════════════
+%% USER_VOUCHER attributes
+%% ══════════════════════════════
+A_UV_CA([collectedAt])
+A_UV_IU([isUsed])
+USER_VOUCHER --- A_UV_CA
+USER_VOUCHER --- A_UV_IU
+
+%% ══════════════════════════════
+%% REVIEW attributes
+%% ══════════════════════════════
+A_RV_ID([ReviewID])
+A_RV_RT([rating])
+A_RV_CT([content])
+A_RV_IM([images])
+A_RV_CA([createdAt])
+REVIEW --- A_RV_ID
+REVIEW --- A_RV_RT
+REVIEW --- A_RV_CT
+REVIEW --- A_RV_IM
+REVIEW --- A_RV_CA
+
+%% ══════════════════════════════
+%% FLASH_SALE attributes
+%% ══════════════════════════════
+A_FS_ID([FlashSaleID])
+A_FS_NM([name])
+A_FS_ST([startTime])
+A_FS_ET([endTime])
+A_FS_SS([status])
+FLASH_SALE --- A_FS_ID
+FLASH_SALE --- A_FS_NM
+FLASH_SALE --- A_FS_ST
+FLASH_SALE --- A_FS_ET
+FLASH_SALE --- A_FS_SS
+
+%% ══════════════════════════════
+%% FLASH_SALE_ITEM attributes
+%% ══════════════════════════════
+A_FI_SP([salePrice])
+A_FI_QT([quantity])
+FLASH_SALE_ITEM --- A_FI_SP
+FLASH_SALE_ITEM --- A_FI_QT
+
+%% ══════════════════════════════
+%% CONVERSATION attributes
+%% ══════════════════════════════
+A_CV_ID([ConversationID])
+A_CV_CA([createdAt])
+A_CV_LM([lastMessageAt])
+CONVERSATION --- A_CV_ID
+CONVERSATION --- A_CV_CA
+CONVERSATION --- A_CV_LM
+
+%% ══════════════════════════════
+%% MESSAGE attributes
+%% ══════════════════════════════
+A_MG_ID([MessageID])
+A_MG_CT([content])
+A_MG_TP([type])
+A_MG_CA([createdAt])
+A_MG_IR([isRead])
+MESSAGE --- A_MG_ID
+MESSAGE --- A_MG_CT
+MESSAGE --- A_MG_TP
+MESSAGE --- A_MG_CA
+MESSAGE --- A_MG_IR
+
+%% ══════════════════════════════
+%% NOTIFICATION attributes
+%% ══════════════════════════════
+A_NF_ID([NotificationID])
+A_NF_CT([content])
+A_NF_TP([type])
+A_NF_IR([isRead])
+A_NF_CA([createdAt])
+NOTIFICATION --- A_NF_ID
+NOTIFICATION --- A_NF_CT
+NOTIFICATION --- A_NF_TP
+NOTIFICATION --- A_NF_IR
+NOTIFICATION --- A_NF_CA
+
+%% ══════════════════════════════
+%% DISPUTE attributes
+%% ══════════════════════════════
+A_DI_ID([DisputeID])
+A_DI_RS([reason])
+A_DI_EV([evidence])
+A_DI_ST([status])
+A_DI_CA([createdAt])
+DISPUTE --- A_DI_ID
+DISPUTE --- A_DI_RS
+DISPUTE --- A_DI_EV
+DISPUTE --- A_DI_ST
+DISPUTE --- A_DI_CA
+
+%% ══════════════════════════════
+%% REFUND attributes
+%% ══════════════════════════════
+A_RF_ID([RefundID])
+A_RF_AM([amount])
+A_RF_RS([reason])
+A_RF_ST([status])
+A_RF_PA([processedAt])
+REFUND --- A_RF_ID
+REFUND --- A_RF_AM
+REFUND --- A_RF_RS
+REFUND --- A_RF_ST
+REFUND --- A_RF_PA
+
+%% ══════════════════════════════
+%% COMMISSION_SETTING attributes
+%% ══════════════════════════════
+A_CS_ID([CommissionID])
+A_CS_CR([commissionRate])
+A_CS_EF([effectiveFrom])
+A_CS_ET([effectiveTo])
+COMMISSION_SETTING --- A_CS_ID
+COMMISSION_SETTING --- A_CS_CR
+COMMISSION_SETTING --- A_CS_EF
+COMMISSION_SETTING --- A_CS_ET
+
+%% ══════════════════════════════
+%% SHIPPER attributes
+%% ══════════════════════════════
+A_SP_ID([ShipperID])
+A_SP_VH([vehicle])
+A_SP_LN([licenseNo])
+A_SP_ST([status])
+SHIPPER --- A_SP_ID
+SHIPPER --- A_SP_VH
+SHIPPER --- A_SP_LN
+SHIPPER --- A_SP_ST
+
+%% ══════════════════════════════
+%% SHIPMENT attributes
+%% ══════════════════════════════
+A_SM_ID([ShipmentID])
+A_SM_TC([trackingCode])
+A_SM_ST([status])
+A_SM_DV([deliveredAt])
+SHIPMENT --- A_SM_ID
+SHIPMENT --- A_SM_TC
+SHIPMENT --- A_SM_ST
+SHIPMENT --- A_SM_DV
+
+%% ══════════════════════════════
+%% WAREHOUSE_HUB attributes
+%% ══════════════════════════════
+A_WH_ID([HubID])
+A_WH_NM([name])
+A_WH_AD([address])
+WAREHOUSE_HUB --- A_WH_ID
+WAREHOUSE_HUB --- A_WH_NM
+WAREHOUSE_HUB --- A_WH_AD
+
+%% ══════════════════════════════
+%% WAREHOUSE_DISTRICT attributes
+%% ══════════════════════════════
+A_WD_ID([DistrictID])
+A_WD_NM([name])
+A_WD_AD([address])
+WAREHOUSE_DISTRICT --- A_WD_ID
+WAREHOUSE_DISTRICT --- A_WD_NM
+WAREHOUSE_DISTRICT --- A_WD_AD
+
+%% ══════════════════════════════
+%% WAREHOUSE_WARD attributes
+%% ══════════════════════════════
+A_WW_ID([WardID])
+A_WW_NM([name])
+A_WW_AD([address])
+WAREHOUSE_WARD --- A_WW_ID
+WAREHOUSE_WARD --- A_WW_NM
+WAREHOUSE_WARD --- A_WW_AD
+
+%% ══════════════════════════════
+%% RELATIONSHIPS
+%% ══════════════════════════════
+R01{SỞ HỮU}
+R02{ĐẶT HÀNG}
+R03{VIẾT}
+R04{NHẬN THÔNG BÁO}
+R05{THU THẬP}
+R06{GỬI KHIẾU NẠI}
+R07{ĐĂNG KÝ SHIPPER}
+R08{CÓ SẢN PHẨM}
+R09{TẠO VOUCHER}
+R10{TỔ CHỨC FLASH SALE}
+R11{CÓ NHÂN VIÊN}
+R12{NHẬN ĐƠN HÀNG}
+R13{ÁP DỤNG HOA HỒNG}
+R14{THAM GIA HỘI THOẠI}
+R15{LÀ TÀI KHOẢN}
+R16{THUỘC DANH MỤC}
+R17{CÓ BIẾN THỂ}
+R18{ĐƯỢC ĐÁNH GIÁ}
+R19{DANH MỤC CHA}
+R20{GỒM MỤC HÀNG}
+R21{THANH TOÁN}
+R22{CÓ KHIẾU NẠI}
+R23{HOÀN TIỀN}
+R24{VẬN CHUYỂN}
+R25{ÁP DỤNG VOUCHER}
+R26{CHỨA BIẾN THỂ}
+R27{ĐƯỢC LƯU}
+R28{GỒM SẢN PHẨM}
+R29{THAM CHIẾU}
+R30{KHÁCH HÀNG}
+R31{GỒM TIN NHẮN}
+R32{GIAO BỞI}
+R33{THUỘC KHO PHƯỜNG}
+R34{QUẢN LÝ KHU VỰC}
+R35{QUẢN LÝ PHƯỜNG}
+R36{QUẢN LÝ BỞI HUB}
+R37{QUẢN LÝ BỞI QUẬN}
+R38{QUẢN LÝ BỞI PHƯỜNG}
+R39{THUỘC KHO PHƯỜNG}
+
+%% ══════════════════════════════
+%% RELATIONSHIP EDGES
+%% ══════════════════════════════
+USER ---|1| R01
+R01 ---|N| SHOP
+
+USER ---|1| R02
+R02 ---|N| ORDER
+
+USER ---|1| R03
+R03 ---|N| REVIEW
+
+USER ---|1| R04
+R04 ---|N| NOTIFICATION
+
+USER ---|M| R05
+R05 ---|N| USER_VOUCHER
+
+USER ---|1| R06
+R06 ---|N| DISPUTE
+
+USER ---|1| R07
+R07 ---|0,1| SHIPPER
+
+SHOP ---|1| R08
+R08 ---|N| PRODUCT
+
+SHOP ---|1| R09
+R09 ---|N| VOUCHER
+
+SHOP ---|1| R10
+R10 ---|N| FLASH_SALE
+
+SHOP ---|1| R11
+R11 ---|N| EMPLOYEE
+
+SHOP ---|1| R12
+R12 ---|N| ORDER
+
+SHOP ---|1| R13
+R13 ---|N| COMMISSION_SETTING
+
+SHOP ---|1| R14
+R14 ---|N| CONVERSATION
+
+EMPLOYEE ---|N| R15
+R15 ---|1| USER
+
+PRODUCT ---|N| R16
+R16 ---|1| CATEGORY
+
+PRODUCT ---|1| R17
+R17 ---|N| PRODUCT_VARIANT
+
+PRODUCT ---|1| R18
+R18 ---|N| REVIEW
+
+CATEGORY ---|N| R19
+R19 ---|0,1| CATEGORY
+
+ORDER ---|1| R20
+R20 ---|N| ORDER_ITEM
+
+ORDER ---|1| R21
+R21 ---|1| PAYMENT
+
+ORDER ---|1| R22
+R22 ---|0,1| DISPUTE
+
+ORDER ---|1| R23
+R23 ---|0,1| REFUND
+
+ORDER ---|1| R24
+R24 ---|1| SHIPMENT
+
+ORDER ---|N| R25
+R25 ---|0,1| VOUCHER
+
+ORDER_ITEM ---|N| R26
+R26 ---|1| PRODUCT_VARIANT
+
+VOUCHER ---|1| R27
+R27 ---|N| USER_VOUCHER
+
+FLASH_SALE ---|1| R28
+R28 ---|N| FLASH_SALE_ITEM
+
+FLASH_SALE_ITEM ---|N| R29
+R29 ---|1| PRODUCT_VARIANT
+
+CONVERSATION ---|N| R30
+R30 ---|1| USER
+
+CONVERSATION ---|1| R31
+R31 ---|N| MESSAGE
+
+SHIPMENT ---|N| R32
+R32 ---|1| SHIPPER
+
+SHIPMENT ---|N| R33
+R33 ---|1| WAREHOUSE_WARD
+
+WAREHOUSE_HUB ---|1| R34
+R34 ---|N| WAREHOUSE_DISTRICT
+
+WAREHOUSE_DISTRICT ---|1| R35
+R35 ---|N| WAREHOUSE_WARD
+
+WAREHOUSE_HUB ---|N| R36
+R36 ---|1| USER
+
+WAREHOUSE_DISTRICT ---|N| R37
+R37 ---|1| USER
+
+WAREHOUSE_WARD ---|N| R38
+R38 ---|1| USER
+
+SHIPPER ---|N| R39
+R39 ---|1| WAREHOUSE_WARD

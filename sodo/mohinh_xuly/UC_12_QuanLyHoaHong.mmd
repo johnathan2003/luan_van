@@ -1,0 +1,9 @@
+graph LR
+    ADMIN["👤 ADMIN"]
+
+    ADMIN --- UC1(["THIẾT LẬP\nTỶ LỆ HOA HỒNG"])
+    ADMIN --- UC2(["XEM BÁO CÁO\nHOA HỒNG"])
+    ADMIN --- UC3(["XEM LỊCH SỬ\nTHAY ĐỔI"])
+
+    UC1 -.->|"<<include>>"| UC1a(["Cập nhật tỷ lệ\nvới thời gian hiệu lực"])
+    UC2 -.->|"<<include>>"| UC2a(["Thống kê theo\ncửa hàng"])

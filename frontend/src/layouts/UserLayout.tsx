@@ -6,6 +6,8 @@
 import React from 'react'
 import Navbar from '../components/common/Navbar'
 import Footer from '../components/common/Footer'
+import ChatbotWidget from '../components/common/ChatbotWidget'
+import ChatWidget from '../components/common/ChatWidget'
 
 interface Props {
   children: React.ReactNode
@@ -34,6 +36,8 @@ const UserLayout: React.FC<Props> = ({ children, subtitle }) => (
       </div>
     </main>
     <Footer />
+    <ChatWidget />
+    <ChatbotWidget />
   </div>
 )
 

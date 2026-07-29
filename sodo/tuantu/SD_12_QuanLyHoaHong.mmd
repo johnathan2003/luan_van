@@ -1,0 +1,40 @@
+sequenceDiagram
+    actor AD as Quản Trị Viên
+    actor CH as Chủ Cửa Hàng
+    participant GDAD as Giao Diện<br/>Quản Trị
+    participant RHH as Router<br/>Hoa Hồng
+    participant CSDLDH as CSDL<br/>Đơn Hàng
+    participant CSDLHH as CSDL<br/>Hoa Hồng
+    participant CGTT as Cổng Thanh Toán
+
+    AD->>GDAD: Truy cập trang quản lý hoa hồng
+    GDAD->>RHH: GET /hoa-hong?trang_thai=cho_thanh_toan&ky={thang}
+    RHH->>CSDLDH: Truy vấn đơn hàng hoàn thành trong kỳ
+    CSDLDH-->>RHH: Danh sách đơn hàng và doanh thu
+    RHH->>CSDLHH: Tính hoa hồng theo tỷ lệ từng cửa hàng
+    CSDLHH-->>RHH: Tổng hoa hồng từng cửa hàng trong kỳ
+    RHH-->>GDAD: 200 OK + bảng hoa hồng
+    GDAD-->>AD: Hiển thị danh sách hoa hồng chờ thanh toán
+
+    AD->>GDAD: Xác nhận thanh toán hoa hồng cho cửa hàng
+    GDAD->>RHH: POST /hoa-hong/thanh-toan {ma_cua_hang, so_tien, ky}
+    RHH->>CGTT: Chuyển tiền đến tài khoản ngân hàng cửa hàng
+    CGTT-->>RHH: Kết quả chuyển khoản
+
+    alt [Chuyển khoản thành công]
+        RHH->>CSDLHH: Cập nhật trạng thái hoa hồng → "đã thanh toán"
+        CSDLHH-->>RHH: OK
+        RHH-->>GDAD: 200 OK
+        GDAD-->>AD: Thông báo "Đã thanh toán hoa hồng thành công"
+        RHH-->>CH: Thông báo "Hoa hồng kỳ {tháng} đã được chuyển khoản"
+    else [Chuyển khoản thất bại]
+        RHH->>CSDLHH: Ghi nhận lỗi, giữ nguyên trạng thái "chờ"
+        CSDLHH-->>RHH: OK
+        RHH-->>GDAD: 500 Lỗi hệ thống + chi tiết lỗi
+        GDAD-->>AD: Thông báo lỗi, yêu cầu thực hiện lại
+    end
+
+    CH->>RHH: GET /cua-hang/{ma_cua_hang}/hoa-hong
+    RHH->>CSDLHH: Truy vấn lịch sử hoa hồng của cửa hàng
+    CSDLHH-->>RHH: Lịch sử hoa hồng theo từng kỳ
+    RHH-->>CH: 200 OK + chi tiết hoa hồng

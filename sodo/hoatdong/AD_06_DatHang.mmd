@@ -1,0 +1,22 @@
+flowchart TD
+    S(( )) --> A[Khách hàng xem giỏ hàng
+và chọn sản phẩm đặt hàng]
+    A --> B[Nhập địa chỉ giao hàng
+và ghi chú đơn hàng]
+    B --> C[Áp dụng mã giảm giá
+nếu có]
+    C --> D[Nhấn 'Đặt hàng']
+    D --> E{Còn hàng
+trong kho?}
+    E -->|Hết hàng| F[Thông báo 'Sản phẩm
+đã hết hàng']
+    F --> A
+    E -->|Còn hàng| G[Tạo đơn hàng
+trạng thái 'chờ thanh toán']
+    G --> H[Giảm tồn kho tạm thời]
+    H --> I[Chuyển hướng
+đến trang thanh toán]
+    I --> E2(( ))
+
+    style S fill:#000,stroke:#000
+    style E2 fill:#000,stroke:#000,color:#fff

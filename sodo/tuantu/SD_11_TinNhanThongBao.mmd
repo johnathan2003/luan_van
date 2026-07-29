@@ -1,0 +1,32 @@
+sequenceDiagram
+    actor KH as Khách Hàng
+    actor CH as Chủ Cửa Hàng
+    participant GDTN as Giao Diện<br/>Tin Nhắn
+    participant MCSK as Máy Chủ<br/>Socket.io
+    participant CSDLTN as CSDL<br/>Tin Nhắn
+    participant DVTB as Dịch Vụ<br/>Thông Báo
+
+    KH->>GDTN: Mở cửa sổ trò chuyện với cửa hàng
+    GDTN->>MCSK: connect() + tham_gia_phong(ma_ch, ma_kh)
+    MCSK-->>GDTN: Đã kết nối + đã vào phòng
+
+    KH->>GDTN: Nhập và gửi tin nhắn
+    GDTN->>MCSK: phat("gui_tin_nhan", {phong, noi_dung, ma_nguoi_gui})
+    MCSK->>CSDLTN: Lưu tin nhắn vào cơ sở dữ liệu
+    CSDLTN-->>MCSK: Mã tin nhắn
+    MCSK->>GDTN: phat("nhan_tin_nhan") → chuyển đến Chủ cửa hàng
+    GDTN-->>CH: Hiển thị tin nhắn mới từ khách hàng
+
+    alt [Chủ cửa hàng đang trực tuyến]
+        CH->>GDTN: Nhập và gửi tin nhắn phản hồi
+        GDTN->>MCSK: phat("gui_tin_nhan", {phong, noi_dung, ma_nguoi_gui})
+        MCSK->>CSDLTN: Lưu tin nhắn phản hồi
+        CSDLTN-->>MCSK: OK
+        MCSK->>GDTN: phat("nhan_tin_nhan") → chuyển đến Khách hàng
+        GDTN-->>KH: Hiển thị phản hồi từ cửa hàng
+    else [Chủ cửa hàng đang ngoại tuyến]
+        MCSK->>DVTB: Tạo thông báo đẩy
+        DVTB-->>CH: Gửi thông báo "Có tin nhắn mới từ khách hàng"
+    end
+
+    note over MCSK,CSDLTN: Lịch sử trò chuyện được lưu<br/>và tải lại khi kết nối lại

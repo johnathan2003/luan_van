@@ -1,0 +1,30 @@
+flowchart TD
+    S(( )) --> A[Chủ cửa hàng truy cập
+mục 'Quản lý Sản phẩm']
+    A --> B[Hệ thống hiển thị
+danh sách sản phẩm]
+    B --> C{Hành động?}
+    C -->|Thêm sản phẩm| D[Điền thông tin:
+tên, giá, tồn kho, danh mục, ảnh]
+    D --> E{Dữ liệu
+hợp lệ?}
+    E -->|Không| F[Hiển thị lỗi
+kiểm tra dữ liệu]
+    F --> D
+    E -->|Có| G[Lưu sản phẩm vào CSDL
+trạng thái 'đang bán']
+    C -->|Sửa sản phẩm| H[Cập nhật thông tin
+hoặc tồn kho]
+    H --> G
+    C -->|Ẩn / Xóa sản phẩm| I{Sản phẩm có đơn
+hàng đang xử lý?}
+    I -->|Có| J[Thông báo không thể xóa,
+chỉ có thể ẩn]
+    J --> B
+    I -->|Không| K[Xóa hoặc ẩn sản phẩm
+trên hệ thống]
+    K --> G
+    G --> E2(( ))
+
+    style S fill:#000,stroke:#000
+    style E2 fill:#000,stroke:#000,color:#fff

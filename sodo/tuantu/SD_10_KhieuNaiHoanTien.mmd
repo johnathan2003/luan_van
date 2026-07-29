@@ -1,0 +1,47 @@
+sequenceDiagram
+    actor KH as Khách Hàng
+    actor AD as Quản Trị Viên
+    participant GDDH as Giao Diện<br/>Đơn Hàng
+    participant RKN as Router<br/>Khiếu Nại
+    participant CSDLKN as CSDL<br/>Khiếu Nại
+    participant CSDLDH as CSDL<br/>Đơn Hàng
+    participant CGTT as Cổng Thanh Toán
+
+    KH->>GDDH: Chọn đơn hàng và nhấn "Gửi khiếu nại"
+    GDDH-->>KH: Hiển thị form khiếu nại
+    KH->>GDDH: Nhập lý do và đính kèm bằng chứng
+    GDDH->>RKN: POST /khieu-nai {ma_don_hang, ly_do, bang_chung}
+    RKN->>CSDLDH: Cập nhật trạng thái đơn hàng → "đang khiếu nại"
+    CSDLDH-->>RKN: OK
+    RKN->>CSDLKN: Tạo phiếu khiếu nại mới
+    CSDLKN-->>RKN: Mã phiếu khiếu nại
+    RKN-->>GDDH: 201 Đã tạo
+    GDDH-->>KH: Thông báo "Khiếu nại đã được gửi, chờ xét duyệt"
+
+    AD->>RKN: GET /khieu-nai?trang_thai=cho_xu_ly
+    RKN->>CSDLKN: Truy vấn danh sách khiếu nại chờ xử lý
+    CSDLKN-->>RKN: Danh sách khiếu nại
+    RKN-->>AD: 200 OK + danh sách
+
+    AD->>RKN: Xem xét chi tiết khiếu nại
+    RKN->>CSDLKN: Lấy chi tiết khiếu nại và bằng chứng
+    CSDLKN-->>RKN: Thông tin đầy đủ
+    RKN-->>AD: Chi tiết khiếu nại
+
+    alt [Chấp thuận khiếu nại]
+        AD->>RKN: PUT /khieu-nai/{ma} {trang_thai: "chấp thuận"}
+        RKN->>CGTT: POST /hoan-tien {ma_giao_dich, so_tien}
+        CGTT-->>RKN: Hoàn tiền thành công
+        RKN->>CSDLDH: Cập nhật đơn hàng → "đã hoàn tiền"
+        CSDLDH-->>RKN: OK
+        RKN->>CSDLKN: Cập nhật khiếu nại → "đã giải quyết"
+        CSDLKN-->>RKN: OK
+        RKN-->>GDDH: Thông báo khách hàng: "Khiếu nại được chấp thuận, tiền đã được hoàn"
+    else [Từ chối khiếu nại]
+        AD->>RKN: PUT /khieu-nai/{ma} {trang_thai: "từ chối", ly_do}
+        RKN->>CSDLDH: Cập nhật đơn hàng → "khiếu nại bị từ chối"
+        CSDLDH-->>RKN: OK
+        RKN->>CSDLKN: Cập nhật khiếu nại → "đã từ chối"
+        CSDLKN-->>RKN: OK
+        RKN-->>GDDH: Thông báo khách hàng: "Khiếu nại không được chấp thuận"
+    end

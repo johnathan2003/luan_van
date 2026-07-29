@@ -1,0 +1,23 @@
+flowchart TD
+    S(( )) --> A[Khách hàng vào trang
+đơn hàng đã nhận]
+    A --> B{Đơn hàng đã
+được giao?}
+    B -->|Chưa| C[Thông báo 'Chỉ đánh giá
+sau khi nhận hàng']
+    C --> E2(( ))
+    B -->|Đã giao| D[Hiển thị form đánh giá
+từng sản phẩm trong đơn]
+    D --> E[Chọn số sao,
+nhập nhận xét, tải ảnh thực tế]
+    E --> F[Gửi đánh giá]
+    F --> G[Hệ thống lưu đánh giá
+vào CSDL]
+    G --> H[Cập nhật điểm đánh giá
+trung bình sản phẩm]
+    H --> I[Hiển thị đánh giá
+trên trang sản phẩm]
+    I --> E2(( ))
+
+    style S fill:#000,stroke:#000
+    style E2 fill:#000,stroke:#000,color:#fff

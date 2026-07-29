@@ -1,0 +1,40 @@
+sequenceDiagram
+    actor SP as Nhân Viên Giao Hàng
+    participant UDGV as Ứng Dụng<br/>Giao Hàng
+    participant RVC as Router<br/>Vận Chuyển
+    participant CSDLDH as CSDL<br/>Đơn Hàng
+    participant DVTB as Dịch Vụ<br/>Thông Báo
+    actor KH as Khách Hàng
+
+    SP->>UDGV: Đăng nhập và xem danh sách đơn hàng được phân công
+    UDGV->>RVC: GET /giao-hang/{ma_giao_vien}/don-hang?trang_thai=da_phan_cong
+    RVC->>CSDLDH: Truy vấn đơn hàng của nhân viên giao hàng
+    CSDLDH-->>RVC: Danh sách đơn hàng
+    RVC-->>UDGV: 200 OK + danh sách
+    UDGV-->>SP: Hiển thị đơn hàng cần giao
+
+    SP->>UDGV: Xác nhận đã lấy hàng tại kho
+    UDGV->>RVC: PUT /don-hang/{ma_don_hang}/trang-thai {trang_thai: "đang giao"}
+    RVC->>CSDLDH: Cập nhật trạng thái đơn hàng
+    CSDLDH-->>RVC: OK
+    RVC->>DVTB: Phát sự kiện thay đổi trạng thái đơn hàng
+    DVTB-->>KH: Thông báo "Đơn hàng đang trên đường giao đến bạn"
+    RVC-->>UDGV: 200 OK
+
+    SP->>UDGV: Cập nhật đã giao hàng thành công
+    UDGV->>RVC: PUT /don-hang/{ma_don_hang}/trang-thai {trang_thai: "đã giao"}
+    RVC->>CSDLDH: Cập nhật trạng thái "đã giao thành công"
+    CSDLDH-->>RVC: OK
+    RVC->>DVTB: Phát sự kiện giao hàng thành công
+    DVTB-->>KH: Thông báo "Đơn hàng đã được giao thành công"
+    RVC-->>UDGV: 200 OK
+    UDGV-->>SP: Cập nhật hoàn thành giao hàng
+
+    alt [Giao hàng thất bại]
+        SP->>UDGV: Cập nhật thất bại và nhập lý do
+        UDGV->>RVC: PUT /don-hang/{ma_don_hang}/trang-thai {trang_thai: "giao thất bại", ly_do}
+        RVC->>CSDLDH: Ghi nhận trạng thái thất bại và lý do
+        CSDLDH-->>RVC: OK
+        RVC->>DVTB: Phát sự kiện giao hàng thất bại
+        DVTB-->>KH: Thông báo "Giao hàng thất bại, chúng tôi sẽ liên hệ lại"
+    end

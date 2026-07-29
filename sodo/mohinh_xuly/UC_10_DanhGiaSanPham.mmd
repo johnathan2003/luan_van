@@ -1,0 +1,9 @@
+graph LR
+    CUS["👤 KHÁCH HÀNG"]
+
+    CUS --- UC1(["ĐÁNH GIÁ\nSẢN PHẨM"])
+
+    UC1 -.->|"<<include>>"| UC1a(["Cho điểm\n1–5 sao"])
+    UC1 -.->|"<<include>>"| UC1b(["Viết nhận xét"])
+    UC1 -.->|"<<include>>"| UC1c(["Đính kèm\nhình ảnh thực tế"])
+    UC1 -.->|"<<include>>"| UC1d(["Cập nhật rating\ntrung bình sản phẩm"])

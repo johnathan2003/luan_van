@@ -1,0 +1,23 @@
+sequenceDiagram
+    actor KH as Khách Hàng
+    participant GD as Giao Diện<br/>Đăng Nhập
+    participant RXT as Router<br/>Xác Thực
+    participant CSDLND as CSDL<br/>Người Dùng
+
+    KH->>GD: Truy cập trang đăng nhập
+    GD-->>KH: Hiển thị form đăng nhập
+
+    KH->>GD: Nhập email và mật khẩu
+    GD->>RXT: POST /auth/login {email, password}
+    RXT->>CSDLND: Truy vấn người dùng theo email
+    CSDLND-->>RXT: Trả về thông tin người dùng
+    RXT->>RXT: Kiểm tra mật khẩu (bcrypt)
+
+    alt [Thông tin hợp lệ]
+        RXT-->>GD: 200 OK + JWT token
+        GD->>GD: Lưu token vào bộ nhớ cục bộ
+        GD-->>KH: Chuyển hướng đến trang chủ
+    else [Thông tin không hợp lệ]
+        RXT-->>GD: 401 Không xác thực được
+        GD-->>KH: Hiển thị lỗi "Sai email hoặc mật khẩu"
+    end

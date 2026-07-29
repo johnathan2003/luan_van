@@ -1,0 +1,32 @@
+sequenceDiagram
+    actor KH as Khách Hàng
+    actor CH as Chủ Cửa Hàng
+    participant GDGH as Giao Diện<br/>Giỏ Hàng
+    participant RMGG as Router<br/>Mã Giảm Giá
+    participant CSDLMGG as CSDL<br/>Mã Giảm Giá
+
+    CH->>RMGG: POST /ma-giam-gia {ma, muc_giam, don_toi_thieu, han_dung, so_luong}
+    RMGG->>CSDLMGG: Tạo mã giảm giá mới
+    CSDLMGG-->>RMGG: Mã định danh
+    RMGG-->>CH: 201 Đã tạo + thông tin mã giảm giá
+
+    KH->>GDGH: Nhập mã giảm giá tại trang giỏ hàng
+    GDGH->>RMGG: POST /ma-giam-gia/kiem-tra {ma, tong_don, ma_cua_hang}
+    RMGG->>CSDLMGG: Truy vấn mã giảm giá theo mã code
+
+    alt [Mã giảm giá hợp lệ]
+        CSDLMGG-->>RMGG: Thông tin mã giảm giá
+        RMGG->>RMGG: Kiểm tra điều kiện áp dụng
+        RMGG-->>GDGH: 200 OK + số tiền được giảm
+        GDGH-->>KH: Hiển thị mức giảm giá và tổng tiền mới
+    else [Mã không hợp lệ / hết hạn / hết lượt]
+        RMGG-->>GDGH: 400 Yêu cầu không hợp lệ + lý do
+        GDGH-->>KH: Thông báo lỗi mã giảm giá
+    end
+
+    KH->>GDGH: Xác nhận đặt hàng với mã giảm giá
+    GDGH->>RMGG: POST /don-hang {ma_gio_hang, ma_giam_gia}
+    RMGG->>CSDLMGG: Giảm số lượt sử dụng còn lại
+    CSDLMGG-->>RMGG: OK
+    RMGG-->>GDGH: 201 Đã tạo + mã đơn hàng
+    GDGH-->>KH: Đặt hàng thành công với ưu đãi đã áp dụng

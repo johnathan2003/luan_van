@@ -1,0 +1,32 @@
+flowchart TD
+    S(( )) --> A[Khách hàng chọn đơn hàng
+và nhấn 'Gửi khiếu nại']
+    A --> B[Nhập lý do và
+đính kèm bằng chứng]
+    B --> C[Hệ thống tạo phiếu khiếu nại
+trạng thái 'chờ xử lý']
+    C --> D[Quản trị viên xem xét
+khiếu nại và bằng chứng]
+    D --> E{Khiếu nại
+hợp lệ?}
+    E -->|Không| F[Từ chối, gửi lý do
+cho khách hàng]
+    F --> G[Cập nhật trạng thái
+'khiếu nại bị từ chối']
+    G --> E2(( ))
+    E -->|Có| H[Chấp thuận khiếu nại]
+    H --> I[Hệ thống gửi yêu cầu
+hoàn tiền đến cổng thanh toán]
+    I --> J{Hoàn tiền
+thành công?}
+    J -->|Không| K[Ghi nhận lỗi,
+thử lại sau]
+    K --> I
+    J -->|Có| L[Cập nhật đơn hàng
+'đã hoàn tiền']
+    L --> M[Gửi thông báo cho
+khách hàng và cửa hàng]
+    M --> E2(( ))
+
+    style S fill:#000,stroke:#000
+    style E2 fill:#000,stroke:#000,color:#fff

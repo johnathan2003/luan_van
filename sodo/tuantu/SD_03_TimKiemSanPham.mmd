@@ -1,0 +1,25 @@
+sequenceDiagram
+    actor KH as Khách Hàng
+    participant GDSP as Giao Diện<br/>Sản Phẩm
+    participant RSP as Router<br/>Sản Phẩm
+    participant CSDLSP as CSDL<br/>Sản Phẩm
+
+    KH->>GDSP: Nhập từ khóa tìm kiếm
+    GDSP->>RSP: GET /san-pham?tu-khoa={từ_khóa}&danh-muc={id}&sap-xep={trường}
+    RSP->>CSDLSP: Truy vấn sản phẩm theo điều kiện lọc
+    CSDLSP-->>RSP: Danh sách sản phẩm và tổng số kết quả
+
+    alt [Có kết quả]
+        RSP-->>GDSP: 200 OK + danh sách sản phẩm
+        GDSP-->>KH: Hiển thị danh sách sản phẩm theo trang
+    else [Không có kết quả]
+        RSP-->>GDSP: 200 OK + danh sách rỗng
+        GDSP-->>KH: Hiển thị "Không tìm thấy sản phẩm phù hợp"
+    end
+
+    KH->>GDSP: Chọn sản phẩm để xem chi tiết
+    GDSP->>RSP: GET /san-pham/{ma_san_pham}
+    RSP->>CSDLSP: Truy vấn chi tiết sản phẩm và đánh giá
+    CSDLSP-->>RSP: Thông tin chi tiết sản phẩm
+    RSP-->>GDSP: 200 OK + dữ liệu sản phẩm
+    GDSP-->>KH: Hiển thị trang chi tiết sản phẩm

@@ -1,0 +1,10 @@
+graph LR
+    SHOP["👤 CHỦ CỬA HÀNG"]
+
+    SHOP --- UC1(["QUẢN LÝ\nNHÂN VIÊN"])
+    UC1 -.->|"<<include>>"| UC1a(["Thêm nhân viên"])
+    UC1 -.->|"<<include>>"| UC1b(["Gán vai trò\nstaff / manager"])
+    UC1 -.->|"<<include>>"| UC1c(["Xóa nhân viên\nkhỏi cửa hàng"])
+
+    SHOP --- UC2(["MỜI NHÂN VIÊN\nQUA EMAIL"])
+    SHOP --- UC3(["CẬP NHẬT\nVAI TRÒ"])

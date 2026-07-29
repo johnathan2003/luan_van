@@ -1,0 +1,40 @@
+sequenceDiagram
+    actor CH as Chủ Cửa Hàng
+    actor AD as Quản Trị Viên
+    participant GDCH as Giao Diện<br/>Cửa Hàng
+    participant RCH as Router<br/>Cửa Hàng
+    participant CSDLCH as CSDL<br/>Cửa Hàng
+
+    CH->>GDCH: Truy cập trang đăng ký mở cửa hàng
+    GDCH-->>CH: Hiển thị form đăng ký cửa hàng
+    CH->>GDCH: Điền thông tin: tên, địa chỉ, CCCD, tài khoản ngân hàng
+    GDCH->>RCH: POST /cua-hang {ten, dia_chi, ma_chua_hang, thong_tin_ngan_hang, tai_lieu}
+    RCH->>CSDLCH: Tạo cửa hàng trạng thái "chờ phê duyệt"
+    CSDLCH-->>RCH: Mã cửa hàng
+    RCH-->>GDCH: 201 Đã tạo
+    GDCH-->>CH: Thông báo "Đang chờ Quản trị viên phê duyệt"
+
+    AD->>RCH: GET /cua-hang?trang_thai=cho_duyet
+    RCH->>CSDLCH: Truy vấn cửa hàng chờ phê duyệt
+    CSDLCH-->>RCH: Danh sách cửa hàng
+    RCH-->>AD: 200 OK + danh sách
+
+    alt [Phê duyệt cửa hàng]
+        AD->>RCH: PUT /cua-hang/{ma_ch} {trang_thai: "hoạt động"}
+        RCH->>CSDLCH: Cập nhật trạng thái → "đang hoạt động"
+        CSDLCH-->>RCH: OK
+        RCH-->>AD: 200 OK
+        RCH-->>GDCH: Thông báo: "Cửa hàng đã được phê duyệt, bạn có thể bắt đầu bán hàng"
+    else [Từ chối đăng ký]
+        AD->>RCH: PUT /cua-hang/{ma_ch} {trang_thai: "bị từ chối", ly_do}
+        RCH->>CSDLCH: Cập nhật trạng thái → "bị từ chối"
+        CSDLCH-->>RCH: OK
+        RCH-->>GDCH: Thông báo: "Đăng ký bị từ chối: {lý do}"
+    end
+
+    CH->>GDCH: Cập nhật thông tin cửa hàng (logo, mô tả, giờ hoạt động)
+    GDCH->>RCH: PUT /cua-hang/{ma_ch} {thong_tin_cap_nhat}
+    RCH->>CSDLCH: Cập nhật thông tin cửa hàng
+    CSDLCH-->>RCH: OK
+    RCH-->>GDCH: 200 OK
+    GDCH-->>CH: Thông báo "Cập nhật thông tin thành công"

@@ -1,0 +1,31 @@
+flowchart TD
+    S(( )) --> A[Người dùng truy cập trang đăng ký]
+    A --> B[Điền thông tin: tên, email, mật khẩu]
+    B --> C{Email đã
+tồn tại?}
+    C -->|Có| D[Thông báo lỗi
+'Email đã được sử dụng']
+    D --> B
+    C -->|Không| E[Tạo tài khoản
+trạng thái 'chờ xác thực']
+    E --> F[Hệ thống gửi mã OTP đến email]
+    F --> G[Người dùng nhập mã OTP]
+    G --> H{Mã OTP
+hợp lệ?}
+    H -->|Không| I[Thông báo lỗi,
+cho phép gửi lại OTP]
+    I --> G
+    H -->|Có| J[Kích hoạt tài khoản]
+    J --> K[Chuyển hướng đến trang đăng nhập]
+    K --> L[Người dùng nhập email và mật khẩu]
+    L --> M{Thông tin
+hợp lệ?}
+    M -->|Không| N[Thông báo lỗi
+'Sai email hoặc mật khẩu']
+    N --> L
+    M -->|Có| O[Cấp phát JWT token]
+    O --> P[Chuyển hướng đến trang chủ]
+    P --> E2(( ))
+
+    style S fill:#000,stroke:#000
+    style E2 fill:#000,stroke:#000,color:#fff

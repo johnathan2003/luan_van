@@ -1,0 +1,31 @@
+sequenceDiagram
+    actor KH as Khách Hàng
+    participant GDGH as Giao Diện<br/>Giỏ Hàng
+    participant RDH as Router<br/>Đơn Hàng
+    participant CSDLSP as CSDL<br/>Sản Phẩm
+    participant CSDLDH as CSDL<br/>Đơn Hàng
+
+    KH->>GDGH: Thêm sản phẩm vào giỏ hàng
+    GDGH->>RDH: POST /gio-hang/san-pham {ma_sp, so_luong, bien_the}
+    RDH->>CSDLSP: Kiểm tra số lượng tồn kho
+    CSDLSP-->>RDH: Số lượng tồn kho hiện tại
+
+    alt [Đủ hàng trong kho]
+        RDH-->>GDGH: 200 OK + giỏ hàng đã cập nhật
+        GDGH-->>KH: Hiển thị giỏ hàng
+    else [Không đủ hàng trong kho]
+        RDH-->>GDGH: 400 Yêu cầu không hợp lệ
+        GDGH-->>KH: Thông báo "Không đủ số lượng tồn kho"
+    end
+
+    KH->>GDGH: Xem giỏ hàng và nhấn "Đặt hàng"
+    GDGH->>RDH: POST /don-hang {ma_gio_hang, ma_dia_chi, ghi_chu}
+    RDH->>CSDLSP: Kiểm tra lại tồn kho trước khi tạo đơn
+    CSDLSP-->>RDH: Xác nhận số lượng tồn kho
+
+    RDH->>CSDLDH: Tạo đơn hàng trạng thái "chờ thanh toán"
+    CSDLDH-->>RDH: Mã đơn hàng
+    RDH->>CSDLSP: Giảm số lượng tồn kho tạm thời
+    CSDLSP-->>RDH: OK
+    RDH-->>GDGH: 201 Đã tạo + mã đơn hàng
+    GDGH-->>KH: Chuyển hướng đến trang thanh toán

@@ -1,0 +1,27 @@
+flowchart TD
+    S(( )) --> A[Nhân viên kho đóng gói
+và xác nhận hàng sẵn sàng]
+    A --> B[Hệ thống phân công
+nhân viên giao hàng]
+    B --> C[Nhân viên giao hàng
+xem danh sách đơn được giao]
+    C --> D[Xác nhận lấy hàng tại kho]
+    D --> E[Cập nhật trạng thái
+'đang giao hàng']
+    E --> F[Hệ thống gửi thông báo
+cho khách hàng]
+    F --> G[Nhân viên giao hàng
+đến địa chỉ]
+    G --> H{Giao hàng
+thành công?}
+    H -->|Không| I[Ghi nhận lý do thất bại
+và lên lịch giao lại]
+    I --> G
+    H -->|Có| J[Cập nhật trạng thái
+'đã giao thành công']
+    J --> K[Thông báo cho khách hàng
+và cửa hàng]
+    K --> E2(( ))
+
+    style S fill:#000,stroke:#000
+    style E2 fill:#000,stroke:#000,color:#fff

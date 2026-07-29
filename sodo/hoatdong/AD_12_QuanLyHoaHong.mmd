@@ -1,0 +1,26 @@
+flowchart TD
+    S(( )) --> A[Quản trị viên truy cập
+mục 'Quản lý Hoa hồng']
+    A --> B[Hệ thống tổng hợp đơn hàng
+hoàn thành trong kỳ]
+    B --> C[Tính toán hoa hồng
+theo tỷ lệ từng cửa hàng]
+    C --> D[Hiển thị danh sách
+hoa hồng chờ thanh toán]
+    D --> E[Quản trị viên xác nhận
+thanh toán hoa hồng]
+    E --> F[Hệ thống gửi lệnh
+chuyển khoản qua cổng thanh toán]
+    F --> G{Chuyển khoản
+thành công?}
+    G -->|Không| H[Ghi nhận lỗi,
+gửi cảnh báo quản trị viên]
+    H --> E
+    G -->|Có| I[Cập nhật trạng thái
+hoa hồng 'đã thanh toán']
+    I --> J[Gửi thông báo
+cho chủ cửa hàng]
+    J --> E2(( ))
+
+    style S fill:#000,stroke:#000
+    style E2 fill:#000,stroke:#000,color:#fff
