@@ -61,6 +61,7 @@ const OrderAdminPage             = React.lazy(() => import('./pages/admin/OrderA
 const ShipperManagementPage      = React.lazy(() => import('./pages/admin/ShipperManagementPage'))
 const WarehouseManagerAdminPage  = React.lazy(() => import('./pages/admin/WarehouseManagerAdminPage'))
 const WarehouseHierarchyPage     = React.lazy(() => import('./pages/admin/WarehouseHierarchyPage'))
+const WarehouseAccountTreePage   = React.lazy(() => import('./pages/admin/WarehouseAccountTreePage'))
 const VoucherAdminPage           = React.lazy(() => import('./pages/admin/VoucherAdminPage'))
 const BannerAdminPage            = React.lazy(() => import('./pages/admin/BannerAdminPage'))
 const FinancePage                = React.lazy(() => import('./pages/admin/FinancePage'))
@@ -197,8 +198,9 @@ const Router: React.FC = () => (
       <Route path="/admin/notifications"         element={inAdmin(<SystemNotificationPage />)} />
       {/* Vận hành */}
       <Route path="/admin/shippers"              element={inAdmin(<ShipperManagementPage />)} />
-      <Route path="/admin/warehouse-managers"    element={inAdmin(<WarehouseManagerAdminPage />)} />
-      <Route path="/admin/warehouse-hierarchy"   element={inAdmin(<WarehouseHierarchyPage />)} />
+      <Route path="/admin/warehouse-managers"      element={inAdmin(<WarehouseManagerAdminPage />)} />
+      <Route path="/admin/warehouse-hierarchy"    element={inAdmin(<WarehouseHierarchyPage />)} />
+      <Route path="/admin/warehouse-account-tree" element={inAdmin(<WarehouseAccountTreePage />)} />
       <Route path="/admin/shipping-config"       element={inAdmin(<ShippingConfigPage />)} />
       {/* Báo cáo & Log */}
       <Route path="/admin/reports"               element={inAdmin(<ReportsPage />)} />

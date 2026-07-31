@@ -8,10 +8,13 @@ import React from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 
 const NAV_ITEMS = [
-  { path: '/super',          label: 'Dashboard',   icon: '⚡' },
-  { path: '/super/products', label: 'Sản phẩm',    icon: '📦' },
-  { path: '/super/orders',   label: 'Đơn hàng',    icon: '🧾' },
-  { path: '/super/users',    label: 'Người dùng',  icon: '👥' },
+  { path: '/super',            label: 'Dashboard',   icon: '⚡' },
+  { path: '/super/products',   label: 'Sản phẩm',    icon: '📦' },
+  { path: '/super/orders',     label: 'Đơn hàng',    icon: '🧾' },
+  { path: '/super/users',      label: 'Người dùng',  icon: '👥' },
+  { path: '/super/db-viewer',  label: 'DB Viewer',   icon: '🗄️' },
+  { path: '/super/erd',        label: 'Sơ đồ ERD',   icon: '🔗' },
+  { path: '/super/docs',       label: 'Tài liệu',    icon: '📖' },
 ]
 
 interface SuperLayoutProps {

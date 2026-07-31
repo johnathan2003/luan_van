@@ -72,8 +72,9 @@ const ADMIN_NAV: NavGroup[] = [
     group: 'Vận hành',
     items: [
       { icon: '🛵', label: 'Quản Lý Shipper',   path: '/admin/shippers' },
-      { icon: '🏭', label: 'Quản Lý Kho',      path: '/admin/warehouse-managers' },
-      { icon: '🗂️', label: 'Phân Cấp Kho',     path: '/admin/warehouse-hierarchy' },
+      { icon: '🏭', label: 'Quản Lý Kho',        path: '/admin/warehouse-managers' },
+      { icon: '🗂️', label: 'Phân Cấp Kho',      path: '/admin/warehouse-hierarchy' },
+      { icon: '🔑', label: 'Tài Khoản Kho (Cây)', path: '/admin/warehouse-account-tree' },
       { icon: '🚚', label: 'Cấu Hình Vận Chuyển',      path: '/admin/shipping-config' },
     ],
   },
