@@ -1,3 +1,4 @@
+
 import logging
 import logging.handlers
 import os
@@ -19,7 +20,6 @@ from app.routes import (
     wallet, banners, bot, feedback, disputes,
 )
 from app.routes.warehouses import router as warehouses_router
-from app.routes.warehouse_accounts import router as warehouse_accounts_router
 from app.routes.config_public import router as config_public_router
 from app.websocket.connection_manager import sio, init_main_loop
 
@@ -124,7 +124,6 @@ app.include_router(employee.router,      prefix="/api/v1/employee",       tags=[
 app.include_router(feedback.router,      prefix="/api/v1/feedback",       tags=["Feedback"])   # [F-1]
 app.include_router(disputes.router,      prefix="/api/v1/disputes",       tags=["Disputes"])   # [F-2]
 app.include_router(warehouses_router,                                      tags=["Warehouses"])
-app.include_router(warehouse_accounts_router,  prefix="/api/v1/admin/warehouse-accounts", tags=["WarehouseAccounts"])
 app.include_router(wallet.router,                                          tags=["Wallet"])
 app.include_router(banners.router,                                         tags=["Banners"])
 app.include_router(bot.router,           prefix="/api/v1/bot",            tags=["Bot"])
