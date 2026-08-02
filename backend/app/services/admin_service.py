@@ -226,14 +226,23 @@ def resolve_dispute(db: Session, admin_id: int, dispute_id: int, decision: str, 
 
 
 def get_admin_dashboard(db: Session) -> dict:
-    from app.models.order import Order
+    from sqlalchemy import text
+
+    def _count(tbl: str, where: str = "") -> int:
+        try:
+            sql = f"SELECT COUNT(*) FROM {tbl}" + (f" WHERE {where}" if where else "")
+            return db.execute(text(sql)).scalar() or 0
+        except Exception:
+            db.rollback()
+            return 0
+
     return {
-        "total_users": db.query(User).count(),
-        "total_shops": db.query(Shop).count(),
-        "total_orders": db.query(Order).count(),
-        "pending_shop_registrations": db.query(ShopRegistration).filter(ShopRegistration.status == "pending").count(),
-        "pending_shipper_registrations": db.query(ShipperRegistration).filter(ShipperRegistration.status == "pending").count(),
-        "open_disputes": db.query(Dispute).filter(Dispute.status == "open").count(),
+        "total_users":                   _count("users"),
+        "total_shops":                   _count("shops"),
+        "total_orders":                  _count("orders"),
+        "pending_shop_registrations":    _count("shop_registrations", "status = 'pending'"),
+        "pending_shipper_registrations": _count("shipper_registrations", "status = 'pending'"),
+        "open_disputes":                 _count("disputes", "status = 'open'"),
     }
 
 

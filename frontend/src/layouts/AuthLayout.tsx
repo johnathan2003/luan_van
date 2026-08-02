@@ -14,7 +14,10 @@ interface Props {
 const AuthLayout: React.FC<Props> = ({ children, title, subtitle }) => (
   <div style={{
     minHeight: '100vh',
-    background: 'linear-gradient(135deg, #fff7f5 0%, #fef3f0 50%, #fff0ed 100%)',
+    backgroundImage: 'url(/background.png)',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

@@ -25,6 +25,180 @@ def dashboard(current_user: User = Depends(require_admin), db: Session = Depends
     return get_admin_dashboard(db)
 
 
+# ─── Shops management ──────────────────────────────────────────────────────────
+
+@router.get("/shops")
+def list_shops(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import text
+    conditions = ["1=1"]
+    params: dict = {}
+    if status:
+        conditions.append("status = :status")
+        params["status"] = status
+    if search:
+        conditions.append("shop_name ILIKE :search")
+        params["search"] = f"%{search}%"
+    where = " AND ".join(conditions)
+    try:
+        total = db.execute(text(f"SELECT COUNT(*) FROM shops WHERE {where}"), params).scalar() or 0
+        offset = (page - 1) * limit
+        rows = db.execute(text(f"""
+            SELECT shop_id, shop_name, address, phone, rating, verification_status,
+                   COALESCE(status, 'active') as status,
+                   suspended_reason, suspended_at, created_at
+            FROM shops WHERE {where}
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :offset
+        """), {**params, "limit": limit, "offset": offset}).fetchall()
+    except Exception:
+        db.rollback()
+        # Fallback nếu cột status chưa tồn tại
+        total = db.execute(text(f"SELECT COUNT(*) FROM shops WHERE {where}"), params).scalar() or 0
+        offset = (page - 1) * limit
+        rows = db.execute(text(f"""
+            SELECT shop_id, shop_name, address, phone, rating, verification_status,
+                   'active' as status, NULL as suspended_reason, NULL as suspended_at, created_at
+            FROM shops WHERE {where}
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :offset
+        """), {**params, "limit": limit, "offset": offset}).fetchall()
+    return {
+        "shops": [
+            {
+                "shop_id": r[0], "shop_name": r[1], "address": r[2], "phone": r[3],
+                "rating": str(r[4]) if r[4] else "0.0",
+                "verification_status": r[5], "status": r[6] or "active",
+                "suspended_reason": r[7], "suspended_at": str(r[8]) if r[8] else None,
+                "created_at": str(r[9]) if r[9] else None,
+            }
+            for r in rows
+        ],
+        "total": total,
+        "pages": (total + limit - 1) // limit,
+    }
+
+
+@router.put("/shops/{shop_id}/suspend")
+def suspend_shop(shop_id: int, data: dict, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    from datetime import datetime as dt
+
+    reason = data.get("reason", "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập lý do đình chỉ")
+
+    shop_row = db.execute(text(
+        "SELECT shop_id, shop_name FROM shops WHERE shop_id = :sid"
+    ), {"sid": shop_id}).fetchone()
+    if not shop_row:
+        raise HTTPException(status_code=404, detail="Shop không tồn tại")
+
+    in_transit_statuses = ("pending", "confirmed", "processing", "shipped", "delivering")
+    try:
+        active_rows = db.execute(text("""
+            SELECT DISTINCT oi.product_id
+            FROM order_items oi
+            JOIN orders o ON o.order_id = oi.order_id
+            JOIN products p ON p.product_id = oi.product_id
+            WHERE p.shop_id = :sid AND o.order_status IN :statuses
+        """).bindparams(__import__('sqlalchemy').bindparam("statuses", expanding=True)),
+            {"sid": shop_id, "statuses": list(in_transit_statuses)}
+        ).fetchall()
+        active_pids = [r[0] for r in active_rows]
+    except Exception:
+        db.rollback()
+        active_pids = []
+
+    try:
+        if active_pids:
+            pid_str = ",".join(str(i) for i in active_pids)
+            db.execute(text(f"""
+                UPDATE products SET status='archived'
+                WHERE shop_id=:sid AND status='active' AND product_id NOT IN ({pid_str})
+            """), {"sid": shop_id})
+        else:
+            db.execute(text(
+                "UPDATE products SET status='archived' WHERE shop_id=:sid AND status='active'"
+            ), {"sid": shop_id})
+
+        db.execute(text("""
+            UPDATE shops SET status='suspended', suspended_reason=:reason, suspended_at=:now
+            WHERE shop_id=:sid
+        """), {"reason": reason, "now": dt.utcnow(), "sid": shop_id})
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi đình chỉ shop: {str(e)}")
+
+    try:
+        create_notification(db, shop_id, "Shop bị đình chỉ",
+            f"Shop '{shop_row[1]}' đã bị đình chỉ. Lý do: {reason}", "warning")
+    except Exception:
+        pass
+
+    return {"message": "Đã đình chỉ shop", "shop_id": shop_id}
+
+
+@router.put("/shops/{shop_id}/unsuspend")
+def unsuspend_shop(shop_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from sqlalchemy import text
+
+    shop_row = db.execute(text(
+        "SELECT shop_id, shop_name FROM shops WHERE shop_id = :sid"
+    ), {"sid": shop_id}).fetchone()
+    if not shop_row:
+        raise HTTPException(status_code=404, detail="Shop không tồn tại")
+
+    try:
+        db.execute(text("""
+            UPDATE shops SET status='active', suspended_reason=NULL, suspended_at=NULL
+            WHERE shop_id=:sid
+        """), {"sid": shop_id})
+        db.execute(text(
+            "UPDATE products SET status='active' WHERE shop_id=:sid AND status='archived'"
+        ), {"sid": shop_id})
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi kích hoạt shop: {str(e)}")
+
+    try:
+        create_notification(db, shop_id, "Shop đã được kích hoạt",
+            f"Shop '{shop_row[1]}' đã được kích hoạt trở lại.", "info")
+    except Exception:
+        pass
+
+    return {"message": "Đã kích hoạt shop", "shop_id": shop_id}
+
+
+@router.delete("/shops/{shop_id}")
+def delete_shop(shop_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from sqlalchemy import text
+
+    shop_row = db.execute(text(
+        "SELECT shop_id FROM shops WHERE shop_id = :sid"
+    ), {"sid": shop_id}).fetchone()
+    if not shop_row:
+        raise HTTPException(status_code=404, detail="Shop không tồn tại")
+
+    try:
+        db.execute(text("UPDATE products SET status='archived' WHERE shop_id=:sid"), {"sid": shop_id})
+        db.execute(text("DELETE FROM shops WHERE shop_id=:sid"), {"sid": shop_id})
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi xóa shop: {str(e)}")
+
+    return {"message": "Đã xóa shop", "shop_id": shop_id}
+
+
 # ─── Users ─────────────────────────────────────────────────────────────────────
 
 @router.get("/users")

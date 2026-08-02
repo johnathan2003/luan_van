@@ -29,8 +29,13 @@ const ShopRegistration: React.FC = () => {
   }
 
   return (
-    <div className="page-wrapper">
-
+    <div style={{
+      minHeight: '100vh',
+      backgroundImage: 'url(/background_DKshop.png)',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+    }}>
       <div className="container" style={{ paddingTop: 48, paddingBottom: 48, maxWidth: 600 }}>
         <div className="card" style={{ padding: 40 }}>
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
