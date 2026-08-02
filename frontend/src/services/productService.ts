@@ -16,6 +16,12 @@ export const productService = {
   createCategory: (data: any) => API.post('/api/v1/products/categories', data),
   uploadImage: (file: File) => {
     const fd = new FormData(); fd.append('file', file)
-    return API.post('/api/v1/products/upload-image', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    // Không set Content-Type thủ công — axios tự xoá để browser thêm boundary vào
+    return API.post('/api/v1/products/upload-image', fd, {
+      transformRequest: (data, headers) => {
+        if (headers) delete (headers as any)['Content-Type']
+        return data
+      },
+    })
   },
 }

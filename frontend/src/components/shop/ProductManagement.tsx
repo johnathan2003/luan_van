@@ -134,16 +134,14 @@ const ProductManagement: React.FC = () => {
 
   const load = async () => {
     setLoading(true)
-    seedMockData()
     try {
       const [pr, cr] = await Promise.all([shopService.getProducts(), productService.getCategories()])
       const apiProducts = pr.data.products || []
-      const base = apiProducts.length > 0 ? apiProducts : MOCK_PRODUCTS
       // Áp dụng override status từ admin (approved/rejected)
-      setProducts(productApprovalStore.applyToProducts(base))
+      setProducts(productApprovalStore.applyToProducts(apiProducts))
       setCategories(cr.data.categories || [])
     } catch {
-      setProducts(productApprovalStore.applyToProducts(MOCK_PRODUCTS))
+      setProducts([])
     } finally { setLoading(false) }
   }
   useEffect(() => {

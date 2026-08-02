@@ -42,7 +42,14 @@ async def save_upload_file(file: UploadFile, subfolder: str = "products") -> str
     filename = f"{uuid.uuid4().hex}.{ext}"
 
     # --- Supabase Storage (production) ---
-    if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_KEY:
+    # Bỏ qua nếu URL là placeholder (chứa dấu ngoặc vuông) hoặc không hợp lệ
+    _supabase_ready = (
+        bool(settings.SUPABASE_URL)
+        and bool(settings.SUPABASE_SERVICE_KEY)
+        and '[' not in settings.SUPABASE_URL
+        and settings.SUPABASE_URL.startswith('http')
+    )
+    if _supabase_ready:
         storage_path = f"{subfolder}/{filename}"
         supabase = _get_supabase_client()
         supabase.storage.from_(settings.SUPABASE_STORAGE_BUCKET).upload(

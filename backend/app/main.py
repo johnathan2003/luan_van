@@ -98,7 +98,14 @@ app.add_middleware(
 add_exception_handlers(app)
 
 # ── Static files: chi mount local khi khong dung Supabase Storage ────────────
-if not settings.SUPABASE_URL:
+# Kiểm tra Supabase URL hợp lệ (không phải placeholder [project-ref])
+_supabase_ready = (
+    bool(settings.SUPABASE_URL)
+    and "[" not in settings.SUPABASE_URL
+    and settings.SUPABASE_URL.startswith("http")
+    and bool(settings.SUPABASE_SERVICE_KEY)
+)
+if not _supabase_ready:
     os.makedirs(settings.UPLOAD_FOLDER, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_FOLDER), name="uploads")
     logger.info("Local file storage enabled (dev mode).")
