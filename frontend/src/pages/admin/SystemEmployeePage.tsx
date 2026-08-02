@@ -20,11 +20,12 @@ const PERMISSION_META: Record<string, { label: string; desc: string; color: stri
   voucher_manage:  { label: 'Quản lý voucher',    desc: 'Tạo, chỉnh sửa, vô hiệu hóa voucher',  color: '#EA580C' },
   shipper_support: { label: 'Hỗ trợ shipper',     desc: 'Xem & xử lý vấn đề giao nhận',          color: '#0891B2' },
   shipper_approve: { label: 'Duyệt shipper',      desc: 'Phê duyệt đơn đăng ký shipper mới',     color: C.success },
+  warehouse_manage: { label: 'Quản lý kho', desc: 'Tổng quản lý kho — tạo & phân tài khoản Kho cấp 1/2/3', color: '#7C3AED' },
 }
 
 const ALL_PERMS = Object.keys(PERMISSION_META)
 
-const EMPTY_FORM = { employee_email: '', employee_name: '', permissions: [] as string[] }
+const EMPTY_FORM = { employee_username: '', employee_name: '', permissions: [] as string[] }
 
 interface Employee {
   emp_id: number
@@ -95,16 +96,16 @@ const SystemEmployeePage: React.FC = () => {
   useEffect(() => { loadEmployees() }, [])
 
   const handleCreate = async () => {
-    if (!form.employee_email.trim() || !form.employee_name.trim()) {
-      toast.warn('Vui lòng điền đầy đủ tên và email')
+    if (!form.employee_username.trim() || !form.employee_name.trim()) {
+      toast.warn('Vui lòng điền đầy đủ tên và tài khoản đăng nhập')
       return
     }
     setSaving(true)
     try {
       const r: any = await API.post('/api/v1/admin/system-employees', {
-        employee_email: form.employee_email.trim(),
-        employee_name:  form.employee_name.trim(),
-        permissions:    form.permissions,
+        employee_username: form.employee_username.trim(),
+        employee_name:     form.employee_name.trim(),
+        permissions:       form.permissions,
       })
       toast.success(`Đã thêm nhân viên ${form.employee_name}`)
       setForm({ ...EMPTY_FORM })
@@ -273,8 +274,8 @@ const SystemEmployeePage: React.FC = () => {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
               {[
-                { key: 'employee_name',  label: 'Họ và tên',  type: 'text',  placeholder: 'VD: Nguyễn Thị Admin' },
-                { key: 'employee_email', label: 'Email',      type: 'email', placeholder: 'VD: nhanvien@buyzo.vn' },
+                { key: 'employee_name',     label: 'Họ và tên',           type: 'text', placeholder: 'VD: Nguyễn Thị Admin' },
+                { key: 'employee_username', label: 'Tài khoản đăng nhập', type: 'text', placeholder: 'VD: nhanvien01 (tối thiểu 6 ký tự)' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: C.gray, display: 'block', marginBottom: 4 }}>{f.label}</label>
@@ -283,6 +284,11 @@ const SystemEmployeePage: React.FC = () => {
                     style={{ width: '100%', padding: '9px 12px', border: `1px solid ${C.light}`, borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
                 </div>
               ))}
+              {form.employee_username.trim() && (
+                <div style={{ fontSize: 11, color: C.gray, marginTop: -6 }}>
+                  📌 Email: <b>{form.employee_username.trim()}</b>@buyzo.com — Mật khẩu: <b>{form.employee_username.trim()}</b>
+                </div>
+              )}
             </div>
 
             <p style={{ fontSize: 13, fontWeight: 700, color: C.navy, margin: '0 0 10px' }}>🔑 Phân quyền</p>

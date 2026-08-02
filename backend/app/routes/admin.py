@@ -369,11 +369,16 @@ def create_warehouse_manager(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Tạo tài khoản quản lý kho trực tiếp (không qua shipper)."""
+    """
+    Tạo tài khoản quản lý kho trực tiếp (không qua shipper).
+    LƯU Ý: endpoint cũ, không dùng ở UI nữa (đã gộp vào /admin/warehouse-hierarchy +
+    /api/v1/warehouse-accounts). Giữ lại để tương thích ngược, nhưng role gán ra
+    giờ tier-aware (theo Warehouse.tier) giống assign_warehouse_manager — tránh gán
+    nhầm role "warehouse_manager" (Quản lý tổng) cho kho hub/district/ward.
+    """
     from app.models.user import UserRole, Role
-    from app.models.shipment import WarehouseManager
+    from app.models.shipment import WarehouseManager, Warehouse
     from app.utils.security import hash_password
-    from sqlalchemy import text
 
     email        = data.get("email", "").strip()
     full_name    = data.get("full_name", "").strip()
@@ -386,6 +391,10 @@ def create_warehouse_manager(
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(400, "Email đã được sử dụng")
 
+    wh = db.query(Warehouse).filter(Warehouse.warehouse_id == warehouse_id).first()
+    if not wh:
+        raise HTTPException(404, "Không tìm thấy kho")
+
     # Tạo user
     new_user = User(
         email=email,
@@ -397,13 +406,17 @@ def create_warehouse_manager(
     db.add(new_user)
     db.flush()
 
-    # Gán role warehouse_manager
-    wm_role = db.query(Role).filter(Role.role_name == "warehouse_manager").first()
+    # Role theo đúng tier của kho (1=hub, 2=district, 3=ward) — KHÔNG hardcode
+    # "warehouse_manager" (role đó chỉ dành cho Quản lý tổng, không gắn 1 kho cụ thể).
+    TIER_ROLES = {1: "warehouse_hub_manager", 2: "warehouse_district_manager", 3: "warehouse_ward_manager"}
+    role_name = TIER_ROLES.get(wh.tier, "warehouse_hub_manager")
+    wm_role = db.query(Role).filter(Role.role_name == role_name).first()
     if not wm_role:
-        wm_role = Role(role_name="warehouse_manager", description="Quan ly kho trung chuyen")
+        wm_role = Role(role_name=role_name, description=f"BuyZo — quản lý kho tier {wh.tier}")
         db.add(wm_role)
         db.flush()
-    db.add(UserRole(user_id=new_user.user_id, role_id=wm_role.role_id, status="active", assigned_by=current_user.user_id))
+    db.add(UserRole(user_id=new_user.user_id, role_id=wm_role.role_id, status="active",
+                     current_role=True, assigned_by=current_user.user_id))
 
     # Gán kho
     db.add(WarehouseManager(manager_id=new_user.user_id, warehouse_id=warehouse_id))
@@ -571,7 +584,7 @@ def resolve_disp(dispute_id: int, data: dict, current_user: User = Depends(requi
 def add_sys_employee(data: dict, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     emp = create_system_employee(
         db, current_user.user_id,
-        data["employee_email"], data["employee_name"],
+        data["employee_username"], data["employee_name"],
         data.get("role_name", "general"),
         data.get("permissions", []),
     )
@@ -606,20 +619,28 @@ def update_employee_permissions(
 ):
     """Cập nhật bộ quyền cho nhân viên (replace all permissions)."""
     from app.models.shop import SystemEmployee, SystemEmployeePermission
+    from app.services.admin_service import _sync_warehouse_manage, WAREHOUSE_CREATE_PERMS
     emp = db.query(SystemEmployee).filter(SystemEmployee.emp_id == emp_id).first()
     if not emp:
         raise HTTPException(404, "Nhân viên không tồn tại")
     new_perms: list = data.get("permissions", [])
-    # Xóa toàn bộ quyền cũ
-    db.query(SystemEmployeePermission).filter(SystemEmployeePermission.emp_id == emp_id).delete()
+    # Xóa toàn bộ quyền cũ (trừ 3 quyền warehouse_create_* — do _sync_warehouse_manage tự quản lý bên dưới)
+    db.query(SystemEmployeePermission).filter(
+        SystemEmployeePermission.emp_id == emp_id,
+        ~SystemEmployeePermission.permission_code.in_(WAREHOUSE_CREATE_PERMS),
+    ).delete(synchronize_session=False)
     # Thêm quyền mới
     for perm_code in new_perms:
+        if perm_code in WAREHOUSE_CREATE_PERMS:
+            continue  # quyền này do _sync_warehouse_manage cấp theo checkbox warehouse_manage
         db.add(SystemEmployeePermission(
             emp_id=emp_id,
             permission_code=perm_code,
             scope="admin",
             granted_by=current_user.user_id,
         ))
+    db.flush()
+    _sync_warehouse_manage(db, emp, new_perms, current_user.user_id)
     db.commit()
     return {"message": f"Đã cập nhật {len(new_perms)} quyền cho nhân viên #{emp_id}"}
 
@@ -631,10 +652,15 @@ def delete_sys_employee(
 ):
     """Xóa (deactivate) nhân viên hệ thống."""
     from app.models.shop import SystemEmployee
+    from app.services.admin_service import _sync_warehouse_manage
     emp = db.query(SystemEmployee).filter(SystemEmployee.emp_id == emp_id).first()
     if not emp:
         raise HTTPException(404, "Nhân viên không tồn tại")
     emp.status = "inactive"
+    # Thu hồi role warehouse_manager + 3 quyền warehouse_create_* nếu có —
+    # tránh trường hợp nhân viên "đã xoá" vẫn đăng nhập được portal /warehouse
+    # hoặc vẫn tạo được tài khoản con.
+    _sync_warehouse_manage(db, emp, [], current_user.user_id)
     db.commit()
     return {"message": f"Đã vô hiệu hóa nhân viên {emp.emp_name}"}
 

@@ -45,7 +45,7 @@ services:
     volumes:
       - ./backend:/app          # bind mount — sửa code local là container thấy ngay
       - ./super/backend:/app/super  # superadmin module — tách biệt, không thuộc app package
-      - /app/uploads            # giữ uploads trong container, không bị mount đè
+      - ./uploads:/app/uploads  # bind mount ra host — ảnh tồn tại ngoài container
     depends_on:
       db:
         condition: service_healthy
@@ -80,6 +80,8 @@ services:
       # ── Superadmin (plaintext, không dùng bcrypt)
       SUPER_USERNAME: super
       SUPER_PASSWORD: super
+      # ── Gemini (Chatbot) — set GEMINI_API_KEY trong file .env cùng cấp docker-compose.yml
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
 
   # ── Adminer ────────────────────────────────────────────────
   adminer:

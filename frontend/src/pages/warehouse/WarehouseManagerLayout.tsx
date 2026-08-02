@@ -12,10 +12,12 @@ const NAV = [
   { path: '/warehouse',           icon: '📊', label: 'Tổng quan',     desc: 'Dashboard kho' },
   { path: '/warehouse/shipments', icon: '📋', label: 'Đơn hàng',      desc: 'Quản lý & gán shipper' },
   { path: '/warehouse/incoming',  icon: '🚛', label: 'Hàng đến kho',  desc: 'Liên tỉnh về kho' },
+  { path: '/warehouse/accounts',  icon: '👥', label: 'Tài khoản kho', desc: 'Tạo Hub/District/Ward' },
 ]
 
-// Lấy thông tin kho từ API hoặc dùng fallback
-const WAREHOUSE_INFO = { name: 'Kho HCM', province: 'TP. Hồ Chí Minh', code: 'WH-HCM' }
+// Quản lý tổng (dept) KHÔNG gắn với 1 kho cụ thể — phụ trách toàn bộ hệ thống kho
+// của BuyZo (xem/tạo tài khoản ở mọi Hub/District/Ward qua trang "Tài khoản kho").
+const WAREHOUSE_INFO = { name: 'Toàn hệ thống', province: 'Quản lý tổng — tất cả kho BuyZo', code: 'ALL' }
 
 const WarehouseManagerLayout: React.FC = () => {
   const location  = useLocation()

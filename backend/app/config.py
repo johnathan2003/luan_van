@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "logs/app.log"
 
+    # Gemini (Chatbot)
+    GEMINI_API_KEY: str = ""
+
     @property
     def DATABASE_URL(self):
         return "postgresql+psycopg2://{}:{}@{}:{}/{}".format(

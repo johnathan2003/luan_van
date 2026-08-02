@@ -92,17 +92,27 @@ const AssignManagerModal: React.FC<{
   onClose: () => void
   onAssigned: (wId: number, userId: number, userName: string) => void
 }> = ({ warehouse, onClose, onAssigned }) => {
+  const [mode, setMode] = useState<'existing' | 'new'>('existing')
+
+  // — Gán người dùng có sẵn —
   const [query, setQuery]       = useState('')
   const [results, setResults]   = useState<UserSearchResult[]>([])
   const [selected, setSelected] = useState<UserSearchResult | null>(null)
   const [searching, setSearching] = useState(false)
   const [saving, setSaving]     = useState(false)
 
+  // — Tạo tài khoản mới —
+  const [newUsername, setNewUsername] = useState('')
+  const [newFullName, setNewFullName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [created, setCreated]   = useState<{ email: string; password: string } | null>(null)
+
   const TIER_ROLE: Record<number, string> = {
     1: 'warehouse_hub_manager',
     2: 'warehouse_district_manager',
     3: 'warehouse_ward_manager',
   }
+  const NUM_TO_TIER: Record<number, string> = { 1: 'hub', 2: 'district', 3: 'ward' }
 
   const search = async (q: string) => {
     setQuery(q)
@@ -132,13 +142,38 @@ const AssignManagerModal: React.FC<{
     } finally { setSaving(false) }
   }
 
+  const createNew = async () => {
+    if (!newUsername.trim() || !newFullName.trim()) {
+      toast.error('Điền đầy đủ họ tên và tài khoản'); return
+    }
+    setCreating(true)
+    try {
+      const res = await API.post('/api/v1/warehouse-accounts', {
+        username: newUsername.trim(),
+        full_name: newFullName.trim(),
+        tier: NUM_TO_TIER[warehouse.tier] ?? 'ward',
+        warehouse_id: warehouse.warehouse_id,
+      })
+      toast.success(`Đã tạo tài khoản quản lý ${warehouse.name}`)
+      setCreated({ email: res.data.email, password: res.data.password })
+      onAssigned(warehouse.warehouse_id, res.data.user_id, newFullName.trim())
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi tạo tài khoản')
+    } finally { setCreating(false) }
+  }
+
   const tierStyle = TIER_STYLE[warehouse.tier] ?? TIER_STYLE[3]
+
+  const tabBtnStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1, padding: '8px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+    fontSize: 13, fontWeight: 700, background: active ? '#0D9488' : '#F1F5F9', color: active ? 'white' : '#64748B',
+  })
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 16, padding: 28, maxWidth: 460, width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
         {/* Header */}
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: 16 }}>
           <h3 style={{ fontWeight: 800, color: '#1E3A5F', margin: 0 }}>👤 Gán quản lý kho</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <div style={{ background: tierStyle.bg, color: tierStyle.color, borderRadius: 8, padding: '4px 12px', fontSize: 12, fontWeight: 700 }}>
@@ -156,57 +191,100 @@ const AssignManagerModal: React.FC<{
           </p>
         </div>
 
-        {/* Search */}
-        <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 6 }}>
-          Tìm người dùng (tên hoặc email)
-        </label>
-        <input
-          value={query}
-          onChange={e => search(e.target.value)}
-          placeholder="VD: Nguyễn Văn A hoặc a@email.com"
-          style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 9, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }}
-        />
-
-        {/* Results */}
-        {searching && <p style={{ fontSize: 12, color: '#64748B', margin: '0 0 8px' }}>Đang tìm...</p>}
-        {results.length > 0 && !selected && (
-          <div style={{ border: '1px solid #E2E8F0', borderRadius: 9, overflow: 'hidden', marginBottom: 12 }}>
-            {results.map(u => (
-              <div key={u.user_id}
-                onClick={() => { setSelected(u); setResults([]) }}
-                style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #F1F5F9', transition: 'background 0.1s' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFF')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
-                <p style={{ fontWeight: 700, fontSize: 13, color: '#1E3A8A', margin: 0 }}>{u.full_name}</p>
-                <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>{u.email}{u.phone ? ` · ${u.phone}` : ''}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Selected user */}
-        {selected && (
-          <div style={{ background: '#EFF6FF', border: '2px solid #BFDBFE', borderRadius: 10, padding: '12px 14px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <p style={{ fontWeight: 800, fontSize: 14, color: '#1E3A8A', margin: 0 }}>✓ {selected.full_name}</p>
-              <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>{selected.email}</p>
-            </div>
-            <button onClick={() => { setSelected(null); setQuery('') }}
-              style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 18, cursor: 'pointer' }}>✕</button>
-          </div>
-        )}
-
-        {/* Buttons */}
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onClose}
-            style={{ flex: 1, padding: '10px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: 9, fontWeight: 700, cursor: 'pointer' }}>
-            Hủy
-          </button>
-          <button onClick={assign} disabled={!selected || saving}
-            style={{ flex: 2, padding: '10px', background: !selected || saving ? '#94A3B8' : '#0D9488', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, cursor: selected && !saving ? 'pointer' : 'default' }}>
-            {saving ? '⏳ Đang gán...' : '✓ Xác nhận gán'}
-          </button>
+        {/* Mode tabs */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <button style={tabBtnStyle(mode === 'existing')} onClick={() => setMode('existing')}>Gán người dùng có sẵn</button>
+          <button style={tabBtnStyle(mode === 'new')} onClick={() => setMode('new')}>Tạo tài khoản mới</button>
         </div>
+
+        {mode === 'existing' ? (
+          <>
+            {/* Search */}
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 6 }}>
+              Tìm người dùng (tên hoặc email)
+            </label>
+            <input
+              value={query}
+              onChange={e => search(e.target.value)}
+              placeholder="VD: Nguyễn Văn A hoặc a@email.com"
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 9, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }}
+            />
+
+            {/* Results */}
+            {searching && <p style={{ fontSize: 12, color: '#64748B', margin: '0 0 8px' }}>Đang tìm...</p>}
+            {results.length > 0 && !selected && (
+              <div style={{ border: '1px solid #E2E8F0', borderRadius: 9, overflow: 'hidden', marginBottom: 12 }}>
+                {results.map(u => (
+                  <div key={u.user_id}
+                    onClick={() => { setSelected(u); setResults([]) }}
+                    style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #F1F5F9', transition: 'background 0.1s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFF')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
+                    <p style={{ fontWeight: 700, fontSize: 13, color: '#1E3A8A', margin: 0 }}>{u.full_name}</p>
+                    <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>{u.email}{u.phone ? ` · ${u.phone}` : ''}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Selected user */}
+            {selected && (
+              <div style={{ background: '#EFF6FF', border: '2px solid #BFDBFE', borderRadius: 10, padding: '12px 14px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontWeight: 800, fontSize: 14, color: '#1E3A8A', margin: 0 }}>✓ {selected.full_name}</p>
+                  <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>{selected.email}</p>
+                </div>
+                <button onClick={() => { setSelected(null); setQuery('') }}
+                  style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 18, cursor: 'pointer' }}>✕</button>
+              </div>
+            )}
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={onClose}
+                style={{ flex: 1, padding: '10px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: 9, fontWeight: 700, cursor: 'pointer' }}>
+                Hủy
+              </button>
+              <button onClick={assign} disabled={!selected || saving}
+                style={{ flex: 2, padding: '10px', background: !selected || saving ? '#94A3B8' : '#0D9488', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, cursor: selected && !saving ? 'pointer' : 'default' }}>
+                {saving ? '⏳ Đang gán...' : '✓ Xác nhận gán'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 6 }}>Họ tên</label>
+            <input value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="Nguyễn Văn A"
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 9, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }} />
+
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 6 }}>Tài khoản</label>
+            <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="vd: Kho"
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 9, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
+
+            <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 16px' }}>
+              📌 Email sẽ tự sinh dạng: <b>{newUsername || '...'}</b>cap{warehouse.tier}<b>MÃKHO</b>@buyzo.com — mật khẩu = toàn bộ phần trước @.
+            </p>
+
+            {created && (
+              <div style={{ background: '#DCFCE7', border: '1px solid #86EFAC', borderRadius: 9, padding: '10px 14px', marginBottom: 16, fontSize: 12 }}>
+                ✅ Email: <b>{created.email}</b> — Mật khẩu: <b>{created.password}</b>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={onClose}
+                style={{ flex: 1, padding: '10px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: 9, fontWeight: 700, cursor: 'pointer' }}>
+                {created ? 'Đóng' : 'Hủy'}
+              </button>
+              {!created && (
+                <button onClick={createNew} disabled={creating}
+                  style={{ flex: 2, padding: '10px', background: creating ? '#94A3B8' : '#0D9488', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, cursor: creating ? 'default' : 'pointer' }}>
+                  {creating ? '⏳ Đang tạo...' : '✓ Tạo tài khoản'}
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -446,9 +524,47 @@ const WarehouseHierarchyPage: React.FC = () => {
   const loadTree = useCallback(async () => {
     setTLoading(true)
     try {
-      const r = await API.get('/api/v1/warehouses/hierarchy')
-      setTree(r.data.warehouses)
-      setTreeTotal(r.data.total)
+      // /api/v1/warehouses/hierarchy không tồn tại ở backend — dựng cây từ danh sách
+      // phẳng /api/v1/warehouses (có tier + parent_warehouse_id) + tên quản lý từ
+      // /api/v1/warehouse-accounts (tài khoản kho gắn với warehouse_id thật).
+      const [whRes, accRes] = await Promise.all([
+        API.get('/api/v1/warehouses'),
+        API.get('/api/v1/warehouse-accounts').catch(() => ({ data: [] })),
+      ])
+      const flat: any[] = whRes.data ?? []
+      const managerByWh = new Map<number, { user_id: number; full_name: string }>()
+      ;(accRes.data ?? []).forEach((a: any) => {
+        if (a.warehouse_id) managerByWh.set(a.warehouse_id, { user_id: a.user_id, full_name: a.full_name })
+      })
+      const toNode = (w: any): WarehouseNode => {
+        const mgr = managerByWh.get(w.warehouse_id)
+        return {
+          warehouse_id: w.warehouse_id,
+          name: w.name,
+          tier: w.tier,
+          province: w.province,
+          address: w.address ?? null,
+          district: w.district ?? null,
+          ward: w.ward ?? null,
+          parent_warehouse_id: w.parent_warehouse_id,
+          manager_id: mgr?.user_id ?? null,
+          manager_name: mgr?.full_name ?? null,
+          is_active: w.is_active,
+          shipments_count: 0,
+          children: [],
+        }
+      }
+      const byId = new Map<number, WarehouseNode>(flat.map(w => [w.warehouse_id, toNode(w)]))
+      const roots: WarehouseNode[] = []
+      byId.forEach(node => {
+        if (node.parent_warehouse_id && byId.has(node.parent_warehouse_id)) {
+          byId.get(node.parent_warehouse_id)!.children.push(node)
+        } else {
+          roots.push(node)
+        }
+      })
+      setTree(roots)
+      setTreeTotal(flat.length)
     } catch { /* ignore */ }
     finally { setTLoading(false) }
   }, [])
@@ -506,9 +622,9 @@ const WarehouseHierarchyPage: React.FC = () => {
 
   return (
     <div style={{ maxWidth: 1000 }}>
-      <h2 style={{ marginBottom: 4 }}>🏭 Kho hàng 3 tầng</h2>
+      <h2 style={{ marginBottom: 4 }}>🏭 Quản Lý Kho</h2>
       <p style={{ color: C.gray, fontSize: 13, marginBottom: 20 }}>
-        Xem phân cấp kho, gán manager và quản lý chuyến vận chuyển nội kho.
+        Xem toàn bộ cây kho 3 tầng, gán/tạo tài khoản quản lý và theo dõi chuyến vận chuyển nội kho.
       </p>
 
       {/* Tabs */}

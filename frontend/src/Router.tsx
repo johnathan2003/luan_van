@@ -59,7 +59,6 @@ const ShopManagementPage         = React.lazy(() => import('./pages/admin/ShopMa
 const ProductAdminPage           = React.lazy(() => import('./pages/admin/ProductAdminPage'))
 const OrderAdminPage             = React.lazy(() => import('./pages/admin/OrderAdminPage'))
 const ShipperManagementPage      = React.lazy(() => import('./pages/admin/ShipperManagementPage'))
-const WarehouseManagerAdminPage  = React.lazy(() => import('./pages/admin/WarehouseManagerAdminPage'))
 const WarehouseHierarchyPage     = React.lazy(() => import('./pages/admin/WarehouseHierarchyPage'))
 const WarehouseAccountTreePage   = React.lazy(() => import('./pages/admin/WarehouseAccountTreePage'))
 const VoucherAdminPage           = React.lazy(() => import('./pages/admin/VoucherAdminPage'))
@@ -94,6 +93,7 @@ import TrackingPage        from './pages/shipper/TrackingPage'
 // ── 🏭 Warehouse Manager pages (cũ — tier tổng hợp) ────────────────────────
 import WarehouseManagerLayout   from './pages/warehouse/WarehouseManagerLayout'
 import WarehouseOverviewPage    from './pages/warehouse/WarehouseOverviewPage'
+import WarehouseAccountsPage    from './pages/warehouse/WarehouseAccountsPage'
 import AllShipmentsPage         from './pages/warehouse/AllShipmentsPage'
 import IncomingShipmentsPage    from './pages/warehouse/IncomingShipmentsPage'
 
@@ -102,6 +102,7 @@ import HubManagerLayout   from './pages/hub/HubManagerLayout'
 import HubDashboardPage   from './pages/hub/HubDashboardPage'
 import HubDistrictsPage   from './pages/hub/HubDistrictsPage'
 import HubShipmentsPage   from './pages/hub/HubShipmentsPage'
+import HubAccountsPage    from './pages/hub/HubAccountsPage'
 import HubBundlesPage     from './pages/hub/HubBundlesPage'
 
 // ── 🏘️ District Manager (cấp 2 — kho quận) ──────────────────────────────
@@ -198,7 +199,6 @@ const Router: React.FC = () => (
       <Route path="/admin/notifications"         element={inAdmin(<SystemNotificationPage />)} />
       {/* Vận hành */}
       <Route path="/admin/shippers"              element={inAdmin(<ShipperManagementPage />)} />
-      <Route path="/admin/warehouse-managers"      element={inAdmin(<WarehouseManagerAdminPage />)} />
       <Route path="/admin/warehouse-hierarchy"    element={inAdmin(<WarehouseHierarchyPage />)} />
       <Route path="/admin/warehouse-account-tree" element={inAdmin(<WarehouseAccountTreePage />)} />
       <Route path="/admin/shipping-config"       element={inAdmin(<ShippingConfigPage />)} />
@@ -233,6 +233,7 @@ const Router: React.FC = () => (
         <Route index element={<WarehouseOverviewPage />} />
         <Route path="shipments" element={<AllShipmentsPage />} />
         <Route path="incoming"  element={<IncomingShipmentsPage />} />
+        <Route path="accounts"  element={<WarehouseAccountsPage />} />
       </Route>
     </Route>
 
@@ -243,6 +244,7 @@ const Router: React.FC = () => (
         <Route path="districts" element={<HubDistrictsPage />} />
         <Route path="bundles"   element={<HubBundlesPage />} />
         <Route path="shipments" element={<HubShipmentsPage />} />
+        <Route path="accounts"  element={<HubAccountsPage />} />
       </Route>
     </Route>
 

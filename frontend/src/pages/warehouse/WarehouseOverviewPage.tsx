@@ -21,11 +21,8 @@ const WarehouseOverviewPage: React.FC = () => {
     warehouseService.getDashboard()
       .then((r: any) => setData(r.data))
       .catch(() => {
-        // Mock data khi chưa có backend thật
-        setData({
-          warehouse: { warehouse_id: 1, name: 'Kho HCM', province: 'TP.HCM' },
-          stats: { total: 248, pending: 32, in_transit: 47, at_warehouse: 15, delivered: 142, failed: 12, incoming_to_my_warehouse: 8 },
-        })
+        // Quản lý tổng không gắn 1 kho cụ thể — không có dữ liệu mẫu giả định 1 kho nào
+        setData({ warehouse: null, stats: {} })
       })
       .finally(() => setLoading(false))
   }, [])

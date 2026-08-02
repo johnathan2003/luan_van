@@ -1,6 +1,6 @@
 """
 Bot service — Google Gemini API với function calling.
-Model: gemini-1.5-flash cho user/shop/shipper, gemini-1.5-pro cho admin.
+Model: gemini-2.5-flash cho user/shop/shipper, gemini-2.5-pro cho admin.
 Cache kết quả tool qua Redis (TTL 5 phút).
 """
 from __future__ import annotations
@@ -12,16 +12,20 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.services.bot_tools import execute_tool
+from app.services.bot_tools import execute_tool, ACTION_TOOLS
 
 logger = logging.getLogger(__name__)
 
 # ── Model selection ────────────────────────────────────────────────────────────
-_FLASH = "gemini-1.5-flash"
-_PRO   = "gemini-1.5-pro"
+# gemini-1.5-* đã bị retire. gemini-2.5-* không cấp cho API key/tài khoản mới nữa.
+# Dùng dòng Gemini 3 (stable, hỗ trợ tốt agentic/function-calling).
+_FLASH = "gemini-3.5-flash"
+_PRO   = "gemini-3.5-flash"  # Gemini 3.1 Pro hiện chỉ ở dạng Preview, chưa dùng cho production
 
 def _model_for_role(role: str) -> str:
-    return _PRO if role == "admin" else _FLASH
+    # Free tier gemini-2.5-pro có quota rất thấp → tạm dùng Flash cho mọi role.
+    # Muốn bật lại Pro cho admin: cần billing account, đổi lại `return _PRO if role == "admin" else _FLASH`.
+    return _FLASH
 
 
 # ── Tool definitions (Gemini function_declarations format) ────────────────────
@@ -43,7 +47,7 @@ _ADMIN_TOOLS = [
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "status": {"type": "STRING", "description": "active | pending | suspended | rejected"},
+                "status": {"type": "STRING", "description": "pending | approved | rejected"},
                 "search": {"type": "STRING", "description": "Từ khóa tên shop"},
                 "limit":  {"type": "INTEGER"},
             },
@@ -55,7 +59,7 @@ _ADMIN_TOOLS = [
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "status": {"type": "STRING", "description": "pending | confirmed | delivering | delivered | cancelled"},
+                "status": {"type": "STRING", "description": "pending | confirmed | paid | ready_to_ship | shipped | delivered | completed | cancelled | returned"},
                 "period": {"type": "STRING", "description": "today | week | month"},
                 "limit":  {"type": "INTEGER"},
             },
@@ -67,7 +71,7 @@ _ADMIN_TOOLS = [
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "status": {"type": "STRING", "description": "open | resolved | rejected"},
+                "status": {"type": "STRING", "description": "open | resolved | escalated"},
                 "limit":  {"type": "INTEGER"},
             },
         },
@@ -80,6 +84,42 @@ _ADMIN_TOOLS = [
             "properties": {
                 "period": {"type": "STRING", "description": "week | month | year"},
                 "limit":  {"type": "INTEGER"},
+            },
+        },
+    },
+    {
+        "name": "admin_get_pending_shippers",
+        "description": "Xem danh sách đơn đăng ký shipper đang chờ admin duyệt.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "limit": {"type": "INTEGER"},
+            },
+        },
+    },
+    {
+        "name": "admin_approve_shop",
+        "description": "Phê duyệt hoặc từ chối đơn đăng ký mở shop. Cần xác nhận trước khi gọi.",
+        "parameters": {
+            "type": "OBJECT",
+            "required": ["reg_id", "action"],
+            "properties": {
+                "reg_id":           {"type": "INTEGER", "description": "ID đơn đăng ký shop"},
+                "action":           {"type": "STRING",  "description": "approve | reject"},
+                "rejection_reason": {"type": "STRING",  "description": "Lý do từ chối (nếu reject)"},
+            },
+        },
+    },
+    {
+        "name": "admin_resolve_dispute",
+        "description": "Giải quyết tranh chấp. Cần xác nhận với admin trước khi gọi.",
+        "parameters": {
+            "type": "OBJECT",
+            "required": ["dispute_id", "verdict"],
+            "properties": {
+                "dispute_id":         {"type": "INTEGER", "description": "ID tranh chấp"},
+                "verdict":            {"type": "STRING",  "description": "resolve | reject | escalate"},
+                "resolution_details": {"type": "STRING",  "description": "Mô tả cách giải quyết"},
             },
         },
     },
@@ -126,6 +166,17 @@ _USER_TOOLS = [
         "description": "Xem danh sách voucher đang có hiệu lực trên sàn.",
         "parameters": {"type": "OBJECT", "properties": {}},
     },
+    {
+        "name": "user_cancel_order",
+        "description": "Hủy đơn hàng của người dùng (chỉ hủy được đơn ở trạng thái 'pending'). Hỏi xác nhận trước khi gọi.",
+        "parameters": {
+            "type": "OBJECT",
+            "required": ["order_id"],
+            "properties": {
+                "order_id": {"type": "INTEGER", "description": "ID đơn hàng cần hủy"},
+            },
+        },
+    },
 ]
 
 _SHOP_TOOLS = [
@@ -170,6 +221,22 @@ _SHOP_TOOLS = [
             },
         },
     },
+    {
+        "name": "shop_get_wallet_balance",
+        "description": "Xem số dư ví shop (tổng, đang giữ, khả dụng).",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    {
+        "name": "shop_confirm_order",
+        "description": "Xác nhận đơn hàng pending của shop. Hỏi xác nhận trước khi gọi.",
+        "parameters": {
+            "type": "OBJECT",
+            "required": ["order_id"],
+            "properties": {
+                "order_id": {"type": "INTEGER", "description": "ID đơn hàng cần xác nhận"},
+            },
+        },
+    },
 ]
 
 _SHIPPER_TOOLS = [
@@ -179,7 +246,7 @@ _SHIPPER_TOOLS = [
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "status": {"type": "STRING", "description": "assigned | picking_up | picked_up | in_transit | delivered | failed"},
+                "status": {"type": "STRING", "description": "pending | packed | assigned_pickup | at_ward_warehouse | at_district_warehouse | at_hub_hanoi | in_transit_interprovincial | at_hub_hcmc | at_district_hcmc | at_ward_hcmc | out_for_delivery | delivered | failed"},
                 "limit":  {"type": "INTEGER"},
             },
         },
@@ -200,15 +267,20 @@ _SHIPPER_TOOLS = [
         "parameters": {"type": "OBJECT", "properties": {}},
     },
     {
+        "name": "shipper_get_next_delivery",
+        "description": "Lấy đơn giao hàng tiếp theo cần xử lý (được giao nhưng chưa hoàn thành).",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    {
         "name": "shipper_update_delivery",
-        "description": "Cập nhật trạng thái đơn giao hàng theo chiều hợp lệ.",
+        "description": "Cập nhật trạng thái đơn giao hàng. Hỏi xác nhận trước khi gọi.",
         "parameters": {
             "type": "OBJECT",
             "required": ["delivery_id", "status"],
             "properties": {
-                "delivery_id": {"type": "INTEGER"},
-                "status":      {"type": "STRING", "description": "picking_up | picked_up | in_transit | delivered | failed"},
-                "note":        {"type": "STRING", "description": "Lý do (bắt buộc khi báo failed)"},
+                "delivery_id": {"type": "INTEGER", "description": "ID shipment cần cập nhật"},
+                "status":      {"type": "STRING",  "description": "out_for_delivery | delivered | failed"},
+                "note":        {"type": "STRING",  "description": "Lý do thất bại (bắt buộc khi failed)"},
             },
         },
     },
@@ -227,23 +299,47 @@ def _system_prompt(role: str, user: Any) -> str:
     name = getattr(user, "full_name", None) or "bạn"
     base = (
         f"Bạn là trợ lý AI của nền tảng thương mại điện tử BuyZo. "
-        f"Người dùng tên {name}, vai trò: {role}. "
-        "Trả lời bằng tiếng Việt, ngắn gọn và thân thiện. "
-        "Chỉ trả lời các câu hỏi liên quan đến hệ thống BuyZo. "
-        "Khi cần dữ liệu hãy gọi function được cung cấp. "
-        "Không bịa đặt số liệu — chỉ dùng kết quả từ function call. "
-        "Nếu câu hỏi không liên quan đến hệ thống, hãy từ chối nhẹ nhàng và hướng dẫn người dùng hỏi đúng chủ đề. "
+        f"Người dùng hiện tại tên '{name}', vai trò: {role}. "
+        "NGUYÊN TẮC:\n"
+        "1. Trả lời bằng tiếng Việt, ngắn gọn và thân thiện.\n"
+        "2. Chỉ trả lời câu hỏi liên quan đến BuyZo. Nếu câu hỏi không liên quan, từ chối nhẹ nhàng.\n"
+        "3. Khi cần dữ liệu, luôn gọi function — không bịa đặt số liệu.\n"
+        "4. Với các hành động ghi DB (hủy đơn, xác nhận đơn, duyệt shop, giải quyết tranh chấp...): "
+        "   PHẢI hỏi xác nhận rõ ràng trước khi gọi function, ví dụ: 'Bạn có chắc muốn hủy đơn #123 không?'.\n"
+        "5. Sử dụng format markdown đơn giản: **đậm**, danh sách -, số liệu rõ ràng.\n"
     )
     specifics = {
-        "admin":   "Bạn có quyền xem toàn bộ dữ liệu hệ thống. Không thực hiện thao tác xóa/ban qua chat.",
-        "user":    "Chỉ xem dữ liệu của chính người dùng này (đơn hàng, voucher). Sản phẩm có thể tìm kiếm tự do.",
-        "shop":    "Chỉ xem dữ liệu của shop thuộc sở hữu người dùng này.",
-        "shipper": "Chỉ xem đơn giao hàng của shipper này. Được phép cập nhật trạng thái giao hàng.",
+        "admin": (
+            "VAI TRÒ: Admin toàn quyền. Được xem toàn bộ dữ liệu hệ thống và thực hiện các hành động quản lý.\n"
+            "GIỚI HẠN: Không thực hiện xóa vĩnh viễn tài khoản qua chat. Mọi hành động cần xác nhận rõ ràng."
+        ),
+        "user": (
+            "VAI TRÒ: Khách hàng. Chỉ được xem và thao tác dữ liệu của chính người dùng này.\n"
+            "GIỚI HẠN: Không được xem đơn hàng của người khác. Chỉ hủy được đơn 'pending' của bản thân."
+        ),
+        "shop": (
+            "VAI TRÒ: Chủ shop. Chỉ được xem và thao tác dữ liệu shop của người dùng này.\n"
+            "GIỚI HẠN: Không được xem dữ liệu shop khác."
+        ),
+        "shipper": (
+            "VAI TRÒ: Shipper. Chỉ được xem và cập nhật đơn giao hàng được phân công cho shipper này.\n"
+            "GIỚI HẠN: Không được cập nhật đơn của shipper khác."
+        ),
     }
     return base + specifics.get(role, "")
 
 
-# ── Redis cache ────────────────────────────────────────────────────────────────
+# ── Redis helpers ──────────────────────────────────────────────────────────────
+def _redis_client():
+    import redis as redis_lib
+    return redis_lib.Redis(
+        host=settings.REDIS_HOST, port=settings.REDIS_PORT,
+        password=settings.REDIS_PASSWORD or None, db=settings.REDIS_DB,
+        decode_responses=True, socket_connect_timeout=1,
+    )
+
+
+# ── Tool result cache ──────────────────────────────────────────────────────────
 def _cache_key(role: str, user_id: int, fn_name: str, fn_args: dict) -> str:
     raw = json.dumps({"role": role, "uid": user_id, "fn": fn_name, "args": fn_args}, sort_keys=True)
     return "bot:tool:" + hashlib.md5(raw.encode()).hexdigest()
@@ -251,13 +347,7 @@ def _cache_key(role: str, user_id: int, fn_name: str, fn_args: dict) -> str:
 
 def _get_cache(key: str) -> dict | None:
     try:
-        import redis as redis_lib
-        r = redis_lib.Redis(
-            host=settings.REDIS_HOST, port=settings.REDIS_PORT,
-            password=settings.REDIS_PASSWORD or None, db=settings.REDIS_DB,
-            decode_responses=True, socket_connect_timeout=1,
-        )
-        val = r.get(key)
+        val = _redis_client().get(key)
         return json.loads(val) if val else None
     except Exception:
         return None
@@ -265,13 +355,44 @@ def _get_cache(key: str) -> dict | None:
 
 def _set_cache(key: str, value: dict, ttl: int = 300) -> None:
     try:
-        import redis as redis_lib
-        r = redis_lib.Redis(
-            host=settings.REDIS_HOST, port=settings.REDIS_PORT,
-            password=settings.REDIS_PASSWORD or None, db=settings.REDIS_DB,
-            decode_responses=True, socket_connect_timeout=1,
-        )
-        r.setex(key, ttl, json.dumps(value))
+        _redis_client().setex(key, ttl, json.dumps(value))
+    except Exception:
+        pass
+
+
+# ── Conversation history (per-user, TTL 30 min) ────────────────────────────────
+_HIST_TTL = 1800  # 30 phút
+
+
+def _hist_key(user_id: int) -> str:
+    return f"bot:hist:{user_id}"
+
+
+def _get_history(user_id: int) -> list[dict]:
+    """Load conversation history from Redis. Returns list of {role, text} dicts."""
+    try:
+        val = _redis_client().get(_hist_key(user_id))
+        if val:
+            return json.loads(val)
+    except Exception:
+        pass
+    return []
+
+
+def _save_history(user_id: int, history: list[dict]) -> None:
+    """Save conversation history to Redis, keep last 20 exchanges (40 messages)."""
+    try:
+        # Trim to last 40 messages (20 user + 20 bot)
+        trimmed = history[-40:]
+        _redis_client().setex(_hist_key(user_id), _HIST_TTL, json.dumps(trimmed))
+    except Exception:
+        pass
+
+
+def clear_history(user_id: int) -> None:
+    """Delete conversation history for a user."""
+    try:
+        _redis_client().delete(_hist_key(user_id))
     except Exception:
         pass
 
@@ -302,10 +423,18 @@ def query_bot(message: str, role: str, user: Any, db: Session) -> str:
         system_instruction=_system_prompt(role, user),
     )
 
-    chat = model.start_chat()
+    # Load conversation history (text-only, skip tool rounds)
+    stored_hist = _get_history(user.user_id)
+    gemini_history = [
+        {"role": h["role"], "parts": [h["text"]]}
+        for h in stored_hist
+    ]
+
+    chat = model.start_chat(history=gemini_history)
 
     MAX_TOOL_ROUNDS = 5
     current_message: Any = message
+    final_reply = ""
 
     for _ in range(MAX_TOOL_ROUNDS):
         response = chat.send_message(current_message)
@@ -325,7 +454,8 @@ def query_bot(message: str, role: str, user: Any, db: Session) -> str:
                 for part in candidate.content.parts
                 if hasattr(part, "text") and part.text
             ]
-            return "\n".join(text_parts).strip() or "Không có phản hồi."
+            final_reply = "\n".join(text_parts).strip() or "Không có phản hồi."
+            break
 
         # Execute all function calls, build response parts
         fn_response_parts = []
@@ -333,15 +463,17 @@ def query_bot(message: str, role: str, user: Any, db: Session) -> str:
             fn_name = fc.name
             fn_args = dict(fc.args)
 
-            cache_key = _cache_key(role, user.user_id, fn_name, fn_args)
-            cached = _get_cache(cache_key)
-
-            if cached is not None:
-                result = cached
-                logger.debug(f"[bot] cache HIT: {fn_name}")
-            else:
+            # Skip cache for action tools (they write to DB)
+            if fn_name in ACTION_TOOLS:
                 result = execute_tool(fn_name, fn_args, db, user)
-                if "update" not in fn_name:
+            else:
+                cache_key = _cache_key(role, user.user_id, fn_name, fn_args)
+                cached = _get_cache(cache_key)
+                if cached is not None:
+                    result = cached
+                    logger.debug(f"[bot] cache HIT: {fn_name}")
+                else:
+                    result = execute_tool(fn_name, fn_args, db, user)
                     _set_cache(cache_key, result, ttl=300)
 
             fn_response_parts.append(
@@ -358,5 +490,15 @@ def query_bot(message: str, role: str, user: Any, db: Session) -> str:
             role="user",
             parts=fn_response_parts,
         )
+    else:
+        final_reply = "Xin lỗi, tôi không thể xử lý yêu cầu này lúc này."
 
-    return "Xin lỗi, tôi không thể xử lý yêu cầu này lúc này."
+    # Persist conversation history (user message + bot reply, text only)
+    if final_reply:
+        updated_hist = stored_hist + [
+            {"role": "user",  "text": message},
+            {"role": "model", "text": final_reply},
+        ]
+        _save_history(user.user_id, updated_hist)
+
+    return final_reply

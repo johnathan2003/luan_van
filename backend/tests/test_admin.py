@@ -129,7 +129,7 @@ class TestPendingProducts:
 class TestSystemEmployees:
     def test_create_system_employee(self, client, admin_token):
         res = client.post("/api/v1/admin/system-employees", json={
-            "employee_email": "sysempl@test.com",
+            "employee_username": "sysempl01",
             "employee_name": "System Emp",
             "role_name": "product_manager",
             "permissions": ["product:approve", "product:read"],

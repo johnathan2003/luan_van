@@ -1,0 +1,6 @@
+# Ignore actual image files — chỉ giữ cấu trúc thư mục
+*
+!.gitignore
+!.gitkeep
+!*/
+!*/.gitkeep

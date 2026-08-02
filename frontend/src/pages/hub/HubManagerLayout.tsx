@@ -13,6 +13,7 @@ const NAV = [
   { path: '/hub/districts', icon: '🏘️', label: 'Kho quận',     desc: 'Quản lý kho cấp 2' },
   { path: '/hub/bundles',   icon: '📦', label: 'Bundle LT',    desc: 'Mã kiện liên tỉnh LT-...' },
   { path: '/hub/shipments', icon: '🚛', label: 'Đơn liên tỉnh',desc: 'Hàng vào/ra thành phố' },
+  { path: '/hub/accounts',  icon: '👥', label: 'Tài khoản kho',desc: 'Tạo District/Ward (nếu được cấp quyền)' },
 ]
 
 const C = { dark: '#0F172A', mid: '#1E293B', teal: '#0D9488', tealLight: '#5EEAD4', muted: '#94A3B8', border: 'rgba(255,255,255,0.08)' }

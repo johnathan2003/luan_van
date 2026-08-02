@@ -10,17 +10,15 @@ So sánh với shop (flat 1 cấp):
             └─ admin thấy toàn bộ cây (BFS theo created_by)
             └─ mỗi cấp trung gian chỉ thấy cây con do mình tạo
 
-Quy tắc tạo:
-  - Admin / superadmin: tạo được bất kỳ tier
-  - NV có warehouse_create_hub     → tạo được hub + district + ward
-  - NV có warehouse_create_district → tạo được district + ward
-  - NV có warehouse_create_ward    → tạo được ward (leaf)
-
-Mỗi tài khoản mới nhận permissions để tiếp tục tạo cấp thấp hơn:
-  hub      → [create_hub, create_district, create_ward]
-  district → [create_district, create_ward]
-  ward     → [] (leaf)
+Quy tắc tạo (2 cấp phân quyền, KHÔNG cascading tiếp):
+  - Admin / superadmin: tạo được bất kỳ tier, kể cả "dept" (Quản lý tổng)
+  - "dept" (Quản lý tổng)  → chỉ admin tạo được. Nhận đủ 3 quyền tạo hub/district/ward.
+  - hub / district / ward → do dept (hoặc admin) tạo. KHÔNG nhận quyền tạo tiếp
+                            (leaf — không tự tạo thêm tài khoản nào khác).
 """
+import re
+import unicodedata
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -29,32 +27,62 @@ from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models.user import User, UserRole, Role
 from app.models.shop import SystemEmployee, SystemEmployeePermission
+from app.models.shipment import Warehouse, WarehouseManager
 from app.utils.security import hash_password
 
 router = APIRouter()
 
-# Permission code cho từng tier
+# Số tier tương ứng với từng tier string — dùng để khớp với Warehouse.tier (1/2/3)
+TIER_NUM = {"hub": 1, "district": 2, "ward": 3}
+
+
+def _strip_diacritics(s: str) -> str:
+    """Bỏ dấu tiếng Việt, kể cả đ/Đ (không thuộc diện NFD tách dấu chuẩn)."""
+    s = s.replace("đ", "d").replace("Đ", "D")
+    nfkd = unicodedata.normalize("NFD", s)
+    return "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
+
+
+def _warehouse_code(warehouse: "Warehouse") -> str:
+    """
+    Sinh 'mã kho' viết tắt từ tên kho, dùng cho email tự động.
+    VD: "Kho Hồ Chí Minh" → "HCM", "Kho Quận 1" → "Q1".
+    """
+    name = _strip_diacritics(warehouse.name or "")
+    # Bỏ tiền tố "Kho " nếu có (không phân biệt hoa/thường)
+    name = re.sub(r"^\s*kho\s+", "", name, flags=re.IGNORECASE)
+    words = re.findall(r"[A-Za-z0-9]+", name)
+    code = "".join(w[0].upper() for w in words if w)
+    return code or f"W{warehouse.warehouse_id}"
+
+# Permission code cần có để tạo tài khoản ở tier tương ứng
+# (tier "dept" không cần permission — chỉ admin mới tạo được)
 TIER_PERM = {
     "hub":      "warehouse_create_hub",
     "district": "warehouse_create_district",
     "ward":     "warehouse_create_ward",
 }
 
-# Permissions được gán cho tài khoản mới tạo (để họ tiếp tục tạo cấp dưới)
+# Permissions được gán cho tài khoản mới tạo.
+# Chỉ "dept" (Quản lý tổng) nhận quyền tạo tiếp — hub/district/ward là leaf.
 TIER_GRANTS = {
-    "hub":      ["warehouse_create_hub", "warehouse_create_district", "warehouse_create_ward"],
-    "district": ["warehouse_create_district", "warehouse_create_ward"],
-    "ward":     [],  # Leaf — không tạo thêm
+    "dept":     ["warehouse_create_hub", "warehouse_create_district", "warehouse_create_ward"],
+    "hub":      [],
+    "district": [],
+    "ward":     [],
 }
 
 # Role kho gán theo tier
 TIER_ROLE = {
+    "dept":     "warehouse_manager",
     "hub":      "warehouse_hub_manager",
     "district": "warehouse_district_manager",
     "ward":     "warehouse_ward_manager",
 }
+REVERSE_TIER_ROLE = {v: k for k, v in TIER_ROLE.items()}
 
 TIER_LABEL = {
+    "dept": "Quản lý tổng",
     "hub": "Kho tổng (Tier 1)",
     "district": "Kho quận (Tier 2)",
     "ward": "Kho phường (Tier 3)",
@@ -85,10 +113,32 @@ def _collect_subtree(root_id: int, all_emps: list) -> set:
     return result
 
 
-def _infer_tier(perms: list) -> str:
-    """Suy ra tier từ permission list."""
+WAREHOUSE_ROLE_NAMES = set(TIER_ROLE.values())
+
+
+def _warehouse_role_name(user_id: int, db: Session) -> str | None:
+    """Role kho (dept/hub/district/ward) hiện đang active của user, nếu có."""
+    ur = (
+        db.query(UserRole)
+        .join(Role, Role.role_id == UserRole.role_id)
+        .filter(
+            UserRole.user_id == user_id,
+            UserRole.status == "active",
+            Role.role_name.in_(WAREHOUSE_ROLE_NAMES),
+        )
+        .first()
+    )
+    return ur.role.role_name if ur else None
+
+
+def _infer_tier(user_id: int, db: Session, perms: list) -> str:
+    """Suy ra tier — ưu tiên role thật gán cho user, fallback theo permission (legacy)."""
+    role_name = _warehouse_role_name(user_id, db)
+    if role_name and role_name in REVERSE_TIER_ROLE:
+        return REVERSE_TIER_ROLE[role_name]
+    # Fallback cho dữ liệu cũ (tạo trước khi đổi sang mô hình 2 cấp)
     if "warehouse_create_hub" in perms:
-        return "hub"
+        return "dept"
     if "warehouse_create_district" in perms:
         return "district"
     return "ward"
@@ -97,9 +147,19 @@ def _infer_tier(perms: list) -> str:
 # ─── Schemas ──────────────────────────────────────────────────────────────────
 
 class CreateWHAccountIn(BaseModel):
-    username: str   # → email: {username}@kho.test; password cũng = username
+    username: str   # tên tài khoản gốc admin nhập
     full_name: str
-    tier: str       # "hub" | "district" | "ward"
+    tier: str       # "dept" | "hub" | "district" | "ward"
+    warehouse_id: int | None = None  # BẮT BUỘC với hub/district/ward — kho thật được phụ trách
+
+
+class GrantCreateIn(BaseModel):
+    allow: bool
+
+
+# Quyền được cấp/thu hồi cho 1 tài khoản Hub (Tier 1) khi dept "mở khoá" cho nó
+# tự tạo tài khoản cấp dưới. KHÔNG bao gồm warehouse_create_hub — hub không tạo hub khác.
+HUB_GRANT_CODES = ["warehouse_create_district", "warehouse_create_ward"]
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -111,22 +171,27 @@ def create_warehouse_account(
     db: Session = Depends(get_db),
 ):
     """
-    Tạo tài khoản kho theo cấp:
-    - Admin/superadmin: tạo được mọi tier
-    - Sub-manager: chỉ tạo được tier mà mình có permission
+    Tạo tài khoản kho — mô hình 2 cấp phân quyền (không cascading tiếp):
+    - Admin/superadmin: tạo được mọi tier, kể cả "dept" (Quản lý tổng)
+    - "dept": CHỈ admin mới tạo được
+    - hub/district/ward: admin hoặc người có quyền tương ứng (do dept/admin cấp) tạo được.
+      Tài khoản hub/district/ward tạo ra là leaf — không tự tạo thêm được ai.
 
     Tài khoản mới:
-    - email = {username}@kho.test
-    - password = username (dễ nhớ, username = password)
+    - email = {username}@buyzo.com (tự động sinh từ tên tài khoản)
+    - password = username (tự động, giống tài khoản đăng nhập)
     - created_by = user_id của người đang tạo (KHÔNG hardcode admin)
     """
     my_roles = _user_roles(current_user)
     is_admin = "admin" in my_roles or "superadmin" in my_roles
 
-    if payload.tier not in TIER_PERM:
-        raise HTTPException(400, "tier phải là: hub | district | ward")
+    if payload.tier not in TIER_ROLE:
+        raise HTTPException(400, "tier phải là: dept | hub | district | ward")
 
-    if not is_admin:
+    if payload.tier == "dept":
+        if not is_admin:
+            raise HTTPException(403, "Chỉ admin mới tạo được tài khoản Quản lý tổng")
+    elif not is_admin:
         my_perms = _emp_perms(current_user.user_id, db)
         if TIER_PERM[payload.tier] not in my_perms:
             raise HTTPException(
@@ -136,26 +201,71 @@ def create_warehouse_account(
 
     # Validate username
     username = payload.username.strip()
-    if not username or len(username) < 3:
-        raise HTTPException(400, "Username phải có ít nhất 3 ký tự")
+    if not username:
+        raise HTTPException(400, "Vui lòng nhập tài khoản")
 
-    email = f"{username}@kho.test"
-    if db.query(User).filter_by(email=email).first():
-        raise HTTPException(400, f"Username '{username}' đã tồn tại")
+    warehouse: Warehouse | None = None
+    if payload.tier == "dept":
+        # Quản lý tổng không gắn với 1 kho cụ thể (quản lý toàn hệ thống) —
+        # giữ quy tắc cũ: email = {username}@buyzo.com, password = username.
+        if len(username) < 6:
+            raise HTTPException(400, "Tài khoản phải có ít nhất 6 ký tự")
+        local_part = username
+    else:
+        if not payload.warehouse_id:
+            raise HTTPException(400, "Vui lòng chọn kho phụ trách")
+        warehouse = db.query(Warehouse).filter_by(warehouse_id=payload.warehouse_id).first()
+        if not warehouse:
+            raise HTTPException(404, "Không tìm thấy kho được chọn")
+        if warehouse.tier != TIER_NUM[payload.tier]:
+            raise HTTPException(
+                400,
+                f"Kho '{warehouse.name}' là cấp {warehouse.tier}, không khớp với "
+                f"{TIER_LABEL[payload.tier]} (cấp {TIER_NUM[payload.tier]})",
+            )
+        # Quy tắc email: {tài khoản}+cap{cấp}+{mã kho}@buyzo.com — vd Kho + cap1 + HCM
+        # = Khocap1HCM@buyzo.com. Mật khẩu = toàn bộ phần trước @ (giống tài khoản đăng nhập).
+        code = _warehouse_code(warehouse)
+        local_part = f"{username}cap{warehouse.tier}{code}"
+        if len(local_part) < 6:
+            raise HTTPException(400, "Tài khoản phải có ít nhất 6 ký tự")
 
-    # Tạo User — email = username@kho.test, password = username
-    new_user = User(
-        email=email,
-        password_hash=hash_password(username),
-        full_name=payload.full_name,
-        status="active",
-    )
-    db.add(new_user)
-    db.flush()
+    email = f"{local_part}@buyzo.com"
+    existing_user = db.query(User).filter_by(email=email).first()
+    if existing_user:
+        existing_emp = db.query(SystemEmployee).filter_by(user_id=existing_user.user_id).first()
+        if existing_emp and existing_emp.status == "active":
+            raise HTTPException(400, f"Tài khoản '{local_part}' đã tồn tại và đang hoạt động")
+        # User/SystemEmployee đã tồn tại nhưng đang bị vô hiệu hoá (đã "xoá" trước đó) —
+        # kích hoạt lại thay vì báo lỗi trùng, tránh vi phạm UNIQUE constraint user_id.
+        new_user = existing_user
+        new_user.status = "active"
+        new_user.password_hash = hash_password(local_part)
+        new_user.full_name = payload.full_name
+    else:
+        # Tạo User — email tự sinh theo quy tắc ở trên, password = phần trước @
+        new_user = User(
+            email=email,
+            password_hash=hash_password(local_part),
+            full_name=payload.full_name,
+            status="active",
+        )
+        db.add(new_user)
+        db.flush()
 
-    # Gán role kho tương ứng
-    role = db.query(Role).filter_by(role_name=TIER_ROLE[payload.tier]).first()
-    if role:
+    # Gán role kho tương ứng — tạo Role nếu chưa tồn tại (tránh bỏ sót âm thầm)
+    role_name = TIER_ROLE[payload.tier]
+    role = db.query(Role).filter_by(role_name=role_name).first()
+    if not role:
+        role = Role(role_name=role_name, description=f"BuyZo — {TIER_LABEL[payload.tier]}")
+        db.add(role)
+        db.flush()
+    existing_ur = db.query(UserRole).filter_by(user_id=new_user.user_id, role_id=role.role_id).first()
+    if existing_ur:
+        existing_ur.status = "active"
+        existing_ur.current_role = True
+        existing_ur.assigned_by = current_user.user_id
+    else:
         db.add(UserRole(
             user_id=new_user.user_id,
             role_id=role.role_id,
@@ -164,15 +274,24 @@ def create_warehouse_account(
             status="active",
         ))
 
-    # Tạo SystemEmployee — created_by = người đang thao tác (chain tracking)
-    new_emp = SystemEmployee(
-        user_id=new_user.user_id,
-        emp_name=payload.full_name,
-        role_name="warehouse_admin",
-        status="active",
-        created_by=current_user.user_id,  # ← CORE: tạo chuỗi cha-con
-    )
-    db.add(new_emp)
+    # SystemEmployee — nếu user_id đã từng có bản ghi (kể cả đã bị vô hiệu hoá) thì
+    # tái sử dụng & kích hoạt lại, tránh vi phạm UNIQUE constraint user_id.
+    new_emp = db.query(SystemEmployee).filter_by(user_id=new_user.user_id).first()
+    if new_emp:
+        new_emp.emp_name = payload.full_name
+        new_emp.role_name = "warehouse_admin"
+        new_emp.status = "active"
+        new_emp.created_by = current_user.user_id  # ← CORE: tạo chuỗi cha-con
+        db.query(SystemEmployeePermission).filter_by(emp_id=new_emp.emp_id).delete(synchronize_session=False)
+    else:
+        new_emp = SystemEmployee(
+            user_id=new_user.user_id,
+            emp_name=payload.full_name,
+            role_name="warehouse_admin",
+            status="active",
+            created_by=current_user.user_id,  # ← CORE: tạo chuỗi cha-con
+        )
+        db.add(new_emp)
     db.flush()
 
     # Gán permissions để tiếp tục tạo cấp dưới (trừ leaf=ward)
@@ -184,17 +303,52 @@ def create_warehouse_account(
             granted_by=current_user.user_id,
         ))
 
+    # Gắn tài khoản vào đúng kho thật (WarehouseManager) — bỏ qua với tier="dept"
+    # vì Quản lý tổng không phụ trách 1 kho cụ thể.
+    if warehouse is not None:
+        # 1 kho chỉ có 1 manager tại 1 thời điểm — gỡ manager cũ của kho này (nếu có)
+        old_of_warehouse = db.query(WarehouseManager).filter_by(warehouse_id=warehouse.warehouse_id).first()
+        if old_of_warehouse and old_of_warehouse.manager_id != new_user.user_id:
+            db.delete(old_of_warehouse)
+        # 1 user chỉ quản 1 kho tại 1 thời điểm — gỡ liên kết kho cũ của user này (nếu có)
+        old_of_user = db.query(WarehouseManager).filter_by(manager_id=new_user.user_id).first()
+        if old_of_user and old_of_user.warehouse_id != warehouse.warehouse_id:
+            db.delete(old_of_user)
+        db.flush()
+        link = db.query(WarehouseManager).filter_by(
+            manager_id=new_user.user_id, warehouse_id=warehouse.warehouse_id
+        ).first()
+        if not link:
+            db.add(WarehouseManager(manager_id=new_user.user_id, warehouse_id=warehouse.warehouse_id))
+
     db.commit()
     db.refresh(new_emp)
 
     return {
         "user_id": new_user.user_id,
         "email": email,
+        "password": local_part,
         "tier": payload.tier,
         "tier_label": TIER_LABEL[payload.tier],
+        "warehouse_id": warehouse.warehouse_id if warehouse else None,
+        "warehouse_name": warehouse.name if warehouse else None,
         "created_by": current_user.user_id,
-        "message": f"Đã tạo tài khoản {TIER_LABEL[payload.tier]} thành công",
+        "message": f"Đã tạo tài khoản {TIER_LABEL[payload.tier]} thành công — Email: {email} — Mật khẩu: {local_part}",
     }
+
+
+@router.get("/me", summary="Tier + quyền tạo tài khoản của chính người đang đăng nhập")
+def my_warehouse_account_info(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Dùng ở FE (vd: trang /hub/accounts) để biết mình có được tạo District/Ward hay không."""
+    emp = db.query(SystemEmployee).filter_by(user_id=current_user.user_id).first()
+    perms = [p.permission_code for p in emp.permissions] if emp else []
+    tier = _infer_tier(current_user.user_id, db, perms)
+    return {"tier": tier, "permissions": perms, "can_create": [
+        t for t, code in TIER_PERM.items() if code in perms
+    ]}
 
 
 @router.get("", summary="Danh sách tài khoản kho theo cây (admin thấy tất cả)")
@@ -212,9 +366,20 @@ def list_warehouse_accounts(
     my_roles = _user_roles(current_user)
     is_admin = "admin" in my_roles or "superadmin" in my_roles
 
-    all_emps = db.query(SystemEmployee).filter(
-        SystemEmployee.role_name == "warehouse_admin"
-    ).all()
+    # Nhận diện "tài khoản kho" qua Role thực (warehouse_manager/hub/district/ward),
+    # KHÔNG dựa vào SystemEmployee.role_name nữa — để cả 2 luồng tạo (form riêng
+    # + checkbox "Quản lý kho" trong trang Nhân viên hệ thống) đều hiện ra đồng nhất.
+    all_emps = (
+        db.query(SystemEmployee)
+        .join(UserRole, UserRole.user_id == SystemEmployee.user_id)
+        .join(Role, Role.role_id == UserRole.role_id)
+        .filter(
+            UserRole.status == "active",
+            Role.role_name.in_(WAREHOUSE_ROLE_NAMES),
+        )
+        .distinct()
+        .all()
+    )
 
     if is_admin:
         visible_ids = {e.user_id for e in all_emps}
@@ -226,7 +391,7 @@ def list_warehouse_accounts(
         if emp.user_id not in visible_ids:
             continue
         perms = [p.permission_code for p in emp.permissions]
-        tier = _infer_tier(perms)
+        tier = _infer_tier(emp.user_id, db, perms)
 
         # Tên người tạo
         creator_name = None
@@ -234,20 +399,78 @@ def list_warehouse_accounts(
             creator = db.query(User).filter_by(user_id=emp.created_by).first()
             creator_name = creator.full_name if creator else None
 
+        # Kho thật đang phụ trách (nếu có) — dept không gắn 1 kho cụ thể
+        wm = db.query(WarehouseManager).filter_by(manager_id=emp.user_id).first()
+        wh = db.query(Warehouse).filter_by(warehouse_id=wm.warehouse_id).first() if wm else None
+
         result.append({
-            "user_id":      emp.user_id,
-            "email":        emp.user.email if emp.user else None,
-            "full_name":    emp.emp_name,
-            "status":       emp.status,
-            "created_by":   emp.created_by,
-            "creator_name": creator_name,
-            "created_at":   emp.created_at.isoformat() if emp.created_at else None,
-            "permissions":  perms,
-            "tier":         tier,
-            "tier_label":   TIER_LABEL[tier],
+            "user_id":       emp.user_id,
+            "email":         emp.user.email if emp.user else None,
+            "full_name":     emp.emp_name,
+            "status":        emp.status,
+            "created_by":    emp.created_by,
+            "creator_name":  creator_name,
+            "created_at":    emp.created_at.isoformat() if emp.created_at else None,
+            "permissions":   perms,
+            "tier":          tier,
+            "tier_label":    TIER_LABEL[tier],
+            "warehouse_id":  wh.warehouse_id if wh else None,
+            "warehouse_name": wh.name if wh else None,
+            "warehouse_province": wh.province if wh else None,
         })
 
     return result
+
+
+@router.patch("/{user_id}/grant-create", summary="Cấp / thu hồi quyền tự tạo tài khoản cho 1 Hub (Tier 1)")
+def grant_create_permission(
+    user_id: int,
+    payload: GrantCreateIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Quản lý tổng (dept) cho phép MỘT Hub (Tier 1) do chính mình tạo được tự tạo
+    tài khoản District/Ward cho city của họ. Admin cũng gọi được (override).
+
+    - Chỉ áp dụng cho tài khoản tier="hub".
+    - Chỉ người đã tạo ra hub đó (created_by) hoặc admin mới cấp/thu hồi được.
+    - allow=True  → hub nhận warehouse_create_district + warehouse_create_ward
+      (KHÔNG nhận warehouse_create_hub — hub không tự tạo hub khác).
+    - allow=False → thu hồi 2 quyền trên.
+    """
+    my_roles = _user_roles(current_user)
+    is_admin = "admin" in my_roles or "superadmin" in my_roles
+
+    emp = db.query(SystemEmployee).filter_by(user_id=user_id).first()
+    if not emp:
+        raise HTTPException(404, "Không tìm thấy tài khoản kho")
+
+    if not is_admin and emp.created_by != current_user.user_id:
+        raise HTTPException(403, "Bạn chỉ cấp quyền được cho tài khoản do chính mình tạo")
+
+    perms = [p.permission_code for p in emp.permissions]
+    tier = _infer_tier(user_id, db, perms)
+    if tier != "hub":
+        raise HTTPException(400, "Chỉ cấp quyền tự tạo tài khoản được cho Kho tổng (Tier 1)")
+
+    if payload.allow:
+        existing = {p.permission_code for p in emp.permissions}
+        for code in HUB_GRANT_CODES:
+            if code not in existing:
+                db.add(SystemEmployeePermission(
+                    emp_id=emp.emp_id, permission_code=code, granted_by=current_user.user_id,
+                ))
+        message = "Đã cấp quyền tự tạo tài khoản District/Ward cho Hub này"
+    else:
+        db.query(SystemEmployeePermission).filter(
+            SystemEmployeePermission.emp_id == emp.emp_id,
+            SystemEmployeePermission.permission_code.in_(HUB_GRANT_CODES),
+        ).delete(synchronize_session=False)
+        message = "Đã thu hồi quyền tự tạo tài khoản của Hub này"
+
+    db.commit()
+    return {"user_id": user_id, "allow": payload.allow, "message": message}
 
 
 @router.patch("/{user_id}/status", summary="Kích hoạt / vô hiệu tài khoản kho")
@@ -261,8 +484,8 @@ def toggle_wh_account_status(
     if not is_admin:
         raise HTTPException(403, "Chỉ admin mới có thể đổi trạng thái tài khoản kho")
 
-    emp = db.query(SystemEmployee).filter_by(user_id=user_id, role_name="warehouse_admin").first()
-    if not emp:
+    emp = db.query(SystemEmployee).filter_by(user_id=user_id).first()
+    if not emp or not _warehouse_role_name(user_id, db):
         raise HTTPException(404, "Không tìm thấy tài khoản kho")
 
     emp.status = "inactive" if emp.status == "active" else "active"
