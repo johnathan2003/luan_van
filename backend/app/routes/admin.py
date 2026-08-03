@@ -53,6 +53,224 @@ def dashboard(current_user: User = Depends(require_admin), db: Session = Depends
     return get_admin_dashboard(db)
 
 
+# ─── Shops management ──────────────────────────────────────────────────────────
+
+@router.get("/shops")
+def list_shops(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import text
+    conditions = ["1=1"]
+    params: dict = {}
+    if status:
+        conditions.append("status = :status")
+        params["status"] = status
+    if search:
+        conditions.append("shop_name ILIKE :search")
+        params["search"] = f"%{search}%"
+    where = " AND ".join(conditions)
+    try:
+        total = db.execute(text(f"SELECT COUNT(*) FROM shops WHERE {where}"), params).scalar() or 0
+        offset = (page - 1) * limit
+        rows = db.execute(text(f"""
+            SELECT shop_id, shop_name, address, phone, rating, verification_status,
+                   COALESCE(status, 'active') as status,
+                   suspended_reason, suspended_at, created_at
+            FROM shops WHERE {where}
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :offset
+        """), {**params, "limit": limit, "offset": offset}).fetchall()
+    except Exception:
+        db.rollback()
+        # Fallback nếu cột status chưa tồn tại
+        total = db.execute(text(f"SELECT COUNT(*) FROM shops WHERE {where}"), params).scalar() or 0
+        offset = (page - 1) * limit
+        rows = db.execute(text(f"""
+            SELECT shop_id, shop_name, address, phone, rating, verification_status,
+                   'active' as status, NULL as suspended_reason, NULL as suspended_at, created_at
+            FROM shops WHERE {where}
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :offset
+        """), {**params, "limit": limit, "offset": offset}).fetchall()
+    return {
+        "shops": [
+            {
+                "shop_id": r[0], "shop_name": r[1], "address": r[2], "phone": r[3],
+                "rating": str(r[4]) if r[4] else "0.0",
+                "verification_status": r[5], "status": r[6] or "active",
+                "suspended_reason": r[7], "suspended_at": str(r[8]) if r[8] else None,
+                "created_at": str(r[9]) if r[9] else None,
+            }
+            for r in rows
+        ],
+        "total": total,
+        "pages": (total + limit - 1) // limit,
+    }
+
+
+@router.put("/shops/{shop_id}/suspend")
+def suspend_shop(shop_id: int, data: dict, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    from datetime import datetime as dt
+
+    reason = data.get("reason", "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập lý do đình chỉ")
+
+    shop_row = db.execute(text(
+        "SELECT shop_id, shop_name FROM shops WHERE shop_id = :sid"
+    ), {"sid": shop_id}).fetchone()
+    if not shop_row:
+        raise HTTPException(status_code=404, detail="Shop không tồn tại")
+
+    in_transit_statuses = ("pending", "confirmed", "processing", "shipped", "delivering")
+    try:
+        active_rows = db.execute(text("""
+            SELECT DISTINCT oi.product_id
+            FROM order_items oi
+            JOIN orders o ON o.order_id = oi.order_id
+            JOIN products p ON p.product_id = oi.product_id
+            WHERE p.shop_id = :sid AND o.order_status IN :statuses
+        """).bindparams(__import__('sqlalchemy').bindparam("statuses", expanding=True)),
+            {"sid": shop_id, "statuses": list(in_transit_statuses)}
+        ).fetchall()
+        active_pids = [r[0] for r in active_rows]
+    except Exception:
+        db.rollback()
+        active_pids = []
+
+    try:
+        if active_pids:
+            pid_str = ",".join(str(i) for i in active_pids)
+            db.execute(text(f"""
+                UPDATE products SET status='archived'
+                WHERE shop_id=:sid AND status='active' AND product_id NOT IN ({pid_str})
+            """), {"sid": shop_id})
+        else:
+            db.execute(text(
+                "UPDATE products SET status='archived' WHERE shop_id=:sid AND status='active'"
+            ), {"sid": shop_id})
+
+        db.execute(text("""
+            UPDATE shops SET status='suspended', suspended_reason=:reason, suspended_at=:now
+            WHERE shop_id=:sid
+        """), {"reason": reason, "now": dt.utcnow(), "sid": shop_id})
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi đình chỉ shop: {str(e)}")
+
+    try:
+        create_notification(db, shop_id, "Shop bị đình chỉ",
+            f"Shop '{shop_row[1]}' đã bị đình chỉ. Lý do: {reason}", "warning")
+    except Exception:
+        pass
+
+    return {"message": "Đã đình chỉ shop", "shop_id": shop_id}
+
+
+@router.put("/shops/{shop_id}/unsuspend")
+def unsuspend_shop(shop_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from sqlalchemy import text
+
+    shop_row = db.execute(text(
+        "SELECT shop_id, shop_name FROM shops WHERE shop_id = :sid"
+    ), {"sid": shop_id}).fetchone()
+    if not shop_row:
+        raise HTTPException(status_code=404, detail="Shop không tồn tại")
+
+    try:
+        db.execute(text("""
+            UPDATE shops SET status='active', suspended_reason=NULL, suspended_at=NULL
+            WHERE shop_id=:sid
+        """), {"sid": shop_id})
+        db.execute(text(
+            "UPDATE products SET status='active' WHERE shop_id=:sid AND status='archived'"
+        ), {"sid": shop_id})
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi kích hoạt shop: {str(e)}")
+
+    try:
+        create_notification(db, shop_id, "Shop đã được kích hoạt",
+            f"Shop '{shop_row[1]}' đã được kích hoạt trở lại.", "info")
+    except Exception:
+        pass
+
+    return {"message": "Đã kích hoạt shop", "shop_id": shop_id}
+
+
+@router.delete("/shops/{shop_id}")
+def delete_shop(shop_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from sqlalchemy import text
+
+    shop_row = db.execute(text(
+        "SELECT shop_id FROM shops WHERE shop_id = :sid"
+    ), {"sid": shop_id}).fetchone()
+    if not shop_row:
+        raise HTTPException(status_code=404, detail="Shop không tồn tại")
+
+    try:
+        # Cascade xóa đúng thứ tự để tránh FK violation
+        # Lấy danh sách product_id của shop
+        pid_sub = "SELECT product_id FROM products WHERE shop_id = :sid"
+
+        # 1. carts → products
+        db.execute(text(f"DELETE FROM carts WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 2. product_reviews → products
+        db.execute(text(f"DELETE FROM product_reviews WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 3. stock_reservations → products
+        db.execute(text(f"DELETE FROM stock_reservations WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 4. product_deletion_audit_log → product_deletion_requests → products
+        db.execute(text(f"""
+            DELETE FROM product_deletion_audit_log
+            WHERE request_id IN (
+                SELECT request_id FROM product_deletion_requests WHERE product_id IN ({pid_sub})
+            )
+        """), {"sid": shop_id})
+        db.execute(text(f"DELETE FROM product_deletion_requests WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 5. order_items → products
+        db.execute(text(f"DELETE FROM order_items WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 6. product_variants → products
+        db.execute(text(f"DELETE FROM product_variants WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 7. products → shops
+        db.execute(text("DELETE FROM products WHERE shop_id = :sid"), {"sid": shop_id})
+        # 8. banner_bids của shop (shop_id FK, DB có CASCADE nhưng xóa tường minh cho chắc)
+        db.execute(text("DELETE FROM banner_bids WHERE shop_id = :sid"), {"sid": shop_id})
+        # 9. shop_employees → shops (không có ON DELETE CASCADE)
+        db.execute(text("DELETE FROM employee_role_permissions WHERE employee_id IN (SELECT employee_id FROM shop_employees WHERE shop_id = :sid)"), {"sid": shop_id})
+        db.execute(text("DELETE FROM shop_employees WHERE shop_id = :sid"), {"sid": shop_id})
+        # 10. shop_wallet_transactions & shop_wallet (có ON DELETE CASCADE, nhưng xóa tường minh)
+        db.execute(text("DELETE FROM shop_wallet_transactions WHERE shop_id = :sid"), {"sid": shop_id})
+        db.execute(text("DELETE FROM shop_wallet WHERE shop_id = :sid"), {"sid": shop_id})
+        # 11. vouchers (FK tới users.user_id, không cascade)
+        db.execute(text("DELETE FROM vouchers WHERE created_by = :sid"), {"sid": shop_id})
+        # 12. shop_registrations (FK tới users, không xóa tự động)
+        db.execute(text("DELETE FROM shop_registrations WHERE user_id = :sid"), {"sid": shop_id})
+        # 13. Xóa role 'shop' khỏi user_roles — dùng USING JOIN cho chắc
+        db.execute(text("""
+            DELETE FROM user_roles
+            USING roles
+            WHERE user_roles.role_id = roles.role_id
+              AND roles.role_name = 'shop'
+              AND user_roles.user_id = :sid
+        """), {"sid": shop_id})
+        # 14. Cuối cùng xóa shop (banner_auctions.winner_shop_id sẽ SET NULL tự động)
+        db.execute(text("DELETE FROM shops WHERE shop_id = :sid"), {"sid": shop_id})
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi xóa shop: {str(e)}")
+
+    return {"message": "Đã xóa shop", "shop_id": shop_id}
+
+
 # ─── Users ─────────────────────────────────────────────────────────────────────
 
 @router.get("/users")
@@ -107,7 +325,18 @@ def shop_regs(
     items, total, pages = get_shop_registrations(db, page, limit, status)
     return {
         "registrations": [
-            {"reg_id": r.reg_id, "user_id": r.user_id, "shop_name": r.shop_name, "status": r.status, "created_at": str(r.created_at)}
+            {
+                "reg_id":            r.reg_id,
+                "user_id":           r.user_id,
+                "full_name":         r.user.full_name if r.user else None,
+                "shop_name":         r.shop_name,
+                "description":       r.description,
+                "address":           r.address,
+                "product_images":    r.product_images,
+                "business_reg_url":  r.business_reg_url,
+                "status":            r.status,
+                "created_at":        r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else None,
+            }
             for r in items
         ],
         "total": total,
@@ -140,26 +369,7 @@ def shipper_regs(
     items, total, pages = get_shipper_registrations(db, page, limit, status)
     return {
         "registrations": [
-            {
-                "reg_id":           r.reg_id,
-                "user_id":          r.user_id,
-                "full_name":        r.user.full_name if r.user else None,
-                "email":            r.user.email if r.user else None,
-                "phone":            r.user.phone if r.user else None,
-                "vehicle_type":     r.vehicle_type,
-                "license_plate":    r.license_plate,
-                "shipper_type":     r.shipper_type,
-                "zone_province":    r.zone_province,
-                "home_warehouse_id": r.home_warehouse_id,
-                "license_url":      r.license_url,
-                "registration_url": r.registration_url,
-                "id_card_url":      r.id_card_url,
-                "status":           r.status,
-                "rejection_reason": r.rejection_reason,
-                "reviewed_by_name": r.reviewer.full_name if r.reviewer else None,
-                "reviewed_at":      r.reviewed_at.isoformat() if r.reviewed_at else None,
-                "created_at":       r.created_at.isoformat() if r.created_at else None,
-            }
+            {"reg_id": r.reg_id, "user_id": r.user_id, "vehicle_type": r.vehicle_type, "status": r.status}
             for r in items
         ],
         "total": total,

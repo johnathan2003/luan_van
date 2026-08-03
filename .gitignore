@@ -76,6 +76,11 @@ Thumbs.db
 # ==== DOCKER ====
 docker-compose.override.yml
 
+# ==== DB DUMPS (không commit dump nhị phân/backup DB vào git) ====
+*.dump
+backup.dump
+*.sql.gz
+
 # ==== MISC ====
 *.bak
 *.tmp

@@ -44,6 +44,7 @@ class ShopRegistration(Base):
     business_reg_url = Column(String(500))
     status = Column(Enum("pending", "approved", "rejected", native_enum=False), default="pending", index=True)
     rejection_reason = Column(Text)
+    product_images = Column(Text)   # JSON array of image URLs
     reviewed_by = Column(Integer, ForeignKey("users.user_id"))
     reviewed_at = Column(DateTime)
     created_at = Column(DateTime, server_default=func.now())

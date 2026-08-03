@@ -141,13 +141,24 @@ def reject_shop_registration(db: Session, admin_id: int, reg_id: int, reason: st
     reg.reviewed_by = admin_id
     reg.reviewed_at = datetime.utcnow()
 
+    # Xóa role "shop" nếu có (stale role)
+    shop_role = db.query(Role).filter(Role.role_name == "shop").first()
+    if shop_role:
+        stale = db.query(UserRole).filter(
+            UserRole.user_id == reg.user_id,
+            UserRole.role_id == shop_role.role_id,
+        ).first()
+        if stale:
+            db.delete(stale)
+
     _log(db, admin_id, "shop_rejected", "shop_registration", reg_id)
     db.commit()
     create_notification(db, reg.user_id, "Shop bị từ chối", f"Đăng ký shop bị từ chối: {reason}", "shop_rejected")
 
 
 def get_shipper_registrations(db: Session, page: int = 1, limit: int = 20, reg_status: str = "pending"):
-    query = db.query(ShipperRegistration)
+    from sqlalchemy.orm import joinedload
+    query = db.query(ShipperRegistration).options(joinedload(ShipperRegistration.user))
     if reg_status:
         query = query.filter(ShipperRegistration.status == reg_status)
     return paginate(query.order_by(ShipperRegistration.created_at.desc()), page, limit)
@@ -226,14 +237,23 @@ def resolve_dispute(db: Session, admin_id: int, dispute_id: int, decision: str, 
 
 
 def get_admin_dashboard(db: Session) -> dict:
-    from app.models.order import Order
+    from sqlalchemy import text
+
+    def _count(tbl: str, where: str = "") -> int:
+        try:
+            sql = f"SELECT COUNT(*) FROM {tbl}" + (f" WHERE {where}" if where else "")
+            return db.execute(text(sql)).scalar() or 0
+        except Exception:
+            db.rollback()
+            return 0
+
     return {
-        "total_users": db.query(User).count(),
-        "total_shops": db.query(Shop).count(),
-        "total_orders": db.query(Order).count(),
-        "pending_shop_registrations": db.query(ShopRegistration).filter(ShopRegistration.status == "pending").count(),
-        "pending_shipper_registrations": db.query(ShipperRegistration).filter(ShipperRegistration.status == "pending").count(),
-        "open_disputes": db.query(Dispute).filter(Dispute.status == "open").count(),
+        "total_users":                   _count("users"),
+        "total_shops":                   _count("shops"),
+        "total_orders":                  _count("orders"),
+        "pending_shop_registrations":    _count("shop_registrations", "status = 'pending'"),
+        "pending_shipper_registrations": _count("shipper_registrations", "status = 'pending'"),
+        "open_disputes":                 _count("disputes", "status = 'open'"),
     }
 
 

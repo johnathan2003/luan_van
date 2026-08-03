@@ -45,7 +45,9 @@ services:
     volumes:
       - ./backend:/app          # bind mount — sửa code local là container thấy ngay
       - ./super/backend:/app/super  # superadmin module — tách biệt, không thuộc app package
-      - ./uploads:/app/uploads  # bind mount ra host — ảnh tồn tại ngoài container
+
+      - ./uploads:/app/uploads            # giữ uploads trong container, không bị mount đè
+
     depends_on:
       db:
         condition: service_healthy

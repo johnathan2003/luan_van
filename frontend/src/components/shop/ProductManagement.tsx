@@ -1,5 +1,5 @@
-
-import React, { useEffect, useState, useRef, useMemo } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
+import { useShopStatus } from '../../App'
 import * as XLSX from 'xlsx'
 import { toast } from 'react-toastify'
 import { shopService } from '../../services/shopService'
@@ -57,6 +57,7 @@ const EMPTY_FORM = {
 }
 
 const ProductManagement: React.FC = () => {
+  const { isSuspended } = useShopStatus()
   const [products, setProducts]     = useState<any[]>([])
   const [categories, setCategories] = useState<{ category_id: number; category_name: string }[]>([])
   const [loading, setLoading]       = useState(true)
@@ -146,16 +147,22 @@ const ProductManagement: React.FC = () => {
 
   const load = async () => {
     setLoading(true)
-    seedMockData()
     try {
       const [pr, cr] = await Promise.all([shopService.getProducts(), productService.getCategories()])
       const apiProducts = pr.data.products || []
-      const base = apiProducts.length > 0 ? apiProducts : MOCK_PRODUCTS
       // Áp dụng override status từ admin (approved/rejected)
-      setProducts(productApprovalStore.applyToProducts(base))
+      const applied = productApprovalStore.applyToProducts(apiProducts)
+      setProducts(applied)
       setCategories(cr.data.categories || [])
+      // Auto-sync localStorage variants → DB cho các sản phẩm chưa có variants trong DB
+      applied.forEach((p: any) => {
+        const local = variantStore.get(p.product_id)
+        if (local.length > 0) {
+          productService.syncVariants(p.product_id, local).catch(() => {})
+        }
+      })
     } catch {
-      setProducts(productApprovalStore.applyToProducts(MOCK_PRODUCTS))
+      setProducts([])
     } finally { setLoading(false) }
   }
   useEffect(() => {
@@ -213,7 +220,9 @@ const ProductManagement: React.FC = () => {
         // Save attrs as legacy format for display in product card
         attributeStore.save(newId, simpleAttrs.map(a => ({ id: a.id, name: a.name, values: a.values.map(v => v.label) })))
         // Also save as first variant with attrs
-        variantStore.save(newId, [{ ...newVariant(), price: rawPrice, stock: simpleForm.stock_quantity, image_urls: simpleForm.image_urls, attrs: simpleAttrs }])
+        const simpleVariants = [{ ...newVariant(), price: rawPrice, stock: simpleForm.stock_quantity, image_urls: simpleForm.image_urls, attrs: simpleAttrs }]
+        variantStore.save(newId, simpleVariants)
+        productService.syncVariants(newId, simpleVariants).catch(() => {})
       }
       toast.success('Đã gửi sản phẩm để admin duyệt!')
       setSimpleModalOpen(false); load()
@@ -400,6 +409,7 @@ const ProductManagement: React.FC = () => {
         await productService.update(editProduct.product_id, payload)
         variantStore.save(editProduct.product_id, localVariants)
         bundleStore.save(editProduct.product_id, bundleItems)
+        productService.syncVariants(editProduct.product_id, localVariants).catch(() => {})
         toast.success('Đã cập nhật sản phẩm')
       } else {
         const res = await productService.create(payload)
@@ -407,6 +417,7 @@ const ProductManagement: React.FC = () => {
         if (newId) {
           variantStore.save(newId, localVariants)
           if (bundleItems.length > 0) bundleStore.save(newId, bundleItems)
+          productService.syncVariants(newId, localVariants).catch(() => {})
         }
         toast.success('Đã thêm sản phẩm, chờ duyệt')
       }
@@ -472,7 +483,15 @@ const ProductManagement: React.FC = () => {
             </button>
           )}
         </div>
-        <button onClick={openAdd} className="btn btn-primary">+ Thêm sản phẩm</button>
+        <button
+          onClick={isSuspended ? undefined : openAdd}
+          className="btn btn-primary"
+          disabled={isSuspended}
+          title={isSuspended ? 'Shop đang bị đình chỉ — không thể thêm sản phẩm' : undefined}
+          style={isSuspended ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+        >
+          + Thêm sản phẩm
+        </button>
       </div>
 
       {/* Tab navigation */}
@@ -546,6 +565,7 @@ const ProductManagement: React.FC = () => {
                     <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: 16 }}>{formatCurrency(displayPrice)}</span>
                     <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>Tồn: <b style={{ color: 'var(--gray-700)' }}>{displayStock}</b></span>
                     <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>Bán: <b style={{ color: 'var(--gray-700)' }}>{p.sales_count ?? 0}</b></span>
+                    {p.category_name && <span style={{ fontSize: 11, color: 'var(--gray-400)' }}>📂 {p.category_name}</span>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
@@ -611,7 +631,13 @@ const ProductManagement: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Mô tả */}
+                  {/* Danh mục + Mô tả */}
+                  {p.category_name && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Danh mục:</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, background: '#EFF6FF', color: '#1D4ED8', padding: '2px 10px', borderRadius: 20 }}>{p.category_name}</span>
+                    </div>
+                  )}
                   {p.description && (
                     <div>
                       <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--gray-400)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>Mô tả</p>
@@ -624,7 +650,10 @@ const ProductManagement: React.FC = () => {
                     <div>
                       <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--gray-400)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>🔀 Phiên bản sản phẩm</p>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {variants.map((v, vi) => (
+                        {variants.map((v, vi) => {
+                          // Fallback: dùng ảnh product nếu variant chưa có ảnh riêng
+                          const vImgs = (v.image_urls?.length > 0) ? v.image_urls : (p.image_urls || [])
+                          return (
                           <div key={v.id} style={{ background: 'white', borderRadius: 12, border: '1.5px solid var(--border-subtle)', overflow: 'hidden' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 14px', background: vi === 0 ? '#F0FDF4' : '#F8FAFC', borderBottom: '1px solid var(--border-subtle)' }}>
                               <span style={{ fontSize: 12, fontWeight: 800, color: vi === 0 ? 'var(--success)' : 'var(--gray-600)' }}>
@@ -634,9 +663,9 @@ const ProductManagement: React.FC = () => {
                             </div>
                             <div style={{ padding: '10px 14px' }}>
                               {/* Images */}
-                              {v.image_urls?.length > 0 && (
+                              {vImgs.length > 0 && (
                                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                                  {v.image_urls.map((url, ii) => (
+                                  {vImgs.map((url, ii) => (
                                     <div key={ii}
                                       onMouseEnter={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setHoverImg({ url: getImageUrl(url), x: r.left + r.width / 2, y: r.top }) }}
                                       onMouseLeave={() => setHoverImg(null)}
@@ -704,7 +733,8 @@ const ProductManagement: React.FC = () => {
                               )}
                             </div>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   )}
@@ -843,15 +873,18 @@ const ProductManagement: React.FC = () => {
                           <div>
                             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: 8 }}>🔀 Phiên bản</div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {pvariants.map((v: any) => (
+                              {pvariants.map((v: any) => {
+                                const vImg = v.image_urls?.[0] || (p.image_urls || [])[0]
+                                return (
                                 <div key={v.id} style={{ background: 'white', borderRadius: 8, padding: '8px 12px', border: '1px solid #BAE6FD', display: 'flex', alignItems: 'center', gap: 10 }}>
-                                  {v.image_urls?.[0] && <img src={getImageUrl(v.image_urls[0])} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6 }} />}
+                                  {vImg && <img src={getImageUrl(vImg)} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6 }} />}
                                   <div style={{ flex: 1 }}>
                                     <div style={{ fontWeight: 600, fontSize: 13 }}>{v.name}</div>
                                     <div style={{ fontSize: 12, color: '#0EA5E9', fontWeight: 700 }}>{formatCurrency(v.price)} · Tồn: {v.stock}</div>
                                   </div>
                                 </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           </div>
                         )}

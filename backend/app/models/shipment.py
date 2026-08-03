@@ -99,7 +99,10 @@ class ShipperRegistration(Base):
     license_plate    = Column(String(20))
     shipper_type     = Column(String(50), server_default='free', nullable=True)
     zone_province    = Column(String(100))
+    zone_district    = Column(String(100))
+    zone_ward        = Column(String(100))
     home_warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
+
     license_url      = Column(String(500))
     registration_url = Column(String(500))
     id_card_url      = Column(String(500))

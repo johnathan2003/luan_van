@@ -468,7 +468,8 @@ const BuyZoMallSection: React.FC = () => {
 const Home: React.FC = () => {
   const dispatch = useAppDispatch()
   const [searchParams] = useSearchParams()
-  const { products, categories, filters, loading, loadingMore, loopLoading, total } = useAppSelector(s => s.product)
+
+  const { products, categories, filters, loading, loadingMore, loopLoading, total, pages } = useAppSelector(s => s.product)
 
   // ── Infinite scroll state ──────────────────────────────────────────────────
   const infinitePageRef   = useRef(1)   // trang hiện tại đã load

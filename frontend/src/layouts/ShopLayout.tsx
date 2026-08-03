@@ -2,7 +2,7 @@
  * ShopLayout — dùng cho tất cả trang của Shop Owner / Shop Employee
  */
 import React, { useEffect, useState } from 'react'
-import { NavLink, Link } from 'react-router-dom'
+import { NavLink, Link, useNavigate } from 'react-router-dom'
 import Navbar from '../components/common/Navbar'
 import { shopService } from '../services/shopService'
 import { shopFlagStore } from '../utils/shopFlagStore'
@@ -17,7 +17,7 @@ const SHOP_NAV = [
   { icon: '\u{1F3AB}', label: 'Voucher',    path: '/shop/vouchers' },
   { icon: '\u{1F3C6}', label: 'Đấu Giá Quảng Cáo', path: '/shop/auction' },
   { icon: '💰',        label: 'Ví Tiền',           path: '/shop/wallet' },
-  { icon: '⚠️',        label: 'Khiếu Nại',  path: '/complaints' },
+  { icon: '⚠️',        label: 'Khiếu Nại',  path: '/shop/complaints' },
 ]
 
 const ShopSidebar: React.FC = () => {
@@ -151,10 +151,22 @@ const ShopSidebar: React.FC = () => {
 
 interface Props { children: React.ReactNode }
 
+
 const ShopLayout: React.FC<Props> = ({ children }) => {
+  const navigate = useNavigate()
+
   useEffect(() => {
     document.documentElement.setAttribute('data-role', 'shop')
     return () => document.documentElement.removeAttribute('data-role')
+  }, [])
+
+  // Nếu shop bị xóa (404 từ /me), redirect về trang chủ
+  useEffect(() => {
+    shopService.getMyShop().catch((err: any) => {
+      if (err?.response?.status === 404) {
+        navigate('/', { replace: true })
+      }
+    })
   }, [])
 
   return (

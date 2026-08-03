@@ -152,8 +152,8 @@ const Router: React.FC = () => (
       <Route path="/events"           element={inUser(<EventsPage />,          'Sự kiện')} />
       <Route path="/complaints"       element={inUser(<MyDisputesPage />,      'Khiếu nại của tôi')} />
       <Route path="/chat"             element={inUser(<ChatPage />,            'Tin nhắn')} />
-      <Route path="/register-shop"    element={inUser(<ShopRegistration />,    'Đăng ký mở shop')} />
-      <Route path="/register-shipper" element={inUser(<ShipperRegistration />, 'Đăng ký làm shipper')} />
+      <Route path="/register-shop"    element={<AuthLayout title="Đăng ký mở shop" maxWidth={560} bgImage="/background_DKshop.png" align="center" backTo="/"><ShopRegistration /></AuthLayout>} />
+      <Route path="/register-shipper" element={<AuthLayout title="Đăng ký làm Shipper" maxWidth={560} bgImage="/background_DKshipper.png" align="center" backTo="/" backColor="#D97706"><ShipperRegistration /></AuthLayout>} />
     </Route>
 
     {/* ── 🏪 Shop ─────────────────────────────────────────────────────────── */}
@@ -170,6 +170,7 @@ const Router: React.FC = () => (
       <Route path="/shop/auction-live"     element={inShop(<AuctionLivePage />)} />
       <Route path="/shop/chat"             element={inShop(<ShopChatPage />)} />
       <Route path="/shop/mall"             element={inShop(<BuyZoMallRegisterPage />)} />
+      <Route path="/shop/complaints"       element={inShop(<MyDisputesPage />)} />
     </Route>
 
     {/* ── ⚙️ Admin ─────────────────────────────────────────────────────────── */}

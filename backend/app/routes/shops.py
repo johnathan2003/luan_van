@@ -19,6 +19,23 @@ from app.services.product_service import get_products
 router = APIRouter()
 
 
+def get_effective_shop_id(current_user: User, db: Session) -> int:
+    """Trả về shop_id thực tế: chủ shop → user_id, nhân viên → shop_id trong shop_employees."""
+    # Thử là chủ shop trước
+    shop = db.query(Shop).filter(Shop.shop_id == current_user.user_id).first()
+    if shop:
+        return current_user.user_id
+    # Thử là nhân viên
+    emp = db.query(ShopEmployee).filter(
+        ShopEmployee.user_id == current_user.user_id,
+        ShopEmployee.status == "active",
+    ).first()
+    if emp:
+        return emp.shop_id
+    # Fallback
+    return current_user.user_id
+
+
 @router.get("/search")
 def search_shops(
     q:     str            = Query("", description="Tên shop cần tìm"),
@@ -95,18 +112,37 @@ def get_public_shop(shop_id: int, db: Session = Depends(get_db)):
 
 @router.get("/me")
 def my_shop(current_user: User = Depends(require_shop_owner), db: Session = Depends(get_db)):
-    shop = get_shop(db, current_user.user_id)
+    from sqlalchemy import text
+    # Dùng raw SQL để lấy cả status/suspended_reason (cột có thể mới thêm)
+    row = db.execute(
+        text("""
+            SELECT shop_id, shop_name, description, avatar_url, address, phone,
+                   rating, total_followers, total_orders, verification_status,
+                   COALESCE(status, 'active') AS status,
+                   suspended_reason, suspended_at,
+                   mall_request_status
+            FROM shops WHERE shop_id = :sid
+        """),
+        {"sid": current_user.user_id}
+    ).fetchone()
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Shop not found")
     return {
-        "shop_id": shop.shop_id,
-        "shop_name": shop.shop_name,
-        "description": shop.description,
-        "avatar_url": shop.avatar_url,
-        "address": shop.address,
-        "phone": shop.phone,
-        "rating": shop.rating,
-        "total_followers": shop.total_followers,
-        "total_orders": shop.total_orders,
-        "verification_status": shop.verification_status,
+        "shop_id":              row.shop_id,
+        "shop_name":            row.shop_name,
+        "description":          row.description,
+        "avatar_url":           row.avatar_url,
+        "address":              row.address,
+        "phone":                row.phone,
+        "rating":               row.rating,
+        "total_followers":      row.total_followers,
+        "total_orders":         row.total_orders,
+        "verification_status":  row.verification_status,
+        "status":               row.status,
+        "suspended_reason":     row.suspended_reason,
+        "suspended_at":         str(row.suspended_at) if row.suspended_at else None,
+        "mall_request_status":  row.mall_request_status,
     }
 
 
@@ -129,7 +165,8 @@ def shop_products(
     db: Session = Depends(get_db),
 ):
     from app.models.product import Product
-    query = db.query(Product).filter(Product.shop_id == current_user.user_id, Product.deleted_at.is_(None))
+    shop_id = get_effective_shop_id(current_user, db)
+    query = db.query(Product).filter(Product.shop_id == shop_id, Product.deleted_at.is_(None))
     if status:
         query = query.filter(Product.status == status)
     products = query.order_by(Product.created_at.desc()).all()
@@ -138,11 +175,14 @@ def shop_products(
             {
                 "product_id": p.product_id,
                 "product_name": p.product_name,
+                "description": p.description,
                 "price": p.price,
                 "stock_quantity": p.stock_quantity,
                 "status": p.status,
                 "sales_count": p.sales_count,
                 "image_urls": p.image_urls,
+                "category_id": p.category_id,
+                "category_name": p.category.category_name if p.category else None,
             }
             for p in products
         ]
@@ -157,7 +197,8 @@ def shop_orders(
     current_user: User = Depends(require_shop_owner),
     db: Session = Depends(get_db),
 ):
-    items, total, pages = get_shop_orders(db, current_user.user_id, page, limit, order_status)
+    shop_id = get_effective_shop_id(current_user, db)
+    items, total, pages = get_shop_orders(db, shop_id, page, limit, order_status)
     return {
         "orders": [
             {
@@ -183,7 +224,8 @@ def shop_analytics(
     current_user: User = Depends(require_shop_owner),
     db: Session = Depends(get_db),
 ):
-    return get_shop_analytics(db, current_user.user_id, days)
+    shop_id = get_effective_shop_id(current_user, db)
+    return get_shop_analytics(db, shop_id, days)
 
 
 @router.post("/employees", status_code=201)

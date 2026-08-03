@@ -15,12 +15,30 @@ router = APIRouter()
 
 
 @router.get("/me")
-def get_me(current_user: User = Depends(get_current_user)):
+def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from sqlalchemy import text as _text
+    from app.models.shop import Shop
+
+    # Kiểm tra xem user có shop thực sự không
+    has_shop = db.query(Shop).filter(Shop.shop_id == current_user.user_id).first() is not None
+
     roles = [
         {"role_id": ur.role_id, "role_name": ur.role.role_name, "status": ur.status}
-        for ur in current_user.user_roles if ur.status == "active"
+        for ur in current_user.user_roles
+        if ur.status == "active"
+        # Lọc bỏ role 'shop' nếu shop đã bị xóa
+        and not (ur.role.role_name == "shop" and not has_shop)
     ]
+
     current_role = next((ur.role.role_name for ur in current_user.user_roles if ur.current_role), None)
+    # Nếu current_role là 'shop' nhưng shop không còn → fallback về 'user'
+    if current_role == "shop" and not has_shop:
+        current_role = next(
+            (ur.role.role_name for ur in current_user.user_roles
+             if ur.status == "active" and ur.role.role_name != "shop"),
+            "user"
+        )
+
     return {
         "user_id": current_user.user_id,
         "email": current_user.email,
@@ -68,6 +86,15 @@ async def upload_avatar(
     current_user.avatar_url = url
     db.commit()
     return {"message": "Avatar uploaded", "avatar_url": url}
+
+
+@router.post("/me/upload-image")
+async def upload_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    url = await save_upload_file(file, "shop_registrations")
+    return {"url": url}
 
 
 @router.post("/register-shop", status_code=201)

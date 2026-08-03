@@ -135,6 +135,7 @@ class ShopRegistrationCreate(BaseModel):
     description: Optional[str] = None
     address: str
     phone: Optional[str] = None
+    product_images: Optional[str] = None   # JSON array of URLs
     cmnd_url: Optional[str] = None
     cmnd_back_url: Optional[str] = None
     business_reg_url: Optional[str] = None
@@ -143,8 +144,13 @@ class ShopRegistrationCreate(BaseModel):
 class ShipperRegistrationCreate(BaseModel):
     vehicle_type: str
     license_plate: Optional[str] = None
-    license_url: Optional[str] = None
-    registration_url: Optional[str] = None
+    shipper_type: Optional[str] = None
+    zone_province: Optional[str] = None
+    zone_district: Optional[str] = None
+    zone_ward: Optional[str] = None
+    license_url: Optional[str] = None          # Bằng lái xe
+    registration_url: Optional[str] = None     # Cà vẹt xe
+    vehicle_photo_url: Optional[str] = None    # Hình xe
     id_card_url: Optional[str] = None
 
 

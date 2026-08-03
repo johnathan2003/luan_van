@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from '../../hooks/useTheme'
 import { useAuth } from '../../hooks/useAuth'
 import { THEME_MODE_ICONS, THEME_MODE_LABELS } from '../../utils/theme'
@@ -53,6 +53,8 @@ const ThemeToggle: React.FC = () => {
   const { isAuthenticated, user, currentRole } = useAuth()
   const active = themeMode === 'auto' ? resolvedTheme : themeMode
   const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const isAuthPage = ['/login', '/register', '/forgot-password'].includes(pathname)
 
   const [themeOpen,      setThemeOpen]      = useState(false)
   const [chatOpen,       setChatOpen]       = useState(false)
@@ -327,7 +329,7 @@ const ThemeToggle: React.FC = () => {
       )}
 
       {/* Fixed button group */}
-      <div ref={wrapRef} style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+      {!isAuthPage && <div ref={wrapRef} style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
 
         {/* Minimized bubbles — toi da MAX_BUBBLES, moi nhat o tren */}
         {showChat && visibleBubbles.map(conv => {
@@ -381,8 +383,8 @@ const ThemeToggle: React.FC = () => {
           </div>
         )}
 
-        <button type="button" aria-label="Theo dõi đơn hàng" title="Theo dõi đơn hàng" onClick={() => navigate('/orders')} style={BTN} onMouseEnter={on} onMouseLeave={off}>&#x1F4E6;</button>
-        <button type="button" aria-label="Sự kiện" title="Sự kiện" onClick={() => navigate('/events')} style={BTN} onMouseEnter={on} onMouseLeave={off}>&#x1F381;</button>
+        {isAuthenticated && <button type="button" aria-label="Theo dõi đơn hàng" title="Theo dõi đơn hàng" onClick={() => navigate('/orders')} style={BTN} onMouseEnter={on} onMouseLeave={off}>&#x1F4E6;</button>}
+        {isAuthenticated && <button type="button" aria-label="Sự kiện" title="Sự kiện" onClick={() => navigate('/events')} style={BTN} onMouseEnter={on} onMouseLeave={off}>&#x1F381;</button>}
 
         {/* Theme button + dropdown sang trai */}
         <div style={{ position: 'relative' }}>
@@ -403,7 +405,7 @@ const ThemeToggle: React.FC = () => {
           <button type="button" aria-label="Chuyển đổi giao diện" onClick={() => { setThemeOpen(o => !o); setChatOpen(false) }} style={BTN} onMouseEnter={on} onMouseLeave={off}>{icon}</button>
         </div>
 
-      </div>
+      </div>}
     </>
   )
 }
