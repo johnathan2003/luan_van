@@ -132,6 +132,7 @@ def get_order(order_id: int, current_user: User = Depends(get_current_user), db:
             }
             for i in order.items
         ],
+        "shipping_fee":    str(order.shipping_fee or 0),
         "shipment": {
             "shipment_id":       order.shipment.shipment_id,
             "status":            order.shipment.status,
@@ -139,6 +140,14 @@ def get_order(order_id: int, current_user: User = Depends(get_current_user), db:
             "delivery_location": order.shipment.delivery_location,
             "current_location":  order.shipment.current_location,
             "shipper_id":        order.shipment.shipper_id,
+            # [I-3] thêm các trường kích thước và mã giao hàng
+            "delivery_code":     order.shipment.delivery_code,
+            "size_tier":         order.shipment.size_tier,
+            "extra_fee":         float(order.shipment.extra_fee or 0),
+            "pkg_weight_kg":     float(order.shipment.pkg_weight_kg or 0) if order.shipment.pkg_weight_kg else None,
+            "pkg_length_cm":     order.shipment.pkg_length_cm,
+            "pkg_width_cm":      order.shipment.pkg_width_cm,
+            "pkg_height_cm":     order.shipment.pkg_height_cm,
         } if order.shipment else None,
     }
 
@@ -237,6 +246,238 @@ def ready_to_ship(order_id: int, current_user: User = Depends(get_current_user),
     }
 
 
+@router.post("/{order_id}/confirm-packing")
+def confirm_packing(
+    order_id: int,
+    data: dict = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Shop xác nhận đóng gói → sinh mã SD + tạo/cập nhật Shipment → trả delivery_code.
+    Bắt buộc phải gọi trước khi shipper đến lấy hàng.
+    """
+    from fastapi import HTTPException
+    from datetime import datetime, timezone
+    import random, string
+    from app.models.order import Order
+    from app.models.shipment import Shipment, ShipmentLog
+    from app.models.shop import Shop
+
+    order = db.query(Order).filter(Order.order_id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+
+    # Chỉ shop chủ đơn hoặc admin mới được xác nhận đóng gói
+    roles = [r.role_name for r in (current_user.roles or [])]
+    is_admin = "admin" in roles or "superadmin" in roles
+    if not is_admin:
+        shop = db.query(Shop).filter(Shop.shop_id == order.shop_id, Shop.shop_id == current_user.user_id).first()
+        if not shop:
+            raise HTTPException(status_code=403, detail="Không có quyền xác nhận đơn này")
+
+    if order.order_status not in ("confirmed", "pending", "paid"):
+        raise HTTPException(status_code=400, detail=f"Đơn đang ở trạng thái '{order.order_status}', không thể xác nhận đóng gói")
+
+    # Kiểm tra / lấy shipment
+    shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
+    if shipment and shipment.delivery_code:
+        # Đã sinh mã rồi — trả lại mã cũ
+        return {
+            "message": "Đơn đã được xác nhận đóng gói trước đó",
+            "delivery_code": shipment.delivery_code,
+            "order_id": order_id,
+        }
+
+    # Sinh mã SD-YYYYMMDD-xxxxxx (retry nếu trùng)
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    for _ in range(5):
+        suffix = "".join(random.choices(string.digits, k=6))
+        code = f"SD-{today}-{suffix}"
+        exists = db.query(Shipment).filter(Shipment.delivery_code == code).first()
+        if not exists:
+            break
+    else:
+        raise HTTPException(status_code=500, detail="Không thể sinh mã đơn, thử lại")
+
+    # Lấy địa chỉ shop
+    shop_obj = db.query(Shop).filter(Shop.shop_id == order.shop_id).first()
+    pickup_loc = getattr(shop_obj, "address", None) or f"Shop #{order.shop_id}"
+
+    # ── Xếp bậc kích thước ──────────────────────────────────────────────────
+    dims = data or {}
+    pkg_length = float(dims.get("length") or dims.get("pkg_length_cm") or 0)
+    pkg_width  = float(dims.get("width")  or dims.get("pkg_width_cm")  or 0)
+    pkg_height = float(dims.get("height") or dims.get("pkg_height_cm") or 0)
+    pkg_weight = float(dims.get("weight") or dims.get("pkg_weight_kg") or 0)
+
+    assigned_tier = None
+    assigned_extra_fee = 0
+    if pkg_length > 0 or pkg_weight > 0:
+        from app.models.admin_config import ShippingSizeTier
+        tiers = db.query(ShippingSizeTier).order_by(ShippingSizeTier.tier_level).all()
+
+        tier_l = next((t for t in tiers if pkg_length <= t.max_length_cm), None) if pkg_length > 0 else tiers[0] if tiers else None
+        tier_w = next((t for t in tiers if pkg_width  <= t.max_width_cm),  None) if pkg_width  > 0 else tiers[0] if tiers else None
+        tier_h = next((t for t in tiers if pkg_height <= t.max_height_cm), None) if pkg_height > 0 else tiers[0] if tiers else None
+        tier_k = next((t for t in tiers if pkg_weight <= t.max_weight_kg), None) if pkg_weight > 0 else tiers[0] if tiers else None
+
+        candidates = [t for t in [tier_l, tier_w, tier_h, tier_k] if t is not None]
+        if candidates:
+            best = max(candidates, key=lambda t: t.tier_level)
+            assigned_tier = best.tier_level
+            assigned_extra_fee = best.extra_fee
+        else:
+            # Vượt bậc 5 — quá khổ
+            assigned_tier = 6
+            assigned_extra_fee = 200000
+
+    if not shipment:
+        shipment = Shipment(
+            order_id=order_id,
+            pickup_location=pickup_loc,
+            delivery_location=order.shipping_address or "",
+            delivery_code=code,
+            status="packed",
+            shipment_type="local",
+            pkg_length_cm=pkg_length or None,
+            pkg_width_cm=pkg_width or None,
+            pkg_height_cm=pkg_height or None,
+            pkg_weight_kg=pkg_weight or None,
+            size_tier=assigned_tier,
+            extra_fee=assigned_extra_fee,
+        )
+        db.add(shipment)
+    else:
+        shipment.delivery_code = code
+        shipment.status = "packed"
+        shipment.pickup_location = pickup_loc
+        shipment.delivery_location = order.shipping_address or ""
+        if pkg_length or pkg_weight:
+            shipment.pkg_length_cm = pkg_length or None
+            shipment.pkg_width_cm  = pkg_width or None
+            shipment.pkg_height_cm = pkg_height or None
+            shipment.pkg_weight_kg = pkg_weight or None
+            shipment.size_tier     = assigned_tier
+            shipment.extra_fee     = assigned_extra_fee
+
+    # Cập nhật trạng thái đơn hàng
+    order.order_status = "ready_to_ship"
+    order.prepared_by = current_user.user_id
+    order.prepared_at = datetime.now(timezone.utc)
+
+    db.flush()
+
+    # Ghi log
+    log = ShipmentLog(
+        shipment_id=shipment.shipment_id,
+        status="packed",
+        note=f"Shop xác nhận đóng gói. Mã đơn: {code}",
+        created_by=current_user.user_id,
+    )
+    db.add(log)
+    db.commit()
+
+    # Notify khách hàng
+    try:
+        create_notification(
+            db, order.user_id,
+            title="📦 Đơn hàng đang được đóng gói",
+            message=f"Shop đã xác nhận đóng gói đơn {order.order_number or f'#{order_id}'}. Mã vận đơn: {code}",
+            notif_type="order",
+            related_entity_type="order",
+            related_entity_id=order_id,
+            action_url=f"/orders/{order_id}",
+        )
+    except Exception:
+        pass
+
+    return {
+        "message": "Xác nhận đóng gói thành công",
+        "delivery_code": code,
+        "order_id": order_id,
+        "size_tier": assigned_tier,
+        "extra_fee": assigned_extra_fee,
+        "order_status": order.order_status,
+    }
+
+
+@router.get("/{order_id}/delivery-slip")
+def get_delivery_slip(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Trả dữ liệu phiếu giao hàng.
+    - Admin / kho: SĐT đầy đủ
+    - Shipper: SĐT che 7 số đầu (***xxx4 số cuối)
+    - Shop chủ đơn / khách hàng: SĐT đầy đủ
+    """
+    from fastapi import HTTPException
+    from app.models.order import Order, OrderItem
+    from app.models.shipment import Shipment
+    from app.models.shop import Shop
+
+    order = db.query(Order).filter(Order.order_id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+
+    roles = [r.role_name for r in (current_user.roles or [])]
+    is_admin    = "admin" in roles or "superadmin" in roles
+    is_warehouse = any(r in roles for r in [
+        "warehouse_manager", "warehouse_hub_manager",
+        "warehouse_district_manager", "warehouse_ward_manager",
+    ])
+    is_shipper  = "shipper" in roles
+    is_customer = current_user.user_id == order.user_id
+
+    # Kiểm tra quyền truy cập phiếu
+    shop = db.query(Shop).filter(Shop.shop_id == order.shop_id).first()
+    is_shop_owner = shop and shop.shop_id == current_user.user_id
+    if not (is_admin or is_warehouse or is_shipper or is_customer or is_shop_owner):
+        raise HTTPException(status_code=403, detail="Không có quyền xem phiếu này")
+
+    # Che SĐT nếu là shipper
+    phone = order.recipient_phone or ""
+    if is_shipper and not is_admin:
+        if len(phone) > 4:
+            phone = "*" * (len(phone) - 4) + phone[-4:]
+
+    shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
+
+    # Danh sách hàng hóa
+    items = [
+        {"name": i.product_name or f"SP#{i.product_id}", "quantity": i.quantity}
+        for i in (order.items or [])
+    ]
+
+    # COD
+    is_cod = order.payment_method == "cod" and order.payment_status != "paid"
+    cod_amount = float(order.final_price) if is_cod else 0
+
+    return {
+        "delivery_code":   shipment.delivery_code if shipment else None,
+        "order_id":        order.order_id,
+        "order_number":    order.order_number,
+        "shop_name":       shop.shop_name if shop else f"Shop #{order.shop_id}",
+        "pickup_address":  shop.address if shop else "",
+        "recipient_name":  order.recipient_name,
+        "recipient_phone": phone,
+        "delivery_address": order.shipping_address,
+        "items":           items,
+        "is_cod":          is_cod,
+        "cod_amount":      cod_amount,
+        "payment_method":  order.payment_method,
+        "payment_status":  order.payment_status,
+        "shipment_status": shipment.status if shipment else None,
+        "current_warehouse": (
+            shipment.current_warehouse.name if shipment and shipment.current_warehouse else None
+        ),
+        "created_at": str(order.created_at),
+    }
+
+
 @router.post("/{order_id}/confirm-received")
 def confirm_received_route(order_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     order = confirm_received(db, order_id, current_user.user_id)
@@ -258,3 +499,44 @@ def track_order(order_id: int, current_user: User = Depends(get_current_user), d
             "delivery_time": str(order.shipment.delivery_time) if order.shipment.delivery_time else None,
         } if order.shipment else None,
     }
+
+
+# [F-4] Đánh giá shipper sau khi nhận hàng
+@router.post("/{order_id}/rate-shipper", status_code=201)
+def rate_shipper(
+    order_id: int,
+    data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """User đánh giá shipper sau khi đơn hàng completed."""
+    from app.models.shipment import Shipment, Shipper
+    from sqlalchemy import func as sqlfunc
+    from decimal import Decimal
+
+    order = get_order_by_id(db, order_id)
+    if order.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Không có quyền đánh giá đơn này")
+    if order.order_status != "completed":
+        raise HTTPException(status_code=400, detail="Chỉ có thể đánh giá sau khi đã nhận hàng")
+
+    rating = data.get("rating")
+    if not isinstance(rating, (int, float)) or not (1 <= rating <= 5):
+        raise HTTPException(status_code=400, detail="Rating phải từ 1 đến 5")
+
+    shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
+    if not shipment or not shipment.shipper_id:
+        raise HTTPException(status_code=404, detail="Không có shipper cho đơn này")
+
+    shipper = db.query(Shipper).filter(Shipper.shipper_id == shipment.shipper_id).first()
+    if not shipper:
+        raise HTTPException(status_code=404, detail="Không tìm thấy shipper")
+
+    # Tính avg rating: (current_rating * count + new_rating) / (count + 1)
+    current_rating = float(shipper.rating or 0)
+    count = shipper.total_deliveries or 1
+    new_avg = (current_rating * (count - 1) + float(rating)) / count
+    shipper.rating = str(round(new_avg, 2))
+
+    db.commit()
+    return {"message": "Đã đánh giá shipper", "new_rating": round(new_avg, 2)}

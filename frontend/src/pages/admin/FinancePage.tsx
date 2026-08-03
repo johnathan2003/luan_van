@@ -3,8 +3,10 @@
  * Nhóm 6: doanh thu nền tảng, lịch sử giao dịch, xuất báo cáo
  */
 import React, { useState, useEffect } from 'react'
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
+import { toast } from 'react-toastify'
 import { adminService } from '../../services/adminService'
+import API from '../../services/api'
 
 const C = { navy: '#1E3A8A', blue: '#1D4ED8', sky: '#3B82F6', light: '#DBEAFE', tint: '#EFF6FF', gray: '#64748B', success: '#16A34A', warning: '#D97706', error: '#DC2626' }
 
@@ -23,11 +25,172 @@ const TXN_TYPE: Record<string, { label: string; color: string; bg: string }> = {
   adjustment: { label: 'Điều chỉnh', color: C.gray,    bg: '#F1F5F9' },
 }
 
+/* ─── Revenue Config Tab ──────────────────────────────────────────────────── */
+
+const PIE_COLORS: Record<string, string> = {
+  shop: '#7C3AED', admin: '#1D4ED8', shipper: '#0D9488', vat: '#D97706',
+}
+
+const RevenueConfigTab: React.FC = () => {
+  const [cfg, setCfg]         = useState({ shop_rate: 70, admin_rate: 15, shipper_rate: 5, vat_rate: 10 })
+  const [history, setHistory] = useState<any[]>([])
+  const [editing, setEditing] = useState({ ...cfg })
+  const [saving, setSaving]   = useState(false)
+  const [note, setNote]       = useState('')
+
+  const load = () => {
+    API.get('/api/v1/admin/revenue-config').then((r: any) => {
+      const cur = r.data?.current
+      if (cur) { setCfg(cur); setEditing({ shop_rate: cur.shop_rate, admin_rate: cur.admin_rate, shipper_rate: cur.shipper_rate, vat_rate: cur.vat_rate }) }
+      setHistory(r.data?.history ?? [])
+    }).catch(() => {})
+  }
+  useEffect(() => { load() }, [])
+
+  const total = editing.shop_rate + editing.admin_rate + editing.shipper_rate + editing.vat_rate
+  const isValid = Math.abs(total - 100) < 0.01
+
+  const pieData = [
+    { name: `Shop ${editing.shop_rate}%`,    value: editing.shop_rate,    fill: PIE_COLORS.shop    },
+    { name: `Admin ${editing.admin_rate}%`,   value: editing.admin_rate,   fill: PIE_COLORS.admin   },
+    { name: `Shipper ${editing.shipper_rate}%`,value: editing.shipper_rate, fill: PIE_COLORS.shipper },
+    { name: `VAT ${editing.vat_rate}%`,       value: editing.vat_rate,     fill: PIE_COLORS.vat     },
+  ]
+
+  const save = async () => {
+    if (!isValid) { toast.warn(`Tổng phải = 100%, hiện tại ${total.toFixed(2)}%`); return }
+    if (!window.confirm('Thay đổi này áp dụng cho đơn hàng mới. Đơn đã hoàn thành giữ nguyên phân chia cũ. Xác nhận?')) return
+    setSaving(true)
+    try {
+      await API.put('/api/v1/admin/revenue-config', { ...editing, note })
+      toast.success('Đã lưu cấu hình doanh thu')
+      setNote('')
+      load()
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi lưu cấu hình')
+    } finally { setSaving(false) }
+  }
+
+  const fieldMeta = [
+    { key: 'shop_rate',    label: 'Shop nhận',    color: PIE_COLORS.shop    },
+    { key: 'admin_rate',   label: 'Admin nhận',   color: PIE_COLORS.admin   },
+    { key: 'shipper_rate', label: 'Shipper nhận', color: PIE_COLORS.shipper },
+    { key: 'vat_rate',     label: 'VAT',          color: PIE_COLORS.vat     },
+  ]
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        {/* Left — input */}
+        <div className="card" style={{ padding: '24px 28px' }}>
+          <p style={{ fontWeight: 800, color: '#1E3A8A', fontSize: 15, margin: '0 0 6px' }}>⚙️ Phân chia doanh thu</p>
+          <p style={{ fontSize: 12, color: '#64748B', margin: '0 0 20px' }}>Áp dụng cho mọi đơn hàng mới từ thời điểm lưu</p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {fieldMeta.map(f => (
+              <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#1E3A8A', minWidth: 120 }}>{f.label}</label>
+                <input
+                  type="number" min={0} max={100} step={0.5}
+                  value={(editing as any)[f.key]}
+                  onChange={e => setEditing(p => ({ ...p, [f.key]: parseFloat(e.target.value) || 0 }))}
+                  style={{ width: 80, padding: '7px 10px', border: `2px solid ${f.color}40`, borderRadius: 8, fontSize: 15, fontWeight: 700, textAlign: 'center', outline: 'none', color: f.color }}
+                />
+                <span style={{ fontSize: 14, color: '#94A3B8' }}>%</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 10,
+            background: isValid ? '#DCFCE7' : '#FEE2E2',
+            border: `1px solid ${isValid ? '#86EFAC' : '#FCA5A5'}` }}>
+            <p style={{ fontWeight: 800, color: isValid ? '#16A34A' : '#DC2626', fontSize: 13, margin: 0 }}>
+              Tổng: {total.toFixed(2)}% {isValid ? '✅' : '❌ Phải đúng 100%'}
+            </p>
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 6 }}>Ghi chú thay đổi (tuỳ chọn)</label>
+            <input value={note} onChange={e => setNote(e.target.value)} placeholder="VD: Điều chỉnh theo chính sách Q3-2026"
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+            <button onClick={() => setEditing({ shop_rate: cfg.shop_rate, admin_rate: cfg.admin_rate, shipper_rate: cfg.shipper_rate, vat_rate: cfg.vat_rate })}
+              style={{ flex: 1, padding: '10px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: 9, fontWeight: 700, cursor: 'pointer' }}>
+              Hủy
+            </button>
+            <button onClick={save} disabled={!isValid || saving}
+              style={{ flex: 2, padding: '10px', background: !isValid || saving ? '#94A3B8' : '#1D4ED8', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, cursor: isValid && !saving ? 'pointer' : 'default' }}>
+              {saving ? '⏳ Đang lưu...' : '💾 Lưu cấu hình'}
+            </button>
+          </div>
+        </div>
+
+        {/* Right — pie chart */}
+        <div className="card" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <p style={{ fontWeight: 800, color: '#1E3A8A', fontSize: 15, margin: '0 0 6px', alignSelf: 'flex-start' }}>📊 Phân chia trực quan</p>
+          <PieChart width={260} height={220}>
+            <Pie data={pieData} cx={130} cy={100} innerRadius={60} outerRadius={100} dataKey="value" paddingAngle={2}>
+              {pieData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+            </Pie>
+            <Tooltip formatter={(v: number) => `${v}%`} />
+          </PieChart>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+            {pieData.map(d => (
+              <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: d.fill }} />
+                <span style={{ fontSize: 12, color: '#64748B' }}>{d.name}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 14, background: '#FEF3C7', borderRadius: 10, padding: '10px 14px', width: '100%' }}>
+            <p style={{ fontSize: 12, color: '#92400E', margin: 0, fontWeight: 600 }}>
+              ⚠️ Thay đổi áp dụng cho đơn hàng mới. Đơn đã hoàn thành giữ nguyên phân chia cũ.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* History */}
+      {history.length > 0 && (
+        <div className="card" style={{ padding: '18px 20px' }}>
+          <p style={{ fontWeight: 800, color: '#1E3A8A', fontSize: 14, margin: '0 0 12px' }}>📋 Lịch sử thay đổi</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {history.slice(0, 5).map((h, i) => (
+              <div key={h.config_id} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 12px',
+                background: i === 0 ? '#EFF6FF' : '#F8FAFC', borderRadius: 8, border: i === 0 ? '1px solid #BFDBFE' : '1px solid #F1F5F9' }}>
+                {i === 0 && <span style={{ fontSize: 11, fontWeight: 800, color: '#1D4ED8', background: '#DBEAFE', borderRadius: 6, padding: '2px 6px' }}>Hiện tại</span>}
+                <span style={{ fontSize: 12, color: '#64748B', minWidth: 120 }}>
+                  {h.changed_at ? new Date(h.changed_at).toLocaleDateString('vi-VN') : '—'}
+                </span>
+                <span style={{ fontSize: 12, color: '#1E3A8A', fontWeight: 600 }}>
+                  Shop {h.shop_rate}% · Admin {h.admin_rate}% · Shipper {h.shipper_rate}% · VAT {h.vat_rate}%
+                </span>
+                {h.changed_by_name && (
+                  <span style={{ fontSize: 11, color: '#94A3B8', marginLeft: 'auto' }}>bởi {h.changed_by_name}</span>
+                )}
+                {h.note && (
+                  <span style={{ fontSize: 11, color: '#64748B', fontStyle: 'italic' }}>— {h.note}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Main Page ───────────────────────────────────────────────────────────── */
+
 const FinancePage: React.FC = () => {
   const [monthly, setMonthly]         = useState<any[]>([])
   const [shopRevenue, setShopRevenue] = useState<any[]>([])
   const [loading, setLoading]         = useState(true)
   const [period, setPeriod]           = useState<'week' | 'month' | 'year'>('month')
+  const [activeTab, setActiveTab]     = useState<'overview' | 'shops' | 'config'>('overview')
 
   useEffect(() => {
     const load = async () => {
@@ -69,8 +232,25 @@ const FinancePage: React.FC = () => {
         </button>
       </div>
 
-      {/* KPI stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', borderRadius: 12, padding: 4, width: 'fit-content' }}>
+        {([
+          ['overview', '📈 Tổng quan'],
+          ['shops',    '🏪 Doanh thu shop'],
+          ['config',   '⚙️ Cấu hình doanh thu'],
+        ] as const).map(([t, label]) => (
+          <button key={t} onClick={() => setActiveTab(t)}
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+              background: activeTab === t ? C.navy : 'transparent', color: activeTab === t ? 'white' : C.gray, transition: 'all 0.15s' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'config' && <RevenueConfigTab />}
+
+      {/* KPI stats — chỉ hiện ở tab overview */}
+      {activeTab !== 'config' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
         {[
           { label: 'Tổng GMV',         value: fmt(total), sub: 'Tổng giá trị giao dịch', color: C.blue,    bg: C.light },
           { label: 'Hoa hồng nền tảng',value: fmt(comm),  sub: total > 0 ? `~${Math.round(comm/total*100)}% GMV` : '10% GMV', color: C.success, bg: '#DCFCE7' },
@@ -83,10 +263,10 @@ const FinancePage: React.FC = () => {
             <p style={{ fontSize: 11, color: C.gray, marginTop: 2 }}>{s.sub}</p>
           </div>
         ))}
-      </div>
+      </div>}
 
-      {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16 }}>
+      {/* Charts — chỉ ở overview */}
+      {activeTab === 'overview' && <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16 }}>
         {/* Revenue area */}
         <div className="card" style={{ padding: '18px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -147,14 +327,14 @@ const FinancePage: React.FC = () => {
             </ResponsiveContainer>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Shop revenue summary */}
-      <div className="card" style={{ overflow: 'hidden' }}>
+      {activeTab === 'shops' && <div className="card" style={{ overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.light}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>🏪 Doanh thu theo shop</h3>
-            <p style={{ fontSize: 11, color: C.gray, marginTop: 2 }}>Tổng kết từ đơn hàng hoàn thành · Admin nhận 25% (15% + VAT 10%) · Shipper 5% · Shop 70%</p>
+            <p style={{ fontSize: 11, color: C.gray, marginTop: 2 }}>Tổng kết từ đơn hàng hoàn thành</p>
           </div>
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -211,7 +391,7 @@ const FinancePage: React.FC = () => {
             })}
           </tbody>
         </table>
-      </div>
+      </div>}
 
     </div>
   )

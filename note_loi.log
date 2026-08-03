@@ -1,0 +1,374 @@
+=============================================================================
+NOTE_LOI.LOG — Nhật ký sửa lỗi hệ thống BuyZo
+Ngày thực hiện: 2026-07-23
+Dựa trên INTEGRATION_GAP_PLAN.md (38 lỗ hổng đã phát hiện)
+=============================================================================
+
+FORMAT:
+  [ID] MÔ TẢ LỖI
+  File(s): ...
+  Sửa: ...
+  Status: ✅ DONE | ⚠️ PARTIAL | 🔴 TODO
+
+═════════════════════════════════════════════════════════════════════════════
+SPRINT 1 — Fix crash critical
+═════════════════════════════════════════════════════════════════════════════
+
+[C-1] Shop.owner_id không tồn tại — AttributeError khi shop xác nhận đơn
+  File: backend/app/routes/orders.py  lines 266, 428
+  Lỗi: Shop.owner_id == current_user.user_id → model không có cột owner_id
+       (shop_id IS owner's user_id — 1:1 mapping)
+  Sửa: Đổi thành Shop.shop_id == current_user.user_id (2 chỗ)
+  Status: ✅ DONE
+
+[C-2] Product.status "active" không tìm được SP đã duyệt
+  File: backend/app/services/order_service.py  line 26
+  Lỗi: Admin approve SP → status="approved", nhưng create_order filter status=="active"
+       → SP approved không thể đặt hàng được
+  Sửa: Đổi thành Product.status.in_(["active", "approved"])
+  Status: ✅ DONE
+
+[V-1] Voucher model thiếu cột voucher_type và shop_id
+  File: backend/app/models/voucher.py
+  Lỗi: admin.py dùng Voucher.voucher_type và Voucher.shop_id → AttributeError
+  Sửa: Thêm 2 cột vào model + migration 202507230001_add_voucher_type_shop_id.py
+  Status: ✅ DONE
+
+[V-2] Admin create_voucher dùng sai tên cột
+  File: backend/app/routes/admin.py  — create_voucher() + admin_vouchers()
+  Lỗi: Dùng usage_limit, start_date, end_date, is_active, used_count
+       trong khi model dùng max_uses, valid_from, valid_to, status, current_uses
+  Sửa: Map field names đúng khi INSERT và khi trả response
+  Status: ✅ DONE
+
+[F-3] User.is_active không tồn tại — system notification crash
+  File: backend/app/routes/admin.py  — _broadcast_system_notification()  line 1693
+  Lỗi: UserModel.is_active == True → AttributeError (model dùng status)
+  Sửa: Đổi thành UserModel.status == "active"
+  Status: ✅ DONE
+
+═════════════════════════════════════════════════════════════════════════════
+SPRINT 2 — Voucher logic
+═════════════════════════════════════════════════════════════════════════════
+
+[V-3] current_uses không được hoàn lại khi hủy đơn
+  File: backend/app/services/order_service.py  — cancel_order()
+  Lỗi: Hủy đơn → stock được restore nhưng voucher.current_uses không giảm
+       → voucher hết lượt dù user chưa dùng thành công
+  Sửa: Thêm logic giảm current_uses sau khi cancel nếu order có voucher_code
+  Status: ✅ DONE
+
+[V-4] list_platform/shop_vouchers dùng role của creator thay vì voucher_type
+  File: backend/app/services/voucher_service.py
+  Lỗi: Phân loại voucher dựa vào "admin" in creator.roles → fragile, chậm
+  Sửa: Dùng v.voucher_type == "platform" / "shop" trực tiếp
+  Status: ✅ DONE
+
+[V-6] _active_vouchers() không check valid_from
+  File: backend/app/services/voucher_service.py  — _active_vouchers()
+  Lỗi: Chỉ check valid_to >= now, không check valid_from <= now
+       → voucher chưa đến ngày hiệu lực vẫn hiển thị và dùng được
+  Sửa: Thêm check valid_from is None or valid_from <= now
+  Status: ✅ DONE
+
+[V-7] Shop không có endpoint PUT/DELETE voucher của mình
+  File: backend/app/routes/shops.py
+  Lỗi: Thiếu endpoint sửa/xóa voucher → shop tạo xong không quản lý được
+  Sửa: Thêm PUT /shop/vouchers/{id} và DELETE /shop/vouchers/{id}
+       (xóa thật nếu current_uses=0, inactive nếu đã có người dùng)
+  Status: ✅ DONE
+
+[V-8] shop_service.create_voucher lưu discount_value dạng String
+  File: backend/app/services/shop_service.py  — create_voucher()
+  Lỗi: discount_value=str(data.discount_value) → insert String vào cột Numeric
+  Sửa: Bỏ str() cast, lưu trực tiếp Numeric
+  Status: ✅ DONE
+
+[V-9] CheckoutPage.tsx isVoucherEligible() không check valid_from
+  File: frontend/src/pages/user/CheckoutPage.tsx
+  Lỗi: Chỉ check valid_to, không check valid_from
+       → voucher hiển thị eligible dù chưa đến ngày bắt đầu
+  Sửa: Thêm if (v.valid_from && new Date(v.valid_from) > now) return false
+  Status: ✅ DONE
+
+Cũng sửa shop_service.create_voucher: thêm voucher_type="shop", shop_id=created_by
+  Status: ✅ DONE
+
+═════════════════════════════════════════════════════════════════════════════
+SPRINT 3 — Payout flow
+═════════════════════════════════════════════════════════════════════════════
+
+[C-3] confirm_received() không phân chia doanh thu
+  File tạo mới: backend/app/services/payout_service.py
+  Lỗi: Sau khi user xác nhận nhận hàng, không có gì ghi vào:
+       ShipperTransaction, ShopWallet, ShopWalletTransaction, PlatformTransaction
+       → toàn bộ hệ thống ví là vỏ rỗng
+  Sửa: Tạo payout_service.process_order_payout(db, order)
+       - Đọc RevenueConfig active để lấy tỷ lệ
+       - Tạo ShipperTransaction(type="delivery_fee")
+       - Cộng ShopWallet.balance + tạo ShopWalletTransaction
+       - Tạo PlatformTransaction(type="commission")
+       Gọi trong confirm_received() trước db.commit()
+  Status: ✅ DONE
+
+Cũng fix: PlatformTransaction.type và .status dùng named enum PostgreSQL
+  File: backend/app/models/admin_config.py
+  Sửa: Đổi thành native_enum=False
+  Status: ✅ DONE
+
+═════════════════════════════════════════════════════════════════════════════
+SPRINT 4 — Shipping fee & Order detail
+═════════════════════════════════════════════════════════════════════════════
+
+[I-1] shipping_fee từ frontend không được dùng trong final_price
+  File: backend/app/schemas/order.py + backend/app/services/order_service.py
+  Lỗi: OrderCreate schema không có shipping_fee field
+       → create_order() tính final_price = total_price - discount (bỏ qua phí ship)
+  Sửa: Thêm shipping_fee vào OrderCreate schema
+       Trong create_order(): final_price = total_price - discount + shipping_fee
+       Lưu order.shipping_fee riêng để hiển thị breakdown
+  Status: ✅ DONE
+
+[I-3] GET /orders/{id} không trả về delivery_code, size_tier, pkg_* fields
+  File: backend/app/routes/orders.py  — get_order()
+  Lỗi: Response shipment chỉ có shipment_id, status, locations, shipper_id
+       → frontend không thể hiển thị mã giao hàng, kích thước, phí phụ trội
+  Sửa: Thêm delivery_code, size_tier, extra_fee, pkg_weight_kg, pkg_length_cm,
+       pkg_width_cm, pkg_height_cm vào response
+  Status: ✅ DONE
+
+═════════════════════════════════════════════════════════════════════════════
+SPRINT 6 — Feedback & Dispute
+═════════════════════════════════════════════════════════════════════════════
+
+[F-1] Không có endpoint POST /feedback cho user
+  File tạo mới: backend/app/routes/feedback.py
+  Lỗi: Admin có GET/PATCH feedbacks nhưng user không thể submit
+       → FeedbackPage admin luôn rỗng
+  Sửa: Tạo POST /api/v1/feedback (không cần auth, optional login)
+       Đăng ký vào main.py
+  Status: ✅ DONE
+
+[F-2] MyDisputesPage dùng localStorage không kết nối backend
+  File: frontend/src/pages/user/MyDisputesPage.tsx
+  File tạo mới: backend/app/routes/disputes.py
+  Lỗi: import từ disputeStore.ts (localStorage) → khiếu nại chỉ lưu trong browser
+       Admin dispute list luôn rỗng
+  Sửa: Tạo POST /api/v1/disputes + GET /api/v1/disputes/me
+       Viết lại MyDisputesPage dùng API call thật
+       Đăng ký vào main.py
+  Status: ✅ DONE
+
+Cũng fix: Feedback + Banner model dùng named enum → native_enum=False
+  File: backend/app/models/admin_config.py
+  Status: ✅ DONE
+
+═════════════════════════════════════════════════════════════════════════════
+SPRINT 7 — Reviews & Shipper quality
+═════════════════════════════════════════════════════════════════════════════
+
+[S-4] ProductReview model có sẵn nhưng không có endpoint CRUD
+  File: backend/app/routes/products.py
+  Lỗi: Product.rating và total_reviews mãi là 0 vì không có cách tạo review
+  Sửa: Thêm GET /products/{id}/reviews (public)
+       Thêm POST /products/{id}/reviews (cần login, verified nếu đã mua)
+       Sau mỗi review: cập nhật Product.rating = avg, total_reviews = count
+  Status: ✅ DONE
+
+[F-4] Shipper.rating không bao giờ được cập nhật
+  File: backend/app/routes/orders.py
+  Lỗi: Không có endpoint để user đánh giá shipper
+       Shipper.rating mãi là "0.00"
+  Sửa: Thêm POST /orders/{id}/rate-shipper
+       Tính avg rating: (current * (count-1) + new) / count
+       Update Shipper.rating = str(round(new_avg, 2))
+  Status: ✅ DONE
+
+[F-5] ShipperBonus không bao giờ được tạo
+  File: backend/app/routes/admin.py
+  Lỗi: BenefitsPage hiển thị bonuses nhưng table luôn rỗng
+  Sửa: Thêm POST /admin/shippers/{id}/bonus (admin tạo thủ công)
+  Status: ✅ DONE
+
+[F-6] Admin không có endpoint xem / xử lý shipper incidents
+  File: backend/app/routes/admin.py
+  Lỗi: Shipper tạo incident qua POST /shipper/me/incidents
+       Nhưng admin không có UI/endpoint để xem và resolve
+  Sửa: Thêm GET /admin/shipper-incidents + PATCH /admin/shipper-incidents/{id}
+  Status: ✅ DONE
+
+Cũng fix: ShipperBonus.status dùng named enum → native_enum=False
+  File: backend/app/models/shipment.py
+  Status: ✅ DONE
+
+═════════════════════════════════════════════════════════════════════════════
+SPRINT 8 — Reports fix & Audit logs
+═════════════════════════════════════════════════════════════════════════════
+
+[S-2] GROUP BY alias string không hoạt động với PostgreSQL
+  File: backend/app/routes/admin.py
+  Lỗi: .group_by("year", "month") — PostgreSQL không support GROUP BY column alias
+       → ProgrammingError: column "year" does not exist
+       Ảnh hưởng: finance_revenue_monthly(), report_user_growth() → crash
+  Sửa: Gán extract() vào biến Python, GROUP BY biến đó:
+       _yr = extract("year", ...), _mo = extract("month", ...)
+       .group_by(_yr, _mo).order_by(_yr, _mo)
+  Status: ✅ DONE (3 query blocks đã sửa)
+
+[S-1/V-1 combo] report_voucher_usage dùng Voucher.used_count → crash
+  File: backend/app/routes/admin.py — report_voucher_usage()
+  Lỗi: Voucher.used_count không tồn tại (đúng là Voucher.current_uses)
+  Sửa: Thay used_count → current_uses trong filter và order_by và response
+  Status: ✅ DONE
+
+[S-3] AuditLogsPage luôn trống — không có gì INSERT vào admin_logs
+  File: backend/app/routes/admin.py
+  Lỗi: GET /admin/logs SELECT admin_logs nhưng không có code nào INSERT
+  Sửa: Thêm helper log_admin_action(db, admin_id, action, target_type, target_id)
+       Gọi tại: ban_user, unban_user, approve_shop, reject_shop,
+                approve_shipper, reject_shipper
+       Helper dùng try/except để không block nếu log thất bại
+  Status: ✅ DONE (6 điểm quan trọng)
+
+═════════════════════════════════════════════════════════════════════════════
+MIGRATION CẦN CHẠY
+═════════════════════════════════════════════════════════════════════════════
+
+File mới: backend/migrations/versions/202507230001_add_voucher_type_shop_id.py
+Lệnh: cd backend && alembic upgrade head
+Thêm vào bảng vouchers:
+  - voucher_type VARCHAR(20) NOT NULL DEFAULT 'platform'
+  - shop_id INTEGER FK shops.shop_id (nullable)
+  - index idx_voucher_type
+  - index idx_voucher_shop
+
+═════════════════════════════════════════════════════════════════════════════
+FILE MỚI TẠO
+═════════════════════════════════════════════════════════════════════════════
+
+backend/app/services/payout_service.py
+  — Xử lý phân chia doanh thu sau confirm_received
+  — Tạo ShipperTransaction, ShopWalletTransaction, PlatformTransaction
+
+backend/app/routes/feedback.py
+  — POST /api/v1/feedback (user submit phản hồi)
+
+backend/app/routes/disputes.py
+  — POST /api/v1/disputes (user tạo khiếu nại)
+  — GET  /api/v1/disputes/me (user xem khiếu nại của mình)
+
+backend/migrations/versions/202507230001_add_voucher_type_shop_id.py
+  — Migration thêm voucher_type + shop_id
+
+═════════════════════════════════════════════════════════════════════════════
+CÒN LẠI / CHƯA SỬA (cần làm thêm nếu có thời gian)
+═════════════════════════════════════════════════════════════════════════════
+
+[I-2] Frontend checkout: modal nhập kích thước gói → truyền vào confirm-packing
+  → Cần thiết để extra_fee tính đúng nhưng phức tạp UX
+  Status: 🔴 TODO
+
+[I-5] Cập nhật current_warehouse_id khi hub scan QR
+  Status: 🔴 TODO
+
+[I-6] Set src/dest warehouse_id khi confirm-packing
+  Status: 🔴 TODO
+
+[S-5] Bổ sung thêm report types: revenue per shop, shipper performance
+  Status: 🔴 TODO
+
+[S-6] System logs ghi vào bảng system_logs thay vì chỉ console
+  Status: 🔴 TODO
+
+[M-2] Checkout: phí ship hardcode 30,000₫ → nên tính từ backend
+  Status: 🔴 TODO (hiện đã pass shipping_fee từ frontend lên backend)
+
+[V-5] Checkout chỉ gửi 1 voucher_code thay vì platform+shop voucher
+  Status: 🔴 TODO (cần thiết kế API nhận nhiều voucher)
+
+═════════════════════════════════════════════════════════════════════════════
+TÓM TẮT SỐ LƯỢNG SỬA
+═════════════════════════════════════════════════════════════════════════════
+
+Files backend sửa:
+  - backend/app/routes/admin.py         (C-1,V-2,F-3,S-1,S-2,S-3,F-5,F-6)
+  - backend/app/routes/orders.py        (C-1,I-1,I-3,F-4)
+  - backend/app/routes/shops.py         (V-7,V-4)
+  - backend/app/routes/products.py      (S-4)
+  - backend/app/services/order_service.py  (C-2,V-3,C-3,I-1)
+  - backend/app/services/voucher_service.py (V-4,V-6)
+  - backend/app/services/shop_service.py   (V-4,V-7,V-8)
+  - backend/app/models/voucher.py       (V-1)
+  - backend/app/models/admin_config.py  (C-3 enum, F-1 enum)
+  - backend/app/models/shipment.py      (F-5 enum)
+  - backend/app/schemas/order.py        (I-1)
+  - backend/app/main.py                 (F-1,F-2 register routes)
+  - backend/app/routes/__init__.py      (F-1,F-2 import)
+
+Files backend tạo mới:
+  - backend/app/services/payout_service.py
+  - backend/app/routes/feedback.py
+  - backend/app/routes/disputes.py
+  - backend/migrations/versions/202507230001_add_voucher_type_shop_id.py
+
+Files frontend sửa:
+  - frontend/src/pages/user/CheckoutPage.tsx     (V-9)
+  - frontend/src/pages/user/MyDisputesPage.tsx   (F-2 full rewrite)
+
+Tổng lỗ hổng đã sửa: 20/38
+Tổng lỗ hổng còn lại: 18/38 (mostly minor UX + thêm features)
+=============================================================================
+
+═════════════════════════════════════════════════════════════════════════════
+SPRINT 9 — UI/UX: Infinite Scroll, Layout & Visual Improvements
+Ngày: 2026-07-23
+═════════════════════════════════════════════════════════════════════════════
+
+[UI-1] Features section: thu nhỏ + thêm màu cho 4 ô dịch vụ
+  File: frontend/src/pages/Home.tsx
+  Thay đổi:
+    - Giảm padding section từ '48px 0' → '28px 0'
+    - Giảm padding card từ '24px 16px' → '16px 12px'
+    - Giảm icon size từ fontSize:44 → 48x48px box màu solid
+    - Mỗi card có màu gradient riêng:
+        🚚 Giao hàng  → nền xanh dương  (#eff6ff → #dbeafe, icon #3b82f6)
+        🔒 Thanh toán → nền xanh lá     (#f0fdf4 → #dcfce7, icon #22c55e)
+        🔄 Đổi trả    → nền cam         (#fff7ed → #fed7aa, icon #f97316)
+        🎧 Hỗ trợ     → nền tím         (#faf5ff → #ede9fe, icon #7C3AED)
+    - Icon nằm trong box 48x48 bo góc 12px với shadow màu
+    - gridTemplateColumns đổi từ auto-fit minmax(200px) → fixed 'repeat(4,1fr)'
+  Status: ✅ DONE
+
+[UI-2] Infinite scroll cho "Gợi ý cho bạn" — ProductDetailPage
+  File: frontend/src/pages/user/ProductDetailPage.tsx
+  Thay đổi:
+    - Thêm state: recLoadingMore, recLoopLoading (boolean)
+    - Thêm refs: recPageRef, recPagesRef, recFetchingRef, recCancelRef,
+                 recSentinelRef, recCatIdRef, recProductIdRef
+    - Cập nhật useEffect([product]): reset refs + fetch page=1, limit=8
+      thay vì lấy 10 SP rồi slice(0,8) một lần
+    - Thêm hàm loadMoreRecommended() (useCallback):
+        + Guard: isFetching, catId chưa set → bỏ qua
+        + isLoop = page >= pages → chờ 3s (recSleep) rồi fetch lại page=1
+        + Bình thường → fetch page+1, append vào recommended
+        + Hiển thị recLoopLoading / recLoadingMore tương ứng
+    - Thêm useEffect IntersectionObserver gắn recSentinelRef
+        + Dependency: [loadMoreRecommended, recommended.length]
+          (bắt buộc có recommended.length để observer gắn lại sau khi
+           sentinel xuất hiện trong DOM — tránh ref=null lần đầu render)
+    - Cập nhật JSX:
+        + Key sản phẩm: `${product_id}-${idx}` (tránh trùng khi loop)
+        + Spinner "Đang làm mới danh sách…" khi recLoopLoading
+        + Spinner "Đang tải thêm gợi ý…" khi recLoadingMore
+        + Sentinel div ref={recSentinelRef} cuối section
+  Lỗi đã fix trong quá trình:
+    - recSentinelRef.current = null lần đầu render vì recommended rỗng
+      → section chưa render → sentinel chưa có trong DOM → observer không gắn
+      → Fix: thêm recommended.length vào dependency array của useEffect observer
+  Status: ✅ DONE
+
+─────────────────────────────────────────────────────────────────────────────
+Files thay đổi trong Sprint 9:
+  - frontend/src/pages/Home.tsx               (UI-1)
+  - frontend/src/pages/user/ProductDetailPage.tsx  (UI-2)
+=============================================================================

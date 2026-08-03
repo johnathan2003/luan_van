@@ -1,12 +1,11 @@
+
 import React, { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
 import { shopService } from '../../services/shopService'
 import Modal from '../../components/common/Modal'
 import Loading from '../../components/common/Loading'
-import { useShopStatus } from '../../App'
 
 const VoucherManagementPage: React.FC = () => {
-  const { isSuspended } = useShopStatus()
   const [vouchers, setVouchers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -31,32 +30,10 @@ const VoucherManagementPage: React.FC = () => {
 
   return (
     <div>
-      {isSuspended && (
-        <div style={{
-          background: '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: 12,
-          padding: '12px 16px', marginBottom: 16,
-          display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          <span style={{ fontSize: 18 }}>⛔</span>
-          <p style={{ margin: 0, fontSize: 13, color: '#DC2626', fontWeight: 600 }}>
-            Shop đang bị đình chỉ — không thể tạo voucher mới.
-          </p>
-        </div>
-      )}
-
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
         <h2 style={{ fontWeight: 700, fontSize: 18 }}>Voucher ({vouchers.length})</h2>
-        <button
-          onClick={() => !isSuspended && setModalOpen(true)}
-          className="btn btn-primary"
-          disabled={isSuspended}
-          title={isSuspended ? 'Shop đang bị đình chỉ' : undefined}
-          style={isSuspended ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
-        >
-          + Tạo voucher
-        </button>
+        <button onClick={() => setModalOpen(true)} className="btn btn-primary">+ Tạo voucher</button>
       </div>
-
       <div className="card table-wrapper">
         <table>
           <thead><tr><th>Mã</th><th>Loại</th><th>Giá trị</th><th>Đã dùng</th><th>Tối đa</th><th>Trạng thái</th></tr></thead>

@@ -15,7 +15,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole }) => {
   }
 
   if (requiredRole) {
-    const hasRole = user?.roles?.some((r: any) => r.role_name === requiredRole)
+    // Hỗ trợ multi-role: "hub_manager|district_manager|admin"
+    const allowedRoles = requiredRole.split('|').map(r => r.trim())
+    const hasRole = user?.roles?.some((r: any) => allowedRoles.includes(r.role_name))
     if (!hasRole) {
       return <Navigate to="/" replace />
     }

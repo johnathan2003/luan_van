@@ -524,6 +524,34 @@ const DeliveryListPage: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Dimensions & tier row */}
+                    {(d.pkg_length_cm || d.pkg_weight_kg || d.size_tier) && (() => {
+                      const TIER_COLOR: Record<number, string> = { 1:'#0D9488',2:'#2563EB',3:'#D97706',4:'#7C3AED',5:'#DC2626',6:'#B45309' }
+                      const tc = TIER_COLOR[d.size_tier] ?? C.gray
+                      return (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10, padding: '7px 12px', background: '#F8FAFC', borderRadius: 9, border: '1px solid #F1F5F9' }}>
+                          {(d.pkg_length_cm && d.pkg_width_cm && d.pkg_height_cm) && (
+                            <span style={{ fontSize: 12, color: C.gray }}>
+                              📦 {d.pkg_length_cm}×{d.pkg_width_cm}×{d.pkg_height_cm} cm
+                            </span>
+                          )}
+                          {d.pkg_weight_kg && (
+                            <span style={{ fontSize: 12, color: C.gray }}>· ⚖️ {d.pkg_weight_kg} kg</span>
+                          )}
+                          {d.size_tier && (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: 'white', background: tc, borderRadius: 6, padding: '2px 7px' }}>
+                              Bậc {d.size_tier}
+                            </span>
+                          )}
+                          {d.extra_fee > 0 && (
+                            <span style={{ fontSize: 12, color: C.error, fontWeight: 700 }}>
+                              +{(d.extra_fee as number).toLocaleString('vi-VN')}₫
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })()}
+
                     {(d.recipient || d.phone) && (
                       <p style={{ fontSize: 13, color: C.gray, marginBottom: 12 }}>
                         {d.recipient ? '👤 ' + d.recipient : ''}

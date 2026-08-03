@@ -3,18 +3,197 @@
  * Nhóm 8: thêm, sửa vùng/phương thức vận chuyển, cấu hình phí
  */
 import React, { useState, useEffect } from 'react'
+import { toast } from 'react-toastify'
 import { adminService } from '../../services/adminService'
+import API from '../../services/api'
 
 const C = { navy: '#1E3A8A', blue: '#1D4ED8', light: '#DBEAFE', tint: '#EFF6FF', gray: '#64748B', success: '#16A34A', warning: '#D97706', error: '#DC2626' }
 
 const EMPTY_ZONE   = { name: '', provinces: '', base_fee: '', per_kg: '', estimated_days: '' }
 const EMPTY_METHOD = { name: '', code: '', description: '', is_active: true }
 
+/* ─── Size Tiers Tab ──────────────────────────────────────────────────────── */
+
+const DEFAULT_OVERSIZE_FEE = 200000
+
+function calcTier(tiers: any[], l: number, w: number, h: number, kg: number) {
+  if (!l && !w && !h && !kg) return null
+  const sorted = [...tiers].sort((a, b) => a.tier_level - b.tier_level)
+  const pick = (val: number, field: string) =>
+    val > 0 ? sorted.find(t => val <= t[field]) : sorted[0]
+  const tl = pick(l, 'max_length_cm')
+  const tw = pick(w, 'max_width_cm')
+  const th = pick(h, 'max_height_cm')
+  const tk = pick(kg, 'max_weight_kg')
+  const candidates = [tl, tw, th, tk].filter(Boolean)
+  if (!candidates.length) return null
+  const best = candidates.reduce((a, b) => (a.tier_level >= b.tier_level ? a : b))
+  // quá khổ nếu không vừa bậc nào
+  const oversized = [tl, tw, th, tk].some((v, i) => {
+    const val = [l, w, h, kg][i]
+    return val > 0 && !v
+  })
+  if (oversized) return { tier_level: 6, label: 'Quá khổ', extra_fee: DEFAULT_OVERSIZE_FEE }
+  return best
+}
+
+const SizeTiersTab: React.FC = () => {
+  const [tiers, setTiers]     = useState<any[]>([])
+  const [edited, setEdited]   = useState<any[]>([])
+  const [saving, setSaving]   = useState(false)
+  const [prevL, setPL]        = useState('')
+  const [prevW, setPW]        = useState('')
+  const [prevH, setPH]        = useState('')
+  const [prevKg, setPKg]      = useState('')
+
+  useEffect(() => {
+    API.get('/api/v1/admin/shipping/size-tiers').then((r: any) => {
+      const t = r.data?.tiers ?? []
+      setTiers(t)
+      setEdited(t.map((x: any) => ({ ...x })))
+    }).catch(() => {})
+  }, [])
+
+  const update = (idx: number, field: string, val: string) => {
+    setEdited(prev => prev.map((t, i) => i === idx ? { ...t, [field]: val } : t))
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const payload = edited.map(t => ({
+        tier_level:    t.tier_level,
+        label:         t.label,
+        max_length_cm: Number(t.max_length_cm),
+        max_width_cm:  Number(t.max_width_cm),
+        max_height_cm: Number(t.max_height_cm),
+        max_weight_kg: Number(t.max_weight_kg),
+        extra_fee:     Number(t.extra_fee),
+      }))
+      await API.put('/api/v1/admin/shipping/size-tiers', { tiers: payload })
+      setTiers(edited.map(t => ({ ...t })))
+      toast.success('Đã lưu cấu hình bậc kích thước')
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi lưu cấu hình')
+    } finally { setSaving(false) }
+  }
+
+  const reset = () => setEdited(tiers.map(t => ({ ...t })))
+
+  // Preview
+  const pl = parseFloat(prevL) || 0
+  const pw = parseFloat(prevW) || 0
+  const ph = parseFloat(prevH) || 0
+  const pk = parseFloat(prevKg) || 0
+  const previewTier = calcTier(edited, pl, pw, ph, pk)
+
+  const tierColors: Record<number, string> = { 1:'#0D9488', 2:'#2563EB', 3:'#D97706', 4:'#7C3AED', 5:'#DC2626', 6:'#B45309' }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Bảng 5 bậc editable */}
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <p style={{ fontWeight: 800, color: '#1E3A8A', fontSize: 15, margin: 0 }}>⚖️ 5 Bậc kích thước</p>
+            <p style={{ fontSize: 12, color: '#64748B', margin: '3px 0 0' }}>Hệ thống tự xếp bậc khi shop đóng gói. Chỉ sửa số liệu, không thêm/xóa bậc.</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={reset} style={{ padding: '7px 14px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+              🔄 Khôi phục
+            </button>
+            <button onClick={save} disabled={saving} style={{ padding: '7px 16px', background: saving ? '#94A3B8' : '#1D4ED8', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+              {saving ? '⏳ Đang lưu...' : '💾 Lưu cấu hình'}
+            </button>
+          </div>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#F8FAFC' }}>
+              {['Bậc', 'Tên bậc', 'Dài tối đa (cm)', 'Rộng tối đa (cm)', 'Cao tối đa (cm)', 'Cân tối đa (kg)', 'Phí thêm (₫)'].map(h => (
+                <th key={h} style={{ padding: '11px 14px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', borderBottom: '1px solid #E2E8F0' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {edited.map((t, i) => (
+              <tr key={t.tier_level} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                <td style={{ padding: '11px 14px' }}>
+                  <span style={{ background: tierColors[t.tier_level] + '20', color: tierColors[t.tier_level], borderRadius: 8, padding: '3px 10px', fontSize: 13, fontWeight: 800 }}>
+                    Bậc {t.tier_level}
+                  </span>
+                </td>
+                <td style={{ padding: '11px 14px' }}>
+                  <input value={t.label} onChange={e => update(i, 'label', e.target.value)}
+                    style={{ width: 100, padding: '5px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, outline: 'none' }} />
+                </td>
+                {(['max_length_cm','max_width_cm','max_height_cm','max_weight_kg'] as const).map(field => (
+                  <td key={field} style={{ padding: '11px 14px' }}>
+                    <input type="number" value={t[field]} onChange={e => update(i, field, e.target.value)}
+                      style={{ width: 80, padding: '5px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, outline: 'none', textAlign: 'right' }} />
+                  </td>
+                ))}
+                <td style={{ padding: '11px 14px' }}>
+                  <input type="number" value={t.extra_fee} onChange={e => update(i, 'extra_fee', e.target.value)}
+                    style={{ width: 100, padding: '5px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, outline: 'none', textAlign: 'right' }} />
+                </td>
+              </tr>
+            ))}
+            {/* Bậc 6 quá khổ — cố định */}
+            <tr style={{ background: '#FEF9C3', borderBottom: '1px solid #F1F5F9' }}>
+              <td style={{ padding: '11px 14px' }}>
+                <span style={{ background: '#B4530920', color: '#B45309', borderRadius: 8, padding: '3px 10px', fontSize: 13, fontWeight: 800 }}>Bậc 6</span>
+              </td>
+              <td style={{ padding: '11px 14px', fontSize: 13, color: '#92400E', fontWeight: 600 }}>Quá khổ</td>
+              <td colSpan={4} style={{ padding: '11px 14px', fontSize: 12, color: '#92400E' }}>Vượt quá bậc 5 (không thể chỉnh)</td>
+              <td style={{ padding: '11px 14px', fontSize: 13, fontWeight: 800, color: '#DC2626' }}>+200,000₫</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Preview live */}
+      <div className="card" style={{ padding: '18px 20px' }}>
+        <p style={{ fontWeight: 800, color: '#1E3A8A', fontSize: 14, margin: '0 0 14px' }}>🔍 Preview — Nhập kích thước để xem bậc</p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+          {[
+            { label: 'Dài (cm)',  val: prevL,  set: setPL  },
+            { label: 'Rộng (cm)', val: prevW,  set: setPW  },
+            { label: 'Cao (cm)',  val: prevH,  set: setPH  },
+            { label: 'Cân (kg)',  val: prevKg, set: setPKg },
+          ].map(f => (
+            <div key={f.label}>
+              <label style={{ fontSize: 11, color: '#64748B', display: 'block', marginBottom: 4, fontWeight: 600 }}>{f.label}</label>
+              <input type="number" value={f.val} onChange={e => f.set(e.target.value)} placeholder="0"
+                style={{ width: 90, padding: '7px 10px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 14, outline: 'none', textAlign: 'center' }} />
+            </div>
+          ))}
+        </div>
+        {previewTier ? (
+          <div style={{ background: tierColors[previewTier.tier_level] + '15', border: `2px solid ${tierColors[previewTier.tier_level]}`, borderRadius: 12, padding: '12px 16px', display: 'flex', gap: 14, alignItems: 'center' }}>
+            <span style={{ fontSize: 28, fontWeight: 900, color: tierColors[previewTier.tier_level] }}>Bậc {previewTier.tier_level}</span>
+            <div>
+              <p style={{ fontWeight: 800, color: tierColors[previewTier.tier_level], margin: 0, fontSize: 15 }}>📦 {previewTier.label}</p>
+              <p style={{ color: '#64748B', margin: '3px 0 0', fontSize: 13 }}>
+                Phí thêm: <strong style={{ color: '#DC2626' }}>+{(previewTier.extra_fee || 0).toLocaleString('vi-VN')}₫</strong>
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p style={{ color: '#94A3B8', fontSize: 13 }}>Nhập kích thước để xem bậc phí được áp dụng</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ─── Main Page ───────────────────────────────────────────────────────────── */
+
 const ShippingConfigPage: React.FC = () => {
   const [zones, setZones]     = useState<any[]>([])
   const [methods, setMethods] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab]   = useState<'zones' | 'methods'>('zones')
+  const [activeTab, setActiveTab]   = useState<'zones' | 'methods' | 'tiers'>('zones')
   const [showZoneForm, setShowZoneForm]     = useState(false)
   const [showMethodForm, setShowMethodForm] = useState(false)
   const [editZoneId, setEditZoneId]     = useState<number | null>(null)
@@ -122,18 +301,24 @@ const ShippingConfigPage: React.FC = () => {
       {/* Tabs */}
       <div className="card" style={{ padding: '12px 18px', display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 8 }}>
-          {(['zones','methods'] as const).map(t => (
-            <button key={t} onClick={() => setActiveTab(t)} style={{
-              padding: '8px 22px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+          {([
+            ['zones',   '🗺️ Vùng vận chuyển'],
+            ['methods', '📦 Phương thức VC'],
+            ['tiers',   '⚖️ Phí theo kích thước'],
+          ] as const).map(([t, label]) => (
+            <button key={t} onClick={() => setActiveTab(t as any)} style={{
+              padding: '8px 20px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
               background: activeTab === t ? C.blue : C.tint, color: activeTab === t ? 'white' : C.gray,
-            }}>{t === 'zones' ? '🗺️ Vùng vận chuyển' : '📦 Phương thức VC'}</button>
+            }}>{label}</button>
           ))}
         </div>
-        <button
-          onClick={() => activeTab === 'zones' ? openAddZone() : openAddMethod()}
-          style={{ padding: '8px 18px', background: C.blue, color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-          + Thêm mới
-        </button>
+        {activeTab !== 'tiers' && (
+          <button
+            onClick={() => activeTab === 'zones' ? openAddZone() : openAddMethod()}
+            style={{ padding: '8px 18px', background: C.blue, color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            + Thêm mới
+          </button>
+        )}
       </div>
 
       {/* Zones tab */}
@@ -203,6 +388,9 @@ const ShippingConfigPage: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* Size Tiers tab */}
+      {activeTab === 'tiers' && <SizeTiersTab />}
 
       {/* Zone Form Modal */}
       {showZoneForm && (

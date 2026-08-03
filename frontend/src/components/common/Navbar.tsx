@@ -328,10 +328,14 @@ const Navbar: React.FC = () => {
 
   const PURPLE = '#6D28D9'
   const roleGradient: Record<string, string> = {
-    admin:    `linear-gradient(to right, ${PURPLE} 0%, #1D4ED8 100%)`,
-    shop:     `linear-gradient(to right, ${PURPLE} 0%, #16A34A 100%)`,
-    shipper:  `linear-gradient(to right, ${PURPLE} 0%, #D97706 100%)`,
-    employee: `linear-gradient(to right, ${PURPLE} 0%, #DB2777 100%)`,
+    admin:                      `linear-gradient(to right, ${PURPLE} 0%, #1D4ED8 100%)`,
+    shop:                       `linear-gradient(to right, ${PURPLE} 0%, #16A34A 100%)`,
+    shipper:                    `linear-gradient(to right, ${PURPLE} 0%, #D97706 100%)`,
+    employee:                   `linear-gradient(to right, ${PURPLE} 0%, #DB2777 100%)`,
+    warehouse_hub_manager:      `linear-gradient(to right, #0F766E 0%, #0D9488 100%)`,
+    warehouse_district_manager: `linear-gradient(to right, #6D28D9 0%, #7C3AED 100%)`,
+    warehouse_ward_manager:     `linear-gradient(to right, #C2410C 0%, #EA580C 100%)`,
+    warehouse_manager:          `linear-gradient(to right, #374151 0%, #4B5563 100%)`,
   }
   const navBg = (isAuthenticated && currentRole && roleGradient[currentRole])
     ? roleGradient[currentRole]
@@ -340,7 +344,15 @@ const Navbar: React.FC = () => {
   const goTo = (rn: string) => {
     switchRole(rn)
     setRadialOpen(false)
-    const dest = rn === 'admin' ? '/admin' : rn === 'shop' ? '/shop' : rn === 'shipper' ? '/shipper' : rn === 'employee' ? '/employee' : '/'
+    const dest = rn === 'admin' ? '/admin'
+      : rn === 'shop' ? '/shop'
+      : rn === 'shipper' ? '/shipper'
+      : rn === 'employee' ? '/employee'
+      : rn === 'warehouse_hub_manager' ? '/hub'
+      : rn === 'warehouse_district_manager' ? '/district'
+      : rn === 'warehouse_ward_manager' ? '/ward'
+      : rn === 'warehouse_manager' ? '/warehouse'
+      : '/'
     setTimeout(() => navigate(dest), 50)
   }
 
@@ -368,11 +380,15 @@ const Navbar: React.FC = () => {
 
   // Role badge color
   const roleBadgeStyle = (role: string | undefined) => {
-    if (role === 'shop')    return { bg: '#DBEAFE', color: '#1D4ED8', label: '🏪 Shop' }
-    if (role === 'admin')   return { bg: '#FEF3C7', color: '#D97706', label: '⚙️ Admin' }
-    if (role === 'shipper') return { bg: '#FEF9C3', color: '#854D0E', label: '🚚 Shipper' }
-    if (role === 'user')     return { bg: '#EDE9FE', color: '#7C3AED', label: '👤 Khách hàng' }
-    if (role === 'employee') return { bg: '#FCE7F3', color: '#DB2777', label: '👷 Nhân viên' }
+    if (role === 'shop')                        return { bg: '#DBEAFE', color: '#1D4ED8', label: '🏪 Shop' }
+    if (role === 'admin')                       return { bg: '#FEF3C7', color: '#D97706', label: '⚙️ Admin' }
+    if (role === 'shipper')                     return { bg: '#FEF9C3', color: '#854D0E', label: '🚚 Shipper' }
+    if (role === 'user')                        return { bg: '#EDE9FE', color: '#7C3AED', label: '👤 Khách hàng' }
+    if (role === 'employee')                    return { bg: '#FCE7F3', color: '#DB2777', label: '👷 Nhân viên' }
+    if (role === 'warehouse_hub_manager')       return { bg: '#CCFBF1', color: '#0F766E', label: '🏢 Kho Tổng' }
+    if (role === 'warehouse_district_manager')  return { bg: '#EDE9FE', color: '#6D28D9', label: '🏬 Kho Quận' }
+    if (role === 'warehouse_ward_manager')      return { bg: '#FED7AA', color: '#C2410C', label: '🏠 Kho Phường' }
+    if (role === 'warehouse_manager')           return { bg: '#F3F4F6', color: '#374151', label: '🏭 Kho' }
     return { bg: '#F3F4F6', color: '#6B7280', label: '👤 Khách hàng' }
   }
   const badge = roleBadgeStyle(currentRole)
@@ -593,7 +609,43 @@ const Navbar: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Warehouse Manager */}
+                    {/* Warehouse Hub Manager */}
+                    {currentRole === 'warehouse_hub_manager' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"     onClick={close} />
+                        <NavSectionLabel border>Kho Tổng</NavSectionLabel>
+                        <MenuItem icon="🏢" label="Tổng quan"            sub="Dashboard kho tổng"          path="/hub"           onClick={close} />
+                        <MenuItem icon="📦" label="Kho quận"             sub="Danh sách kho cấp 2"         path="/hub/districts" onClick={close} />
+                        <MenuItem icon="🚚" label="Đơn liên tỉnh"        sub="Vận chuyển liên tỉnh"        path="/hub/shipments" onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Warehouse District Manager */}
+                    {currentRole === 'warehouse_district_manager' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"         path="/profile"          onClick={close} />
+                        <NavSectionLabel border>Kho Quận</NavSectionLabel>
+                        <MenuItem icon="🏬" label="Tổng quan"              sub="Dashboard kho quận"  path="/district"          onClick={close} />
+                        <MenuItem icon="📮" label="Kho phường"             sub="Danh sách kho cấp 3" path="/district/wards"    onClick={close} />
+                        <MenuItem icon="🚚" label="Đơn hàng"               sub="Theo dõi vận chuyển" path="/district/shipments" onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Warehouse Ward Manager */}
+                    {currentRole === 'warehouse_ward_manager' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"         path="/profile"         onClick={close} />
+                        <NavSectionLabel border>Kho Phường</NavSectionLabel>
+                        <MenuItem icon="🏠" label="Tổng quan"              sub="Dashboard kho phường" path="/ward"          onClick={close} />
+                        <MenuItem icon="🛵" label="Shipper"                sub="Quản lý shipper"      path="/ward/shippers" onClick={close} />
+                        <MenuItem icon="📦" label="Đơn hàng"               sub="Gán & theo dõi đơn"  path="/ward/orders"   onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Warehouse Manager (legacy) */}
                     {currentRole === 'warehouse_manager' && (
                       <div>
                         <NavSectionLabel>Tài khoản</NavSectionLabel>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatters'
+import API from '../../services/api'
 
 // Gợi ý sản phẩm — dùng API thật thay vì mock data
 
@@ -33,9 +34,9 @@ const SuggestedDealsSection: React.FC = () => {
   const [items, setItems] = useState<any[]>([])
 
   useEffect(() => {
-    fetch('/api/v1/shop/public/featured/products?limit=8')
-      .then(r => r.ok ? r.json() : { products: [] })
-      .then(d => setItems(d.products ?? []))
+    API.get('/api/v1/products', { params: { limit: 8, sort: 'popular' } })
+      .then(r => setItems(r.data.products ?? []))
+      .catch(() => {})
   }, [])
 
   if (items.length === 0) return null

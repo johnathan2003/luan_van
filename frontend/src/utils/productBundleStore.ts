@@ -1,3 +1,4 @@
+
 // ── Bundle / Promo / Attribute / Variant stores (localStorage) ──
 // Fix: LRU eviction + strip image_urls + quota-safe writeAll
 
@@ -107,18 +108,18 @@ function writeAll(key: string, data: Record<string, any[]>) {
   }
 }
 
-// ── Strip base64 image_urls from storage (giữ server URLs, bỏ data: URLs) ──────
+// ── Strip image_urls from storage (không cần lưu, fetch lại từ server) ───────
 
 function stripImages<T extends { image_urls?: string[] }>(items: T[]): T[] {
-  return items.map(item => ({ ...item, image_urls: (item.image_urls || []).filter(u => !u.startsWith('data:')) }))
+  return items.map(item => ({ ...item, image_urls: [] }))
 }
 function stripBundleImages(items: BundleItem[]): BundleItem[] {
-  return items.map(b => ({ ...b, image_urls: (b.image_urls || []).filter(u => !u.startsWith('data:')) }))
+  return items.map(b => ({ ...b, image_urls: [] }))
 }
 function stripVariantImages(variants: VariantLocal[]): VariantLocal[] {
   return variants.map(v => ({
     ...v,
-    image_urls: (v.image_urls || []).filter(u => !u.startsWith('data:')),
+    image_urls: [],
     bundleItems: v.bundleItems ? stripBundleImages(v.bundleItems) : undefined,
   }))
 }
@@ -214,3 +215,4 @@ export function clearAllProductStores() {
     localStorage.removeItem(`${ORDER_KEY}_${k}`)
   })
 }
+

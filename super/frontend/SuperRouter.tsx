@@ -12,6 +12,9 @@ import SuperDashboard from './pages/SuperDashboard'
 import SuperProducts  from './pages/SuperProducts'
 import SuperOrders    from './pages/SuperOrders'
 import SuperUsers     from './pages/SuperUsers'
+import DBViewerPage    from './pages/DBViewerPage'
+import ERDPage         from './pages/ERDPage'
+import SystemDocsPage  from './pages/SystemDocsPage'
 
 /** Guard: kiểm tra super_token trong localStorage */
 const SuperGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -30,11 +33,14 @@ const SuperRouter: React.FC = () => (
       <SuperGuard>
         <SuperLayout>
           <Routes>
-            <Route index           element={<SuperDashboard />} />
-            <Route path="products" element={<SuperProducts />} />
-            <Route path="orders"   element={<SuperOrders />} />
-            <Route path="users"    element={<SuperUsers />} />
-            <Route path="*"        element={<Navigate to="/super" replace />} />
+            <Route index             element={<SuperDashboard />} />
+            <Route path="products"   element={<SuperProducts />} />
+            <Route path="orders"     element={<SuperOrders />} />
+            <Route path="users"      element={<SuperUsers />} />
+            <Route path="db-viewer"  element={<DBViewerPage />} />
+            <Route path="erd"        element={<ERDPage />} />
+            <Route path="docs"       element={<SystemDocsPage />} />
+            <Route path="*"          element={<Navigate to="/super" replace />} />
           </Routes>
         </SuperLayout>
       </SuperGuard>

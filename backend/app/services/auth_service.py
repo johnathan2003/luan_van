@@ -1,4 +1,5 @@
 from datetime import datetime
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
@@ -59,7 +60,15 @@ def register_user(db: Session, user_data: UserCreate) -> User:
 
 
 def login_user(db: Session, login_data: UserLogin) -> dict:
-    user = db.query(User).filter(User.email == login_data.email).first()
+    identifier = login_data.email.strip()
+    # So khớp email KHÔNG phân biệt hoa/thường — người dùng có thể gõ "Tongkho",
+    # "tongkho" hay "TONGKHO" đều phải vào được cùng 1 tài khoản.
+    candidates = [identifier.lower()]
+    if "@" not in identifier:
+        # Tài khoản kho / nhân viên hệ thống được tạo theo quy ước {username}@buyzo.com —
+        # cho phép đăng nhập chỉ bằng tên tài khoản (không cần gõ full email).
+        candidates.append(f"{identifier.lower()}@buyzo.com")
+    user = db.query(User).filter(func.lower(User.email).in_(candidates)).first()
     if not user or not verify_password(login_data.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
 

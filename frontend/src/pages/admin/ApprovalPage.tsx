@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react'
 import { adminService } from '../../services/adminService'
 import { formatCurrency } from '../../utils/formatters'
@@ -54,8 +55,8 @@ const ApprovalPage: React.FC = () => {
     const setter = tab === 'shop' ? setShops : tab === 'shipper' ? setShippers : setProducts
     const key    = tab === 'shop' ? 'registrations' : tab === 'shipper' ? 'registrations' : 'products'
     const call   =
-      tab === 'shop'    ? adminService.getShopRegistrations('') :
-      tab === 'shipper' ? adminService.getShipperRegistrations('') :
+      tab === 'shop'    ? adminService.getShopRegistrations() :
+      tab === 'shipper' ? adminService.getShipperRegistrations() :
                           adminService.getPendingProducts()
     call
       .then(r => {
@@ -93,16 +94,13 @@ const ApprovalPage: React.FC = () => {
       if (tab === 'product') {
         await adminService.rejectProduct(rejectModal!, rejectReason)
         setProducts(s => s.map(x => x.product_id === rejectModal ? { ...x, status: 'rejected' } : x))
-      } else if (tab === 'shop') {
-        await adminService.rejectShop(rejectModal!, rejectReason)
-        setShops(s => s.map(x => x.reg_id === rejectModal ? { ...x, status: 'rejected' } : x))
-      } else if (tab === 'shipper') {
-        await adminService.rejectShipper(rejectModal!, rejectReason)
-        setShippers(s => s.map(x => x.reg_id === rejectModal ? { ...x, status: 'rejected' } : x))
+      } else {
+        if (tab === 'shop')    setShops(s => s.map(x => x.reg_id === rejectModal ? { ...x, status: 'rejected' } : x))
+        if (tab === 'shipper') setShippers(s => s.map(x => x.reg_id === rejectModal ? { ...x, status: 'rejected' } : x))
       }
       toast.success('Đã từ chối')
       setRejectModal(null); setRejectReason('')
-    } catch (err: any) { toast.error(err?.response?.data?.detail || 'Lỗi từ chối') }
+    } catch { toast.error('Lỗi') }
   }
 
   const pendingShops    = shops.filter(x => x.status === 'pending').length
@@ -214,11 +212,10 @@ const ApprovalPage: React.FC = () => {
               <div className="card" style={{ padding: 40, textAlign: 'center', color: C.gray }}>✅ Không có yêu cầu nào</div>
             ) : items.map((item: any, idx) => {
               const id  = item.reg_id ?? item.product_id
-              const fmtD = (s?: string) => s ? s.replace(/\.\d+$/, '').replace('T', ' ') : ''
               const title = item.shop_name ?? `Shipper #${item.user_id}`
               const sub   = tab === 'shop'
-                ? `${item.full_name ?? `UID #${item.user_id}`} · ${item.address ?? '—'}`
-                : `${item.full_name ?? `UID #${item.user_id}`} · ${item.vehicle_type} · ${item.license_plate}`
+                ? `UID #${item.user_id} · ${item.address ?? '—'}`
+                : `UID #${item.user_id} · ${item.vehicle_type} · ${item.license_plate}`
               const st = STATUS_STYLE[item.status] ?? STATUS_STYLE.pending
               return (
                 <div key={id ?? idx} className="card"
@@ -232,7 +229,7 @@ const ApprovalPage: React.FC = () => {
                       <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: st.bg, color: st.color }}>{st.label}</span>
                     </div>
                     <p style={{ fontSize: 13, color: C.gray }}>{sub}</p>
-                    {item.created_at && <p style={{ fontSize: 11, color: C.gray, marginTop: 4 }}>🕐 {fmtD(item.created_at)}</p>}
+                    {item.created_at && <p style={{ fontSize: 11, color: C.gray, marginTop: 4 }}>🕐 {item.created_at}</p>}
                   </div>
                   {item.status === 'pending' && (
                     <div style={{ display: 'flex', gap: 8, marginLeft: 20 }} onClick={e => e.stopPropagation()}>
@@ -433,33 +430,19 @@ const ApprovalPage: React.FC = () => {
         const st = STATUS_STYLE[item.status] ?? STATUS_STYLE.pending
         const isShop = tabType === 'shop'
         const accent = isShop ? C.blue : C.warning
-        const fmtDate = (s?: string) => s ? s.replace(/\.\d+$/, '').replace('T', ' ') : '—'
-        const productImgs: string[] = (() => { try { return item.product_images ? JSON.parse(item.product_images) : [] } catch { return [] } })()
-        const licenseFiles: string[] = (() => { try { return item.business_reg_url ? JSON.parse(item.business_reg_url) : [] } catch { return item.business_reg_url ? [item.business_reg_url] : [] } })()
-        const VEHICLE_LABELS: Record<string, string> = {
-          motorcycle: '🏍️ Xe máy', electric_bike: '🛵 Xe máy điện', car: '🚗 Xe ô tô',
-          truck_small: '🚛 Xe tải nhỏ', truck_medium: '🚚 Xe tải trung', truck_large: '🏗️ Xe tải lớn',
-        }
-        const address = [item.zone_ward, item.zone_district, item.zone_province].filter(Boolean).join(', ') || item.zone_province || '—'
-        const shipperDocs = [
-          { label: '📋 Cà vẹt xe',  url: item.registration_url },
-          { label: '🚗 Hình xe',     url: item.vehicle_photo_url },
-          { label: '🪪 Bằng lái xe', url: item.license_url },
-        ]
         const rows = isShop ? [
           ['🏪 Tên shop',   item.shop_name ?? '—'],
-          ['👤 Chủ shop',   item.full_name ?? `UID #${item.user_id}`],
+          ['👤 Chủ shop',   `UID #${item.user_id}`],
           ['📍 Địa chỉ',    item.address ?? '—'],
-          ['📅 Ngày nộp',   fmtDate(item.created_at)],
-          ['📝 Mô tả',      item.description ?? 'Không có'],
+          ['📅 Ngày nộp',   item.created_at ?? '—'],
+          ['📝 Ghi chú',    item.note ?? 'Không có'],
         ] : [
-          ['👤 Họ tên',       item.full_name || `UID #${item.user_id}`],
-          ['📧 Email',        item.email ?? '—'],
-          ['📱 Điện thoại',   item.phone ?? '—'],
-          ['🚗 Phương tiện',  VEHICLE_LABELS[item.vehicle_type] || item.vehicle_type || '—'],
+          ['👤 Họ tên',       item.full_name ?? `Shipper #${item.user_id}`],
+          ['🆔 UID',          `#${item.user_id}`],
+          ['🚗 Phương tiện',  item.vehicle_type ?? '—'],
           ['🔢 Biển số',      item.license_plate ?? '—'],
-          ['📍 Địa chỉ / Chỗ ở', address],
-          ['📅 Ngày nộp',     fmtDate(item.created_at)],
+          ['📅 Ngày nộp',     item.created_at ?? '—'],
+          ['📝 Ghi chú',      item.note ?? 'Không có'],
         ]
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
@@ -488,70 +471,6 @@ const ApprovalPage: React.FC = () => {
                     <span style={{ fontSize: 13, color: C.navy, fontWeight: 500 }}>{value}</span>
                   </div>
                 ))}
-                {/* Ảnh giấy tờ shipper */}
-                {!isShop && (
-                  <div style={{ paddingTop: 4, borderTop: '1px solid var(--border-subtle)', marginTop: 4 }}>
-                    <p style={{ fontSize: 13, color: C.gray, fontWeight: 600, marginBottom: 10 }}>📄 Hồ sơ ảnh giấy tờ</p>
-                    <div style={{ display: 'flex', gap: 10 }}>
-                      {shipperDocs.map(doc => (
-                        <div key={doc.label} style={{ flex: 1, textAlign: 'center' }}>
-                          {doc.url ? (
-                            <a href={doc.url} target="_blank" rel="noopener noreferrer">
-                              <img src={doc.url} alt={doc.label} style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 8, border: '1.5px solid #E2E8F0', display: 'block', marginBottom: 4 }} />
-                            </a>
-                          ) : (
-                            <div style={{ width: '100%', height: 90, borderRadius: 8, border: '1.5px dashed #E2E8F0', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, marginBottom: 4 }}>📷</div>
-                          )}
-                          <span style={{ fontSize: 11, color: C.gray, fontWeight: 600 }}>{doc.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {isShop && (
-                  <>
-                    {/* Ảnh sản phẩm */}
-                    <div style={{ paddingTop: 4 }}>
-                      <span style={{ fontSize: 13, color: C.gray, fontWeight: 600 }}>🖼️ Hình ảnh sản phẩm</span>
-                      {productImgs.length === 0
-                        ? <p style={{ fontSize: 13, color: C.gray, marginTop: 8 }}>Chưa có hình ảnh</p>
-                        : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                            {productImgs.map((url, i) => (
-                              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                                <img src={url} alt={`product-${i}`} style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border-subtle)', cursor: 'pointer' }} />
-                              </a>
-                            ))}
-                          </div>
-                      }
-                    </div>
-
-                    {/* Giấy phép kinh doanh */}
-                    <div style={{ paddingTop: 4, borderTop: '1px solid var(--border-subtle)', marginTop: 4 }}>
-                      <span style={{ fontSize: 13, color: C.gray, fontWeight: 600 }}>🏛️ Giấy phép kinh doanh</span>
-                      {licenseFiles.length === 0
-                        ? <p style={{ fontSize: 13, color: C.gray, marginTop: 8 }}>Chưa nộp giấy phép</p>
-                        : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                            {licenseFiles.map((url, i) => {
-                              const name = url.split('/').pop() || `Tệp ${i + 1}`
-                              const ext = name.split('.').pop()?.toLowerCase()
-                              const isImg = ['jpg','jpeg','png','webp','gif'].includes(ext || '')
-                              const icon = ext === 'pdf' ? '📄' : ext === 'docx' || ext === 'doc' ? '📝' : '📎'
-                              return isImg
-                                ? <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                                    <img src={url} alt={name} style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border-subtle)', cursor: 'pointer' }} />
-                                  </a>
-                                : <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, width: 80, height: 80, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-highlight, rgba(0,0,0,0.03))', textDecoration: 'none', color: C.navy }}>
-                                    <span style={{ fontSize: 28 }}>{icon}</span>
-                                    <span style={{ fontSize: 10, fontWeight: 600, textAlign: 'center', padding: '0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{name}</span>
-                                  </a>
-                            })}
-                          </div>
-                      }
-                    </div>
-                  </>
-                )}
               </div>
 
               {/* Footer */}
@@ -653,3 +572,4 @@ const ApprovalPage: React.FC = () => {
 }
 
 export default ApprovalPage
+

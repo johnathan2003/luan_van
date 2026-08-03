@@ -1,3 +1,4 @@
+
 import API from './api'
 
 export const adminService = {
@@ -10,11 +11,6 @@ export const adminService = {
   getShopRegistrations: (status = 'pending') => API.get(`/api/v1/admin/shop-registrations?status=${status}`),
   approveShop: (id: number) => API.put(`/api/v1/admin/shop-registrations/${id}/approve`),
   rejectShop: (id: number, reason: string) => API.put(`/api/v1/admin/shop-registrations/${id}/reject`, { reason }),
-  // Shop management
-  getShops: (params: any = {}) => API.get('/api/v1/admin/shops', { params }),
-  suspendShop: (id: number, reason: string) => API.put(`/api/v1/admin/shops/${id}/suspend`, { reason }),
-  unsuspendShop: (id: number) => API.put(`/api/v1/admin/shops/${id}/unsuspend`),
-  deleteShop: (id: number) => API.delete(`/api/v1/admin/shops/${id}`),
   // Shipper registrations
   getShipperRegistrations: (status = 'pending') => API.get(`/api/v1/admin/shipper-registrations?status=${status}`),
   approveShipper: (id: number) => API.put(`/api/v1/admin/shipper-registrations/${id}/approve`),
@@ -86,3 +82,4 @@ export const adminService = {
   assignShipperToOrder: (orderId: number, shipperId: number) =>
     API.post(`/api/v1/admin/orders/${orderId}/assign-shipper`, { shipper_id: shipperId }),
 }
+

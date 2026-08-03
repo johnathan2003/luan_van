@@ -88,10 +88,11 @@ const ThemeToggle: React.FC = () => {
 
   const role     = currentRole || user?.current_role || ''
   const chatPath = role === 'shop' ? '/shop/chat' : role === 'employee' ? '/employee/chat' : '/chat'
-  const showChat = isAuthenticated && role !== 'admin'
+  // Luôn hiện nút chat — click sẽ redirect login nếu chưa đăng nhập
+  const showChat = true
 
   const fetchConvs = useCallback(async () => {
-    if (!showChat) return
+    if (!isAuthenticated) return
     try {
       let res
       if (role === 'shop')          res = await chatService.getShopConversations()
@@ -106,7 +107,7 @@ const ThemeToggle: React.FC = () => {
   }, [showChat, role])
 
   useEffect(() => {
-    if (!showChat) return
+    if (!isAuthenticated) return
     fetchConvs()
     const id = setInterval(fetchConvs, 20_000)
     return () => clearInterval(id)
@@ -118,12 +119,15 @@ const ThemeToggle: React.FC = () => {
     if (!isMin && !isActive) return
     try {
       const res = await chatService.getMessages(convId, undefined, 50)
-      const reversed: Message[] = (res.data?.messages ?? []).reverse()
+      // Sort ASC (cũ → mới) để render đúng thứ tự chat
+      const sorted: Message[] = [...(res.data?.messages ?? [])].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
       setMsgMap(prev => {
         const old = prev[convId] ?? []
         if (isMin) {
           const oldIds = new Set(old.map((m: Message) => m.message_id))
-          const fresh  = reversed.filter((m: Message) => !oldIds.has(m.message_id) && m.sender_id !== user?.user_id)
+          const fresh  = sorted.filter((m: Message) => !oldIds.has(m.message_id) && m.sender_id !== user?.user_id)
           if (fresh.length > 0) {
             const preview = fresh[fresh.length - 1].content || 'Tin nhắn mới'
             setToastMap(t => ({ ...t, [convId]: preview }))
@@ -137,7 +141,7 @@ const ThemeToggle: React.FC = () => {
             })
           }
         }
-        return { ...prev, [convId]: reversed }
+        return { ...prev, [convId]: sorted }
       })
       if (isActive) chatService.markRead(convId).catch(() => {})
     } catch { /* ignore */ }
@@ -247,10 +251,10 @@ const ThemeToggle: React.FC = () => {
                 <button onClick={() => { const id = activeConv.conversation_id; fullClosePanel(); navigate(role === 'shop' || role === 'employee' ? chatPath + '?conv=' + id : chatPath + '?shop=' + activeConv.shop_id) }} title="Mở chat" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--primary,#7C3AED)' }}>&#x2922;</button>
                 <button onClick={fullClosePanel} style={{ background: 'var(--bg-highlight,rgba(0,0,0,0.06))', border: 'none', cursor: 'pointer', width: 26, height: 26, borderRadius: '50%', fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#x2715;</button>
               </div>
-              <div style={{ overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 280, maxHeight: 340, background: 'var(--bg-page,#f5f5f5)' }}>
+              <div style={{ overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column-reverse', gap: 6, minHeight: 280, maxHeight: 340, background: 'var(--bg-page,#f5f5f5)' }}>
                 {activeMessages.length === 0
                   ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: 12, paddingTop: 80 }}>Bắt đầu cuộc trò chuyện</div>
-                  : activeMessages.map((m: Message) => {
+                  : [...activeMessages].reverse().map((m: Message) => {
                       const mine = m.sender_id === user?.user_id
                       return (
                         <div key={m.message_id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 6 }}>
@@ -263,7 +267,6 @@ const ThemeToggle: React.FC = () => {
                       )
                     })
                 }
-                <div ref={msgEnd} />
               </div>
               <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '8px 10px', display: 'flex', gap: 8, alignItems: 'center', background: 'var(--bg-card)' }}>
                 <input
@@ -368,7 +371,7 @@ const ThemeToggle: React.FC = () => {
         {showChat && (
           <div style={{ position: 'relative' }}>
             <button type="button" aria-label="Tin nhắn" title="Tin nhắn"
-              onClick={() => { setThemeOpen(false); if (chatOpen && !activeConv) { setChatOpen(false) } else { setChatOpen(true); setActiveConv(null); fetchConvs() } }}
+              onClick={() => { if (!isAuthenticated) { navigate('/login'); return } setThemeOpen(false); if (chatOpen && !activeConv) { setChatOpen(false) } else { setChatOpen(true); setActiveConv(null); fetchConvs() } }}
               style={{ ...BTN, animation: hasNew ? 'cw-bounce 0.6s ease' : undefined } as React.CSSProperties}
               onMouseEnter={on} onMouseLeave={off}
             >&#x1F4AC;</button>

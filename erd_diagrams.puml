@@ -1,0 +1,405 @@
+' ────────────────────────────────────────────────────────────
+' Hình 3.1 ERD Người dùng & Xác thực
+' ────────────────────────────────────────────────────────────
+@startuml
+  skinparam shadowing false
+  skinparam backgroundColor white
+  skinparam EntityBorderColor #333333
+  skinparam EntityBackgroundColor white
+  skinparam EntityFontName Arial
+  skinparam EntityFontSize 11
+  skinparam ArrowColor #333333
+  skinparam defaultFontName Arial
+  skinparam defaultFontSize 11
+title Hình 3.1 ERD Người dùng & Xác thực
+entity "users" as users {
+  * id : integer <<PK>>
+  --
+  * email : varchar(255)
+  * password_hash : varchar(255)
+  name : varchar(100)
+  phone : varchar(15)
+  avatar_url : text
+  * role : enum('customer','admin','shop','shipper',\n          'hub_manager','district_manager','ward_manager')
+  * created_at : timestamp
+  updated_at : timestamp
+}
+
+entity "employees" as employees {
+  * id : integer <<PK>>
+  --
+  * shop_id : integer <<FK>>
+  * user_id : integer <<FK>>
+  permissions : json
+  * status : enum('active','inactive')
+  * created_at : timestamp
+}
+
+users ||--o{ employees : "được gán làm nhân viên"
+@enduml
+
+' ────────────────────────────────────────────────────────────
+' Hình 3.2 ERD Shop, Sản phẩm & Danh mục
+' ────────────────────────────────────────────────────────────
+@startuml
+  skinparam shadowing false
+  skinparam backgroundColor white
+  skinparam EntityBorderColor #333333
+  skinparam EntityBackgroundColor white
+  skinparam EntityFontName Arial
+  skinparam EntityFontSize 11
+  skinparam ArrowColor #333333
+  skinparam defaultFontName Arial
+  skinparam defaultFontSize 11
+title Hình 3.2 ERD Shop, Sản phẩm & Danh mục
+entity "shops" as shops {
+  * id : integer <<PK>>
+  --
+  * user_id : integer <<FK>>
+  * shop_name : varchar(150)
+  description : text
+  logo : text
+  * status : enum('active','inactive','banned')
+  * is_mall : boolean
+  * balance : decimal(15,2)
+  * created_at : timestamp
+}
+
+entity "products" as products {
+  * id : integer <<PK>>
+  --
+  * shop_id : integer <<FK>>
+  * category_id : integer <<FK>>
+  * name : varchar(200)
+  description : text
+  * price : decimal(15,2)
+  * stock : integer
+  images : json
+  * status : enum('active','inactive','pending_delete')
+  * created_at : timestamp
+}
+
+entity "categories" as categories {
+  * id : integer <<PK>>
+  --
+  * name : varchar(100)
+  parent_id : integer <<FK>>
+  icon_url : text
+  * level : integer
+}
+
+entity "product_reviews" as reviews {
+  * id : integer <<PK>>
+  --
+  * product_id : integer <<FK>>
+  * user_id : integer <<FK>>
+  * order_id : integer <<FK>>
+  * rating : integer
+  comment : text
+  images : json
+  * created_at : timestamp
+}
+
+entity "mall_requests" as mall_requests {
+  * id : integer <<PK>>
+  --
+  * shop_id : integer <<FK>>
+  business_license : varchar(100)
+  contact_phone : varchar(15)
+  contact_email : varchar(255)
+  shop_logo : text
+  * status : enum('pending','approved','rejected')
+  review_note : text
+  * submitted_at : timestamp
+}
+
+shops }o--|| users : "user_id"
+products }o--|| shops : "shop_id"
+products }o--|| categories : "category_id"
+categories }o--o| categories : "parent_id (self-ref)"
+reviews }o--|| products : "product_id"
+mall_requests }o--|| shops : "shop_id"
+@enduml
+
+' ────────────────────────────────────────────────────────────
+' Hình 3.3 ERD Đơn hàng & Thanh toán
+' ────────────────────────────────────────────────────────────
+@startuml
+  skinparam shadowing false
+  skinparam backgroundColor white
+  skinparam EntityBorderColor #333333
+  skinparam EntityBackgroundColor white
+  skinparam EntityFontName Arial
+  skinparam EntityFontSize 11
+  skinparam ArrowColor #333333
+  skinparam defaultFontName Arial
+  skinparam defaultFontSize 11
+title Hình 3.3 ERD Đơn hàng & Thanh toán
+entity "orders" as orders {
+  * id : integer <<PK>>
+  --
+  * user_id : integer <<FK>>
+  * status : enum('pending','confirmed','packing',\n          'shipping','delivered','cancelled','refunded')
+  * total_amount : decimal(15,2)
+  * shipping_fee : decimal(15,2)
+  voucher_id : integer <<FK>>
+  * delivery_code : varchar(50)
+  * payment_method : enum('cod','wallet','vnpay')
+  shipping_address : json
+  * created_at : timestamp
+  updated_at : timestamp
+}
+
+entity "order_items" as order_items {
+  * id : integer <<PK>>
+  --
+  * order_id : integer <<FK>>
+  * product_id : integer <<FK>>
+  * shop_id : integer <<FK>>
+  * quantity : integer
+  * unit_price : decimal(15,2)
+  package_size : varchar(10)
+  pkg_weight : decimal(8,2)
+  pkg_length : decimal(8,2)
+  pkg_width : decimal(8,2)
+  pkg_height : decimal(8,2)
+}
+
+entity "vouchers" as vouchers {
+  * id : integer <<PK>>
+  --
+  * code : varchar(50)
+  owner_id : integer <<FK>>
+  * owner_type : enum('system','shop')
+  * discount_type : enum('percent','fixed')
+  * discount_value : decimal(10,2)
+  * min_order_amount : decimal(15,2)
+  max_discount : decimal(15,2)
+  * max_usage : integer
+  * used_count : integer
+  * expires_at : timestamp
+  * status : enum('active','inactive','expired')
+  * created_at : timestamp
+}
+
+entity "disputes" as disputes {
+  * id : integer <<PK>>
+  --
+  * order_id : integer <<FK>>
+  * user_id : integer <<FK>>
+  * reason : text
+  evidence : json
+  * status : enum('pending','processing','resolved','rejected')
+  resolution : text
+  resolved_by : integer <<FK>>
+  * created_at : timestamp
+}
+
+orders }o--|| users : "user_id"
+order_items }o--|| orders : "order_id"
+order_items }o--|| products : "product_id"
+orders }o--o| vouchers : "voucher_id"
+disputes }o--|| orders : "order_id"
+disputes }o--|| users : "user_id"
+@enduml
+
+' ────────────────────────────────────────────────────────────
+' Hình 3.4 ERD Kho & Vận chuyển
+' ────────────────────────────────────────────────────────────
+@startuml
+  skinparam shadowing false
+  skinparam backgroundColor white
+  skinparam EntityBorderColor #333333
+  skinparam EntityBackgroundColor white
+  skinparam EntityFontName Arial
+  skinparam EntityFontSize 11
+  skinparam ArrowColor #333333
+  skinparam defaultFontName Arial
+  skinparam defaultFontSize 11
+title Hình 3.4 ERD Kho & Vận chuyển
+entity "warehouses" as warehouses {
+  * id : integer <<PK>>
+  --
+  * name : varchar(150)
+  * tier : enum('hub','district','ward')
+  * city : varchar(100)
+  ward_code : varchar(20)
+  parent_id : integer <<FK>>
+  manager_id : integer <<FK>>
+  lat : decimal(10,8)
+  lng : decimal(11,8)
+  * created_at : timestamp
+}
+
+entity "warehouse_shippers" as wshippers {
+  * id : integer <<PK>>
+  --
+  * warehouse_id : integer <<FK>>
+  * shipper_id : integer <<FK>>
+  * status : enum('active','inactive')
+  * rating : decimal(3,2)
+  * total_deliveries : integer
+  * created_at : timestamp
+}
+
+entity "shipments" as shipments {
+  * id : integer <<PK>>
+  --
+  * order_id : integer <<FK>>
+  shipper_id : integer <<FK>>
+  * package_size : varchar(10)
+  * shipping_fee : decimal(15,2)
+  * status : enum('waiting','picked_up','in_transit','delivered','returned')
+  pkg_weight : decimal(8,2)
+  pkg_length : decimal(8,2)
+  pkg_width : decimal(8,2)
+  pkg_height : decimal(8,2)
+  picked_up_at : timestamp
+  delivered_at : timestamp
+}
+
+entity "shipment_logs" as slogs {
+  * id : integer <<PK>>
+  --
+  * shipment_id : integer <<FK>>
+  warehouse_id : integer <<FK>>
+  * action : varchar(100)
+  note : text
+  * timestamp : timestamp
+}
+
+entity "interprovincial_bundles" as bundles {
+  * id : integer <<PK>>
+  --
+  * hub_warehouse_id : integer <<FK>>
+  * destination_city : varchar(100)
+  * status : enum('open','sealed','dispatched','arrived')
+  * created_at : timestamp
+}
+
+entity "bundle_shipments" as bshipments {
+  * id : integer <<PK>>
+  --
+  * bundle_id : integer <<FK>>
+  * shipment_id : integer <<FK>>
+}
+
+entity "shipping_size_tiers" as sizetiers {
+  * id : integer <<PK>>
+  --
+  * tier_name : varchar(20)
+  * base_price : decimal(10,2)
+  * price_per_km : decimal(10,4)
+  * max_weight : decimal(8,2)
+  * is_active : boolean
+  * updated_at : timestamp
+}
+
+entity "revenue_config" as rev_config {
+  * id : integer <<PK>>
+  --
+  * platform_fee_percent : decimal(5,2)
+  * shipper_commission_percent : decimal(5,2)
+  * updated_at : timestamp
+}
+
+warehouses }o--o| warehouses : "parent_id (self-ref)"
+wshippers }o--|| warehouses : "warehouse_id"
+wshippers }o--|| users : "shipper_id"
+shipments }o--|| orders : "order_id"
+shipments }o--o| wshippers : "shipper_id"
+slogs }o--|| shipments : "shipment_id"
+slogs }o--o| warehouses : "warehouse_id"
+bundles }o--|| warehouses : "hub_warehouse_id"
+bshipments }o--|| bundles : "bundle_id"
+bshipments }o--|| shipments : "shipment_id"
+@enduml
+
+' ────────────────────────────────────────────────────────────
+' Hình 3.5 ERD Quảng cáo & Đấu thầu
+' ────────────────────────────────────────────────────────────
+@startuml
+  skinparam shadowing false
+  skinparam backgroundColor white
+  skinparam EntityBorderColor #333333
+  skinparam EntityBackgroundColor white
+  skinparam EntityFontName Arial
+  skinparam EntityFontSize 11
+  skinparam ArrowColor #333333
+  skinparam defaultFontName Arial
+  skinparam defaultFontSize 11
+title Hình 3.5 ERD Quảng cáo & Đấu thầu
+entity "advertisements" as ads {
+  * id : integer <<PK>>
+  --
+  * shop_id : integer <<FK>>
+  * title : varchar(200)
+  * image_url : text
+  target_url : text
+  * budget : decimal(15,2)
+  * spent : decimal(15,2)
+  * start_date : timestamp
+  * end_date : timestamp
+  * status : enum('pending','active','paused','ended','rejected')
+  * created_at : timestamp
+}
+
+entity "banner_auctions" as auctions {
+  * id : integer <<PK>>
+  --
+  * slot_position : varchar(50)
+  * shop_id : integer <<FK>>
+  * bid_amount : decimal(15,2)
+  * deposit_amount : decimal(15,2)
+  * status : enum('pending','active','won','lost','refunded')
+  * auction_end_time : timestamp
+  * is_winner : boolean
+  * created_at : timestamp
+}
+
+ads }o--|| shops : "shop_id"
+auctions }o--|| shops : "shop_id"
+@enduml
+
+' ────────────────────────────────────────────────────────────
+' Hình 3.6 ERD Chat & Thông báo
+' ────────────────────────────────────────────────────────────
+@startuml
+  skinparam shadowing false
+  skinparam backgroundColor white
+  skinparam EntityBorderColor #333333
+  skinparam EntityBackgroundColor white
+  skinparam EntityFontName Arial
+  skinparam EntityFontSize 11
+  skinparam ArrowColor #333333
+  skinparam defaultFontName Arial
+  skinparam defaultFontSize 11
+title Hình 3.6 ERD Chat & Thông báo
+entity "messages" as messages {
+  * id : integer <<PK>>
+  --
+  * sender_id : integer <<FK>>
+  * receiver_id : integer <<FK>>
+  * shop_id : integer <<FK>>
+  * content : text
+  attachments : json
+  * is_read : boolean
+  * created_at : timestamp
+}
+
+entity "notifications" as notifs {
+  * id : integer <<PK>>
+  --
+  * user_id : integer <<FK>>
+  * type : varchar(50)
+  * title : varchar(200)
+  * message : text
+  meta : json
+  * is_read : boolean
+  * created_at : timestamp
+}
+
+messages }o--|| users : "sender_id"
+messages }o--|| shops : "shop_id"
+notifs }o--|| users : "user_id"
+@enduml

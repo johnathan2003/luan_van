@@ -185,13 +185,17 @@ def create_voucher(db: Session, created_by: int, data: VoucherCreate) -> Voucher
 
     voucher = Voucher(
         code=data.code,
+        voucher_type="shop",                            # [V-4] shop voucher
+        shop_id=created_by,                            # shop_id = user_id của chủ shop
         discount_type=data.discount_type,
-        discount_value=str(data.discount_value),
-        min_order_value=str(data.min_order_value) if data.min_order_value else None,
-        max_discount=str(data.max_discount) if data.max_discount else None,
+        discount_value=data.discount_value,            # [V-8] Numeric, không cast str
+        min_order_value=data.min_order_value if data.min_order_value else None,
+        max_discount=data.max_discount if data.max_discount else None,
         max_uses=data.max_uses,
+        current_uses=0,
         valid_from=data.valid_from,
         valid_to=data.valid_to,
+        status="active",
         created_by=created_by,
     )
     db.add(voucher)

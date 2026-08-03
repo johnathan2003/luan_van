@@ -1,3 +1,4 @@
+
 /**
  * ⚙️ Admin Overview — Dashboard tổng quan hệ thống
  */
@@ -159,7 +160,7 @@ const AdminOverviewPage: React.FC = () => {
       {/* ── 6 Stat Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
         <StatCard icon="👥" label="Tổng người dùng"     value={data.total_users}                    color={C.blue}    bg={C.light}  delta="▲ Đang hoạt động" path="/admin/users" />
-        <StatCard icon="🏪" label="Shop hoạt động"      value={data.total_shops}                    color={C.success} bg="#DCFCE7"   delta="▲ Đã phê duyệt"  path="/admin/shops" />
+        <StatCard icon="🏪" label="Shop hoạt động"      value={data.total_shops}                    color={C.success} bg="#DCFCE7"   delta="▲ Đã phê duyệt"  path="/admin/approvals" />
         <StatCard icon="📦" label="Tổng đơn hàng"       value={data.total_orders}                   color={C.navy}    bg={C.tint} />
         <StatCard icon="⏳" label="Shop chờ duyệt"      value={data.pending_shop_registrations}     color={C.warning} bg="#FEF3C7"   path="/admin/approvals" />
         <StatCard icon="🚚" label="Shipper chờ duyệt"   value={data.pending_shipper_registrations}  color={C.sky}     bg={C.light}  path="/admin/approvals" />
@@ -296,3 +297,4 @@ const AdminOverviewPage: React.FC = () => {
 }
 
 export default AdminOverviewPage
+

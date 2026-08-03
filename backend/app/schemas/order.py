@@ -17,6 +17,7 @@ class OrderCreate(BaseModel):
     payment_method: str = "cod"
     voucher_code: Optional[str] = None
     note: Optional[str] = None
+    shipping_fee: Optional[Decimal] = None  # [I-1] phí vận chuyển từ frontend
 
 
 class OrderItemResponse(BaseModel):

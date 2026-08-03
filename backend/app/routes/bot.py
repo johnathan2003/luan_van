@@ -1,6 +1,6 @@
 """
 Chatbot API — POST /api/v1/bot/query
-Hỗ trợ role: admin (gemini-1.5-pro), user/shop/shipper (gemini-1.5-flash).
+Hỗ trợ role: admin (gemini-2.5-pro), user/shop/shipper (gemini-2.5-flash).
 Employee không có chatbot.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models.user import User
-from app.services.bot_service import query_bot
+from app.services.bot_service import query_bot, clear_history
 
 router = APIRouter()
 
@@ -61,3 +61,12 @@ def bot_query(
         db=db,
     )
     return BotQueryResponse(reply=reply, role=role)
+
+
+@router.post("/clear", status_code=200)
+def bot_clear_history(
+    current_user: User = Depends(get_current_user),
+):
+    """Xóa lịch sử hội thoại của user hiện tại."""
+    clear_history(current_user.user_id)
+    return {"cleared": True}

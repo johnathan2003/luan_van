@@ -257,30 +257,106 @@ def get_admin_dashboard(db: Session) -> dict:
     }
 
 
-def create_system_employee(db: Session, admin_id: int, employee_email: str, emp_name: str, role_name: str, permissions: list) -> SystemEmployee:
-    user = db.query(User).filter(User.email == employee_email).first()
+# Checkbox "Quản lý kho" trong form phân quyền nhân viên = bundle của 3 quyền tạo
+# tài khoản kho + role warehouse_manager (đăng nhập được portal /warehouse).
+WAREHOUSE_MANAGE_PERM = "warehouse_manage"
+WAREHOUSE_CREATE_PERMS = ["warehouse_create_hub", "warehouse_create_district", "warehouse_create_ward"]
+
+
+def _sync_warehouse_manage(db: Session, emp: SystemEmployee, permissions: list, granted_by: int) -> None:
+    """
+    Đồng bộ quyền 'Tổng quản lý kho' khi checkbox warehouse_manage được bật/tắt:
+    - Bật: gán role warehouse_manager + 3 quyền warehouse_create_hub/district/ward
+    - Tắt: thu hồi role + 3 quyền đó (giữ nguyên các quyền khác)
+    """
+    from app.models.user import Role, UserRole
+
+    has_flag = WAREHOUSE_MANAGE_PERM in permissions
+
+    role = db.query(Role).filter_by(role_name="warehouse_manager").first()
+    if has_flag and not role:
+        role = Role(role_name="warehouse_manager", description="BuyZo — Quản lý tổng kho")
+        db.add(role)
+        db.flush()
+
+    if role:
+        ur = db.query(UserRole).filter_by(user_id=emp.user_id, role_id=role.role_id).first()
+        if has_flag:
+            if ur:
+                ur.status = "active"
+            else:
+                db.add(UserRole(
+                    user_id=emp.user_id, role_id=role.role_id,
+                    current_role=True, assigned_by=granted_by, status="active",
+                ))
+        elif ur:
+            ur.status = "inactive"
+
+    existing_codes = {p.permission_code for p in emp.permissions}
+    if has_flag:
+        for code in WAREHOUSE_CREATE_PERMS:
+            if code not in existing_codes:
+                db.add(SystemEmployeePermission(emp_id=emp.emp_id, permission_code=code, granted_by=granted_by))
+    else:
+        db.query(SystemEmployeePermission).filter(
+            SystemEmployeePermission.emp_id == emp.emp_id,
+            SystemEmployeePermission.permission_code.in_(WAREHOUSE_CREATE_PERMS),
+        ).delete(synchronize_session=False)
+
+
+def create_system_employee(db: Session, admin_id: int, employee_username: str, emp_name: str, role_name: str, permissions: list) -> SystemEmployee:
+    """
+    employee_username: tài khoản đăng nhập (do admin nhập) — email và mật khẩu
+    được tự động sinh từ đây: email = {username}@buyzo.com, password = username.
+    """
+    username = employee_username.strip()
+    if not username or len(username) < 6:
+        raise HTTPException(400, "Tài khoản đăng nhập phải có ít nhất 6 ký tự")
+
+    email = f"{username}@buyzo.com"
+    user = db.query(User).filter(User.email == email).first()
     if not user:
-        random_pass = "".join(random.choices(string.ascii_letters + string.digits, k=12))
         user = User(
-            email=employee_email,
-            password_hash=hash_password(random_pass),
+            email=email,
+            password_hash=hash_password(username),
             full_name=emp_name,
             status="active",
         )
         db.add(user)
         db.flush()
+    else:
+        # User đã tồn tại (VD: đã từng được thêm rồi "xoá" — soft-delete) —
+        # kích hoạt lại tài khoản đăng nhập và đặt lại mật khẩu = username.
+        user.status = "active"
+        user.password_hash = hash_password(username)
 
-    emp = SystemEmployee(
-        user_id=user.user_id,
-        emp_name=emp_name,
-        role_name=role_name,
-        created_by=admin_id,
-    )
-    db.add(emp)
+    # Nếu user_id này ĐÃ TỪNG có bản ghi SystemEmployee (kể cả đã bị vô hiệu hoá
+    # trước đó qua nút "Xoá") — tái sử dụng & kích hoạt lại bản ghi cũ thay vì
+    # insert mới, vì system_employees.user_id có ràng buộc UNIQUE.
+    emp = db.query(SystemEmployee).filter(SystemEmployee.user_id == user.user_id).first()
+    if emp:
+        emp.emp_name = emp_name
+        emp.role_name = role_name
+        emp.status = "active"
+        emp.created_by = admin_id
+        db.query(SystemEmployeePermission).filter(
+            SystemEmployeePermission.emp_id == emp.emp_id
+        ).delete(synchronize_session=False)
+    else:
+        emp = SystemEmployee(
+            user_id=user.user_id,
+            emp_name=emp_name,
+            role_name=role_name,
+            created_by=admin_id,
+        )
+        db.add(emp)
     db.flush()
 
     for perm in permissions:
         db.add(SystemEmployeePermission(emp_id=emp.emp_id, permission_code=perm, granted_by=admin_id))
+    db.flush()
+
+    _sync_warehouse_manage(db, emp, permissions, admin_id)
 
     db.commit()
     db.refresh(emp)

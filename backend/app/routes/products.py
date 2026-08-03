@@ -1,6 +1,7 @@
-import json as _json
-from typing import Optional, List
-from fastapi import APIRouter, Depends, Query, UploadFile, File, Body
+
+from typing import Optional
+from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException
+
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -213,3 +214,102 @@ def sync_product_variants(
 async def upload_product_image(file: UploadFile = File(...)):
     url = await save_upload_file(file, "products")
     return {"url": url}
+
+
+# ─── Product Reviews [S-4] ───────────────────────────────────────────────────
+
+@router.get("/{product_id}/reviews")
+def list_product_reviews(
+    product_id: int,
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Xem danh sách review của sản phẩm (public)."""
+    from app.models.product import ProductReview
+    q = db.query(ProductReview).filter(ProductReview.product_id == product_id)
+    total = q.count()
+    items = q.order_by(ProductReview.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+    return {
+        "reviews": [
+            {
+                "review_id":  r.review_id,
+                "user_id":    r.user_id,
+                "user_name":  r.user.full_name if r.user else "Ẩn danh",
+                "rating":     r.rating,
+                "title":      r.title,
+                "content":    r.content,
+                "verified":   r.verified,
+                "helpful":    r.helpful,
+                "created_at": str(r.created_at),
+            }
+            for r in items
+        ],
+        "total": total,
+        "page": page,
+        "pages": (total + limit - 1) // limit,
+    }
+
+
+@router.post("/{product_id}/reviews", status_code=201)
+def create_product_review(
+    product_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """[S-4] User đã mua sản phẩm có thể gửi review."""
+    from app.models.product import Product, ProductReview
+    from app.models.order import Order, OrderItem
+    from sqlalchemy import func as sqlfunc
+
+    # Kiểm tra sản phẩm tồn tại
+    product = db.query(Product).filter(Product.product_id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+
+    rating = data.get("rating")
+    if not isinstance(rating, int) or not (1 <= rating <= 5):
+        raise HTTPException(status_code=400, detail="Rating phải từ 1 đến 5")
+
+    # Xác nhận user đã từng mua và đơn completed
+    purchased = (
+        db.query(OrderItem)
+        .join(Order, Order.order_id == OrderItem.order_id)
+        .filter(
+            OrderItem.product_id == product_id,
+            Order.user_id == current_user.user_id,
+            Order.order_status == "completed",
+        )
+        .first()
+    )
+
+    # Kiểm tra đã review chưa
+    existing = db.query(ProductReview).filter(
+        ProductReview.product_id == product_id,
+        ProductReview.user_id == current_user.user_id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Bạn đã đánh giá sản phẩm này rồi")
+
+    review = ProductReview(
+        product_id=product_id,
+        user_id=current_user.user_id,
+        rating=rating,
+        title=data.get("title", "").strip() or None,
+        content=data.get("content", "").strip() or None,
+        verified=bool(purchased),   # True nếu đã mua
+    )
+    db.add(review)
+    db.flush()
+
+    # Cập nhật avg rating và total_reviews
+    agg = db.query(
+        sqlfunc.avg(ProductReview.rating).label("avg_rating"),
+        sqlfunc.count(ProductReview.review_id).label("count"),
+    ).filter(ProductReview.product_id == product_id).first()
+    product.rating = round(float(agg.avg_rating or 0), 2)
+    product.total_reviews = agg.count or 0
+
+    db.commit()
+    return {"message": "Cảm ơn bạn đã đánh giá!", "review_id": review.review_id}

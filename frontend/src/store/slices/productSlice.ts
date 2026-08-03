@@ -11,6 +11,8 @@ interface ProductState {
   pages: number
   filters: ProductFilters
   loading: boolean
+  loadingMore: boolean
+  loopLoading: boolean
   error: string | null
 }
 
@@ -21,8 +23,10 @@ const initialState: ProductState = {
   total: 0,
   page: 1,
   pages: 0,
-  filters: { page: 1, limit: 20, sort: 'newest' },
+  filters: { page: 1, limit: 12, sort: 'popular' },
   loading: false,
+  loadingMore: false,
+  loopLoading: false,
   error: null,
 }
 
@@ -70,6 +74,25 @@ const productSlice = createSlice({
     clearSelectedProduct(state) {
       state.selectedProduct = null
     },
+    appendProducts(state, action: PayloadAction<{ products: Product[]; total: number; page: number; pages: number }>) {
+      state.products = [...state.products, ...action.payload.products]
+      state.total = action.payload.total
+      state.page = action.payload.page
+      state.pages = action.payload.pages
+      state.loadingMore = false
+    },
+    resetProducts(state) {
+      state.products = []
+      state.page = 1
+      state.pages = 0
+      state.total = 0
+    },
+    setLoadingMore(state, action: PayloadAction<boolean>) {
+      state.loadingMore = action.payload
+    },
+    setLoopLoading(state, action: PayloadAction<boolean>) {
+      state.loopLoading = action.payload
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -97,5 +120,5 @@ const productSlice = createSlice({
   },
 })
 
-export const { setFilters, resetFilters, clearSelectedProduct } = productSlice.actions
+export const { setFilters, resetFilters, clearSelectedProduct, appendProducts, resetProducts, setLoadingMore, setLoopLoading } = productSlice.actions
 export default productSlice.reducer

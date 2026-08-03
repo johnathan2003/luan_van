@@ -167,6 +167,52 @@ def table_data(
     }
 
 
+@router.get("/erd")
+def get_erd_schema(_: dict = Depends(require_super)):
+    """Toàn bộ schema + FK relationships cho ERD diagram."""
+    insp = inspect(engine)
+    tables: dict[str, list[dict]] = {}
+    relationships: list[dict] = []
+
+    for tname in sorted(insp.get_table_names()):
+        cols = insp.get_columns(tname)
+        pk_cols = set(insp.get_pk_constraint(tname).get("constrained_columns", []))
+        fks_raw = insp.get_foreign_keys(tname)
+        fk_map = {
+            fk["constrained_columns"][0]: fk
+            for fk in fks_raw
+            if fk.get("constrained_columns")
+        }
+        col_list = []
+        for col in cols:
+            fk_info = None
+            if col["name"] in fk_map:
+                fk = fk_map[col["name"]]
+                fk_info = {
+                    "to_table": fk.get("referred_table"),
+                    "to_col":   fk["referred_columns"][0] if fk.get("referred_columns") else None,
+                }
+            col_list.append({
+                "name":     col["name"],
+                "type":     str(col["type"]),
+                "nullable": col.get("nullable", True),
+                "pk":       col["name"] in pk_cols,
+                "fk":       fk_info,
+            })
+        tables[tname] = col_list
+
+        for fk in fks_raw:
+            if fk.get("constrained_columns") and fk.get("referred_columns"):
+                relationships.append({
+                    "from_table": tname,
+                    "from_col":   fk["constrained_columns"][0],
+                    "to_table":   fk["referred_table"],
+                    "to_col":     fk["referred_columns"][0],
+                })
+
+    return {"tables": tables, "relationships": relationships}
+
+
 @router.post("/exec")
 def exec_query(
     body: dict,
