@@ -64,6 +64,7 @@ const WarehouseAccountTreePage   = React.lazy(() => import('./pages/admin/Wareho
 const VoucherAdminPage           = React.lazy(() => import('./pages/admin/VoucherAdminPage'))
 const BannerAdminPage            = React.lazy(() => import('./pages/admin/BannerAdminPage'))
 const FinancePage                = React.lazy(() => import('./pages/admin/FinancePage'))
+const AdminWalletPage            = React.lazy(() => import('./pages/admin/AdminWalletPage'))
 const SystemNotificationPage     = React.lazy(() => import('./pages/admin/SystemNotificationPage'))
 const ShippingConfigPage         = React.lazy(() => import('./pages/admin/ShippingConfigPage'))
 const MallRequestsPage           = React.lazy(() => import('./pages/admin/MallRequestsPage'))
@@ -191,6 +192,7 @@ const Router: React.FC = () => (
       <Route path="/admin/disputes"              element={inAdmin(<DisputeResolutionPage />)} />
       {/* Tài chính */}
       <Route path="/admin/finance"               element={inAdmin(<FinancePage />)} />
+      <Route path="/admin/wallet"                element={inAdmin(<AdminWalletPage />)} />
       <Route path="/admin/vouchers"              element={inAdmin(<VoucherAdminPage />)} />
       {/* Nội dung / Marketing */}
       <Route path="/admin/banners"               element={inAdmin(<BannerAdminPage />)} />

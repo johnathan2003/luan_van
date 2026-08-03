@@ -42,6 +42,16 @@ img { max-width: 100%; display: block; }
 button { cursor: pointer; font-family: inherit; }
 input, textarea, select { font-family: inherit; }
 
+/* Fix: html có color-scheme: light dark, nên trình duyệt/OS có thể render popup
+   <select>/<option> theo dark theme của HỆ ĐIỀU HÀNH trong khi chữ trong <option>
+   không được set màu tường minh (kế thừa mặc định) — chữ tối trên nền tối, chỉ đọc
+   được khi hover (trình duyệt tô nền highlight). Set màu tường minh theo theme hiện
+   tại của app để luôn có tương phản, không phụ thuộc dark mode của OS. */
+select, option {
+  color: var(--text-primary);
+  background-color: var(--bg-card);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--gray-100); }

@@ -127,6 +127,16 @@ const SystemEmployeePage: React.FC = () => {
     }
   }
 
+  const handleResetPassword = async (emp: Employee) => {
+    if (!window.confirm(`Đặt lại mật khẩu về mặc định cho ${emp.emp_name}?`)) return
+    try {
+      const res: any = await API.post(`/api/v1/admin/system-employees/${emp.emp_id}/reset-password`)
+      toast.success(`Mật khẩu mới: ${res.data.password}`, { autoClose: 10000 })
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Đặt lại mật khẩu thất bại')
+    }
+  }
+
   const openEditPerm = (emp: Employee) => {
     setEditPerm(emp)
     setEditPerms([...emp.permissions])
@@ -248,6 +258,10 @@ const SystemEmployeePage: React.FC = () => {
                       <button onClick={() => openEditPerm(e)}
                         style={{ padding: '5px 12px', background: C.tint, color: C.blue, border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                         🔑 Sửa quyền
+                      </button>
+                      <button onClick={() => handleResetPassword(e)}
+                        style={{ padding: '5px 12px', background: '#FFF7ED', color: '#C2410C', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                        ♻️ Reset MK
                       </button>
                       <button onClick={() => handleRemove(e)}
                         style={{ padding: '5px 12px', background: '#FEE2E2', color: C.error, border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>

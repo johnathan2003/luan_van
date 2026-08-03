@@ -3,6 +3,8 @@ Chatbot API — POST /api/v1/bot/query
 Hỗ trợ role: admin (gemini-2.5-pro), user/shop/shipper (gemini-2.5-flash).
 Employee không có chatbot.
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -12,6 +14,7 @@ from app.middleware.auth import get_current_user
 from app.models.user import User
 from app.services.bot_service import query_bot, clear_history
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 SUPPORTED_ROLES = {"admin", "user", "shop", "shipper"}
@@ -54,12 +57,19 @@ def bot_query(
             detail="Vai trò của bạn chưa được hỗ trợ chatbot",
         )
 
-    reply = query_bot(
-        message=body.message.strip(),
-        role=role,
-        user=current_user,
-        db=db,
-    )
+    try:
+        reply = query_bot(
+            message=body.message.strip(),
+            role=role,
+            user=current_user,
+            db=db,
+        )
+    except Exception:
+        # query_bot() đã tự bắt lỗi Gemini/tool ở bên trong — nhánh này chỉ
+        # phòng hờ lỗi phát sinh ngoài dự kiến, để chat không bao giờ trả 500
+        # thô cho người dùng.
+        logger.exception("[bot] Lỗi không mong muốn khi xử lý /bot/query (user_id=%s)", current_user.user_id)
+        reply = "⚠️ Xin lỗi, có lỗi xảy ra khi xử lý câu hỏi này. Bạn thử lại sau ít phút nhé."
     return BotQueryResponse(reply=reply, role=role)
 
 

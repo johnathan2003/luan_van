@@ -17,14 +17,21 @@ from app.services.bot_tools import execute_tool, ACTION_TOOLS
 logger = logging.getLogger(__name__)
 
 # ── Model selection ────────────────────────────────────────────────────────────
-# gemini-1.5-* đã bị retire. gemini-2.5-* không cấp cho API key/tài khoản mới nữa.
-# Dùng dòng Gemini 3 (stable, hỗ trợ tốt agentic/function-calling).
-_FLASH = "gemini-3.5-flash"
-_PRO   = "gemini-3.5-flash"  # Gemini 3.1 Pro hiện chỉ ở dạng Preview, chưa dùng cho production
+# gemini-1.5-* đã bị retire.
+# LƯU Ý QUOTA (đã gặp lỗi 429 thực tế — xem docker logs):
+#   gemini-3.5-flash  free tier chỉ  20 requests/NGÀY  → hết quota chỉ sau vài câu hỏi.
+#   gemini-2.5-flash  free tier      ~1.500 requests/ngày (theo tài liệu Google, có thể đổi).
+# → Dùng gemini-2.5-flash làm mặc định cho tất cả role: vẫn hỗ trợ đầy đủ
+#   function-calling, quota rộng rãi hơn nhiều cho demo/luận văn.
+# Nếu vẫn hết quota thường xuyên: bật billing cho project (Google AI Studio →
+# Billing) để chuyển sang usage tier trả phí — chi phí model Flash rất rẻ,
+# và giới hạn requests/ngày của free tier sẽ không còn áp dụng nữa.
+_FLASH = "gemini-2.5-flash"
+_PRO   = "gemini-2.5-flash"  # Gemini 2.5 Pro free tier chỉ ~50 req/ngày → dùng chung Flash cho ổn định
 
 def _model_for_role(role: str) -> str:
-    # Free tier gemini-2.5-pro có quota rất thấp → tạm dùng Flash cho mọi role.
-    # Muốn bật lại Pro cho admin: cần billing account, đổi lại `return _PRO if role == "admin" else _FLASH`.
+    # Muốn bật lại Pro riêng cho admin (cần quota/billing rộng hơn):
+    # đổi lại `return _PRO if role == "admin" else _FLASH`.
     return _FLASH
 
 
@@ -189,6 +196,11 @@ _SHOP_TOOLS = [
                 "period": {"type": "STRING", "description": "today | week | month"},
             },
         },
+    },
+    {
+        "name": "shop_get_product_count",
+        "description": "Đếm tổng số sản phẩm của shop, chia theo trạng thái (active, approved, pending, rejected, archived). Dùng khi được hỏi 'shop có bao nhiêu sản phẩm'.",
+        "parameters": {"type": "OBJECT", "properties": {}},
     },
     {
         "name": "shop_get_low_stock",
@@ -397,6 +409,34 @@ def clear_history(user_id: int) -> None:
         pass
 
 
+# ── Full-reply cache (câu hỏi lặp lại — khỏi gọi Gemini lần nữa) ───────────────
+# Khác với cache tool ở trên (chỉ cache KẾT QUẢ TRUY VẤN DB), cache này lưu
+# THẲNG câu trả lời cuối cùng đã được model soạn — nếu user hỏi lại y hệt câu
+# đã hỏi gần đây thì trả lời ngay, không tốn round-trip gọi Gemini nữa.
+# TTL ngắn (90s) vì dữ liệu (đơn hàng, tồn kho...) có thể đổi liên tục.
+_REPLY_TTL = 90
+
+
+def _reply_cache_key(role: str, user_id: int, message: str) -> str:
+    norm = " ".join(message.strip().lower().split())
+    raw = f"{role}:{user_id}:{norm}"
+    return "bot:reply:" + hashlib.md5(raw.encode()).hexdigest()
+
+
+def _get_reply_cache(key: str) -> str | None:
+    try:
+        return _redis_client().get(key)
+    except Exception:
+        return None
+
+
+def _set_reply_cache(key: str, reply: str) -> None:
+    try:
+        _redis_client().setex(key, _REPLY_TTL, reply)
+    except Exception:
+        pass
+
+
 # ── Main query function ────────────────────────────────────────────────────────
 def query_bot(message: str, role: str, user: Any, db: Session) -> str:
     if not settings.GEMINI_API_KEY:
@@ -410,88 +450,119 @@ def query_bot(message: str, role: str, user: Any, db: Session) -> str:
     if not tool_defs:
         return "Vai trò này chưa được hỗ trợ chatbot."
 
-    # Build Gemini tool object
-    gemini_tools = genai.protos.Tool(
-        function_declarations=[
-            genai.protos.FunctionDeclaration(**t) for t in tool_defs
-        ]
-    )
+    # Câu hỏi lặp lại y hệt gần đây (cùng role, cùng user) → trả lời ngay,
+    # khỏi gọi Gemini lại từ đầu.
+    reply_key = _reply_cache_key(role, user.user_id, message)
+    cached_reply = _get_reply_cache(reply_key)
+    if cached_reply is not None:
+        logger.debug("[bot] reply cache HIT")
+        stored_hist = _get_history(user.user_id)
+        _save_history(user.user_id, stored_hist + [
+            {"role": "user",  "text": message},
+            {"role": "model", "text": cached_reply},
+        ])
+        return cached_reply
 
-    model = genai.GenerativeModel(
-        model_name=_model_for_role(role),
-        tools=[gemini_tools],
-        system_instruction=_system_prompt(role, user),
-    )
-
-    # Load conversation history (text-only, skip tool rounds)
+    # Load conversation history (text-only, skip tool rounds) — luôn lấy trước
+    # try/except để vẫn có stored_hist dùng lưu lịch sử dù có lỗi xảy ra sau đó.
     stored_hist = _get_history(user.user_id)
-    gemini_history = [
-        {"role": h["role"], "parts": [h["text"]]}
-        for h in stored_hist
-    ]
-
-    chat = model.start_chat(history=gemini_history)
 
     MAX_TOOL_ROUNDS = 5
     current_message: Any = message
     final_reply = ""
+    used_action_tool = False
 
-    for _ in range(MAX_TOOL_ROUNDS):
-        response = chat.send_message(current_message)
-        candidate = response.candidates[0]
+    try:
+        # Build Gemini tool object
+        gemini_tools = genai.protos.Tool(
+            function_declarations=[
+                genai.protos.FunctionDeclaration(**t) for t in tool_defs
+            ]
+        )
 
-        # Collect all function calls in this turn
-        fn_calls = [
-            part.function_call
-            for part in candidate.content.parts
-            if part.function_call.name  # non-empty name = actual call
+        model = genai.GenerativeModel(
+            model_name=_model_for_role(role),
+            tools=[gemini_tools],
+            system_instruction=_system_prompt(role, user),
+        )
+
+        gemini_history = [
+            {"role": h["role"], "parts": [h["text"]]}
+            for h in stored_hist
         ]
 
-        if not fn_calls:
-            # No more tool calls — return text
-            text_parts = [
-                part.text
+        chat = model.start_chat(history=gemini_history)
+
+        for _ in range(MAX_TOOL_ROUNDS):
+            response = chat.send_message(current_message)
+            candidate = response.candidates[0]
+
+            # Collect all function calls in this turn
+            fn_calls = [
+                part.function_call
                 for part in candidate.content.parts
-                if hasattr(part, "text") and part.text
+                if part.function_call.name  # non-empty name = actual call
             ]
-            final_reply = "\n".join(text_parts).strip() or "Không có phản hồi."
-            break
 
-        # Execute all function calls, build response parts
-        fn_response_parts = []
-        for fc in fn_calls:
-            fn_name = fc.name
-            fn_args = dict(fc.args)
+            if not fn_calls:
+                # No more tool calls — return text
+                text_parts = [
+                    part.text
+                    for part in candidate.content.parts
+                    if hasattr(part, "text") and part.text
+                ]
+                final_reply = "\n".join(text_parts).strip() or "Không có phản hồi."
+                break
 
-            # Skip cache for action tools (they write to DB)
-            if fn_name in ACTION_TOOLS:
-                result = execute_tool(fn_name, fn_args, db, user)
-            else:
-                cache_key = _cache_key(role, user.user_id, fn_name, fn_args)
-                cached = _get_cache(cache_key)
-                if cached is not None:
-                    result = cached
-                    logger.debug(f"[bot] cache HIT: {fn_name}")
-                else:
+            # Execute all function calls, build response parts
+            fn_response_parts = []
+            for fc in fn_calls:
+                fn_name = fc.name
+                fn_args = dict(fc.args)
+
+                if fn_name in ACTION_TOOLS:
+                    used_action_tool = True
                     result = execute_tool(fn_name, fn_args, db, user)
-                    _set_cache(cache_key, result, ttl=300)
+                else:
+                    cache_key = _cache_key(role, user.user_id, fn_name, fn_args)
+                    cached = _get_cache(cache_key)
+                    if cached is not None:
+                        result = cached
+                        logger.debug(f"[bot] cache HIT: {fn_name}")
+                    else:
+                        result = execute_tool(fn_name, fn_args, db, user)
+                        _set_cache(cache_key, result, ttl=300)
 
-            fn_response_parts.append(
-                genai.protos.Part(
-                    function_response=genai.protos.FunctionResponse(
-                        name=fn_name,
-                        response={"result": result},
+                fn_response_parts.append(
+                    genai.protos.Part(
+                        function_response=genai.protos.FunctionResponse(
+                            name=fn_name,
+                            response={"result": result},
+                        )
                     )
                 )
-            )
 
-        # Feed results back as a single Content message
-        current_message = genai.protos.Content(
-            role="user",
-            parts=fn_response_parts,
-        )
-    else:
-        final_reply = "Xin lỗi, tôi không thể xử lý yêu cầu này lúc này."
+            # Feed results back as a single Content message
+            current_message = genai.protos.Content(
+                role="user",
+                parts=fn_response_parts,
+            )
+        else:
+            final_reply = "Xin lỗi, tôi không thể xử lý yêu cầu này lúc này."
+    except Exception as e:
+        from google.api_core.exceptions import ResourceExhausted
+        if isinstance(e, ResourceExhausted):
+            logger.warning("[bot] Gemini quota exceeded (role=%s, user_id=%s): %s", role, user.user_id, e)
+            final_reply = "⚠️ Chatbot đang tạm hết lượt sử dụng miễn phí trong ngày, vui lòng thử lại sau ít phút hoặc liên hệ Admin để nâng cấp."
+        else:
+            logger.exception("[bot] Lỗi khi gọi Gemini / xử lý function-calling (role=%s, user_id=%s, message=%r)",
+                              role, user.user_id, message)
+            final_reply = "⚠️ Xin lỗi, có lỗi xảy ra khi xử lý câu hỏi này. Bạn thử hỏi lại theo cách khác hoặc thử lại sau ít phút nhé."
+
+    # Câu hỏi thông tin thuần (không ghi DB) → cache thẳng câu trả lời cuối để
+    # lần hỏi lại y hệt (trong ít phút) không cần gọi Gemini nữa.
+    if final_reply and not used_action_tool:
+        _set_reply_cache(reply_key, final_reply)
 
     # Persist conversation history (user message + bot reply, text only)
     if final_reply:

@@ -57,6 +57,7 @@ const ADMIN_NAV: NavGroup[] = [
     group: 'Tài chính',
     items: [
       { icon: '💰', label: 'Doanh Thu Hệ Thống',     path: '/admin/finance' },
+      { icon: '🏦', label: 'Ví & Nạp Tiền Shop',    path: '/admin/wallet' },
       { icon: '🎫', label: 'Mã Giảm Giá',       path: '/admin/vouchers' },
     ],
   },

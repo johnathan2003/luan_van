@@ -18,11 +18,39 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.middleware.auth import get_current_user, require_shop_owner, require_admin_or_superadmin
-from app.models.user import User
+from app.middleware.auth import get_current_user, require_shop_owner, require_admin_or_superadmin, require_superadmin
+from app.models.user import User, Role, UserRole
 from app.models.wallet_auction import ShopWallet, ShopWalletTransaction
 from app.models.shop import Shop
 from app.utils.helpers import paginate
+from app.services.notification_service import create_notification
+
+# ref_type của các giao dịch nạp tiền THẬT SỰ cần admin duyệt (không tính tiền
+# doanh thu đơn hàng tự động cộng vào ví — payout_service.py cũng dùng
+# txn_type="deposit" cho doanh thu, nhưng ref_type="order_completed" nên phải
+# lọc riêng để không lẫn vào hàng chờ duyệt nạp tiền thủ công).
+MANUAL_DEPOSIT_REF_TYPES = ["manual", "mock_deposit"]
+
+
+def _notify_admins_new_deposit(db: Session, shop_name: str, amount: Decimal, txn_id: int):
+    """Báo cho toàn bộ admin/superadmin đang active khi có shop nộp yêu cầu nạp tiền."""
+    admin_ids = db.query(User.user_id).join(UserRole, UserRole.user_id == User.user_id).join(
+        Role, Role.role_id == UserRole.role_id
+    ).filter(
+        Role.role_name.in_(["admin", "superadmin"]),
+        UserRole.status == "active",
+        User.status == "active",
+    ).distinct().all()
+    for (uid,) in admin_ids:
+        create_notification(
+            db, user_id=uid,
+            title="💰 Yêu cầu nạp tiền mới",
+            message=f"Shop {shop_name} vừa gửi yêu cầu nạp {float(amount):,.0f}đ vào ví — chờ duyệt.",
+            notif_type="wallet_deposit",
+            related_entity_type="wallet_txn",
+            related_entity_id=txn_id,
+            action_url="/admin/wallet",
+        )
 
 router = APIRouter(prefix="/api/v1/wallet", tags=["Wallet"])
 
@@ -137,6 +165,10 @@ def request_deposit(
     db.add(txn)
     db.commit()
     db.refresh(txn)
+
+    shop = db.query(Shop).filter(Shop.shop_id == current_user.user_id).first()
+    _notify_admins_new_deposit(db, shop.shop_name if shop else f"#{current_user.user_id}", amount, txn.txn_id)
+
     return {
         "message": "Yêu cầu nạp tiền đã gửi — admin sẽ phê duyệt sớm",
         "txn_id": txn.txn_id,
@@ -156,7 +188,8 @@ def list_deposit_requests(
     db: Session = Depends(get_db),
 ):
     query = db.query(ShopWalletTransaction).filter(
-        ShopWalletTransaction.txn_type.in_(["deposit_pending", "deposit"])
+        ShopWalletTransaction.txn_type.in_(["deposit_pending", "deposit", "deposit_rejected"]),
+        ShopWalletTransaction.ref_type.in_(MANUAL_DEPOSIT_REF_TYPES),
     )
     if status == "pending":
         query = query.filter(ShopWalletTransaction.txn_type == "deposit_pending")
@@ -196,6 +229,17 @@ def approve_deposit(
     txn.note = (txn.note or "") + f" [Duyệt bởi admin #{current_user.user_id}]"
 
     db.commit()
+
+    create_notification(
+        db, user_id=txn.shop_id,
+        title="✅ Yêu cầu nạp tiền đã được duyệt",
+        message=f"Yêu cầu nạp {float(txn.amount):,.0f}đ đã được duyệt — tiền đã vào ví.",
+        notif_type="wallet_deposit_approved",
+        related_entity_type="wallet_txn",
+        related_entity_id=txn.txn_id,
+        action_url="/shop/wallet",
+    )
+
     return {
         "message": "Đã phê duyệt — tiền đã vào ví shop",
         "txn_id":  txn_id,
@@ -208,10 +252,11 @@ def approve_deposit(
 def admin_list_wallets(
     page:  int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(require_admin_or_superadmin),
+    current_user: User = Depends(require_superadmin),
     db: Session = Depends(get_db),
 ):
-    """Admin xem tất cả ví shop."""
+    """Chỉ Superadmin xem được tổng số dư ví của từng shop.
+    Admin thường chỉ thấy hàng chờ duyệt nạp tiền (từng lần nạp), không thấy tổng ví."""
     query = db.query(ShopWallet).order_by(ShopWallet.balance.desc())
     items, total, pages = paginate(query, page, limit)
     result = []
@@ -242,4 +287,15 @@ def reject_deposit(
     txn.txn_type = "deposit_rejected"
     txn.note = f"Từ chối: {reason}"
     db.commit()
+
+    create_notification(
+        db, user_id=txn.shop_id,
+        title="❌ Yêu cầu nạp tiền bị từ chối",
+        message=f"Yêu cầu nạp {float(txn.amount):,.0f}đ đã bị từ chối. Lý do: {reason}",
+        notif_type="wallet_deposit_rejected",
+        related_entity_type="wallet_txn",
+        related_entity_id=txn.txn_id,
+        action_url="/shop/wallet",
+    )
+
     return {"message": "Đã từ chối yêu cầu nạp tiền", "txn_id": txn_id}

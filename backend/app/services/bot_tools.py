@@ -316,6 +316,29 @@ def shop_get_top_products(db: Session, user: Any, metric: str = "sales", period:
     }
 
 
+def shop_get_product_count(db: Session, user: Any) -> dict:
+    """Tổng số sản phẩm của shop, chia theo trạng thái (active/approved/pending/rejected/archived)."""
+    from app.models.product import Product
+    shop_id = _shop_id_for(db, user)
+    if not shop_id:
+        return {"error": "Không tìm thấy shop"}
+    rows = (
+        db.query(Product.status, func.count(Product.product_id))
+        .filter(Product.shop_id == shop_id, Product.deleted_at.is_(None))
+        .group_by(Product.status)
+        .all()
+    )
+    by_status = {status: count for status, count in rows}
+    return {
+        "total_products": sum(by_status.values()),
+        "active":   by_status.get("active", 0),
+        "approved": by_status.get("approved", 0),
+        "pending":  by_status.get("pending", 0),
+        "rejected": by_status.get("rejected", 0),
+        "archived": by_status.get("archived", 0),
+    }
+
+
 def shop_get_pending_orders(db: Session, user: Any, limit: int = 10) -> dict:
     from app.models.order import Order
     shop_id = _shop_id_for(db, user)
@@ -599,6 +622,7 @@ TOOL_MAP = {
     "user_cancel_order":          user_cancel_order,
     # Shop — read
     "shop_get_stats":             shop_get_stats,
+    "shop_get_product_count":     shop_get_product_count,
     "shop_get_low_stock":         shop_get_low_stock,
     "shop_get_top_products":      shop_get_top_products,
     "shop_get_pending_orders":    shop_get_pending_orders,

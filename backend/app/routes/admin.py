@@ -645,6 +645,32 @@ def update_employee_permissions(
     return {"message": f"Đã cập nhật {len(new_perms)} quyền cho nhân viên #{emp_id}"}
 
 
+@router.post("/system-employees/{emp_id}/reset-password")
+def reset_sys_employee_password(
+    emp_id: int,
+    current_user: User = Depends(require_admin), db: Session = Depends(get_db),
+):
+    """Đặt lại mật khẩu nhân viên hệ thống về mặc định (= phần trước @ trong email)."""
+    from app.models.shop import SystemEmployee
+    from app.utils.security import hash_password
+
+    emp = db.query(SystemEmployee).filter(SystemEmployee.emp_id == emp_id).first()
+    if not emp:
+        raise HTTPException(404, "Nhân viên không tồn tại")
+    user = db.query(User).filter(User.user_id == emp.user_id).first()
+    if not user:
+        raise HTTPException(404, "Không tìm thấy tài khoản")
+
+    local_part = user.email.split("@")[0]
+    user.password_hash = hash_password(local_part)
+    db.commit()
+    return {
+        "message": f"Đã đặt lại mật khẩu về mặc định cho {emp.emp_name}",
+        "email": user.email,
+        "password": local_part,
+    }
+
+
 @router.delete("/system-employees/{emp_id}")
 def delete_sys_employee(
     emp_id: int,

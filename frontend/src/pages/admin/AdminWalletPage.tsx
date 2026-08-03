@@ -8,7 +8,9 @@
  */
 import React, { useEffect, useState, useCallback } from 'react'
 import { toast } from 'react-toastify'
+import { useSelector } from 'react-redux'
 import API from '../../services/api'
+import type { RootState } from '../../store/store'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface DepositTxn {
@@ -51,6 +53,9 @@ const btn = (bg: string, color = 'white'): React.CSSProperties => ({
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 const AdminWalletPage: React.FC = () => {
+  const currentUser = useSelector((s: RootState) => s.auth.user)
+  const isSuperadmin = currentUser?.roles?.includes('superadmin') || false
+
   const [tab, setTab] = useState<'deposits' | 'wallets'>('deposits')
 
   // Deposits
@@ -96,7 +101,7 @@ const AdminWalletPage: React.FC = () => {
   }, [walletPage])
 
   useEffect(() => { if (tab === 'deposits') loadDeposits() }, [tab, loadDeposits])
-  useEffect(() => { if (tab === 'wallets')  loadWallets()  }, [tab, loadWallets])
+  useEffect(() => { if (tab === 'wallets' && isSuperadmin) loadWallets() }, [tab, isSuperadmin, loadWallets])
 
   const approve = async (txn_id: number) => {
     setProcessing(txn_id)
@@ -129,7 +134,11 @@ const AdminWalletPage: React.FC = () => {
   return (
     <div style={{ maxWidth: 960 }}>
       <h2 style={{ marginBottom: 4 }}>💰 Quản lý Ví tiền Shop</h2>
-      <p style={{ color: C.gray, fontSize: 13, marginBottom: 20 }}>Duyệt yêu cầu nạp tiền và xem số dư ví của từng shop.</p>
+      <p style={{ color: C.gray, fontSize: 13, marginBottom: 20 }}>
+        {isSuperadmin
+          ? 'Duyệt yêu cầu nạp tiền và xem số dư ví của từng shop.'
+          : 'Duyệt các lần nạp tiền của shop. Tổng số dư ví chỉ Superadmin mới xem được.'}
+      </p>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
@@ -139,7 +148,9 @@ const AdminWalletPage: React.FC = () => {
             <span style={{ marginLeft: 6, background: C.orange, color: 'white', borderRadius: 999, padding: '0 7px', fontSize: 11 }}>{depositTotal}</span>
           )}
         </button>
-        <button style={tabBtn('wallets', '')} onClick={() => setTab('wallets')}>🏦 Ví của tất cả shop</button>
+        {isSuperadmin && (
+          <button style={tabBtn('wallets', '')} onClick={() => setTab('wallets')}>🏦 Ví của tất cả shop</button>
+        )}
       </div>
 
       {/* ── DEPOSITS TAB ─────────────────────────────────────────────────────── */}
@@ -226,8 +237,8 @@ const AdminWalletPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── WALLETS TAB ──────────────────────────────────────────────────────── */}
-      {tab === 'wallets' && (
+      {/* ── WALLETS TAB (chỉ Superadmin) ────────────────────────────────────── */}
+      {tab === 'wallets' && isSuperadmin && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
             <span style={{ color: C.gray, fontSize: 13 }}>Tổng {walletTotal} shop có ví</span>

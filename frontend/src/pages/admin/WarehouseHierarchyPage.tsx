@@ -207,7 +207,7 @@ const AssignManagerModal: React.FC<{
               value={query}
               onChange={e => search(e.target.value)}
               placeholder="VD: Nguyễn Văn A hoặc a@email.com"
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 9, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }}
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 9, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 8, background: '#fff', color: '#1E293B' }}
             />
 
             {/* Results */}
@@ -255,11 +255,11 @@ const AssignManagerModal: React.FC<{
           <>
             <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 6 }}>Họ tên</label>
             <input value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="Nguyễn Văn A"
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 9, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }} />
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 9, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 10, background: '#fff', color: '#1E293B' }} />
 
             <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 6 }}>Tài khoản</label>
             <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="vd: Kho"
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 9, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 9, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 8, background: '#fff', color: '#1E293B' }} />
 
             <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 16px' }}>
               📌 Email sẽ tự sinh dạng: <b>{newUsername || '...'}</b>cap{warehouse.tier}<b>MÃKHO</b>@buyzo.com — mật khẩu = toàn bộ phần trước @.

@@ -260,7 +260,7 @@ const CreateForm: React.FC<CreateFormProps> = ({ allowedTiers, onSuccess }) => {
 
 const iStyle: React.CSSProperties = {
   padding: '6px 10px', borderRadius: 6, border: '1px solid #CBD5E1',
-  fontSize: 13, outline: 'none', background: '#fff',
+  fontSize: 13, outline: 'none', background: '#fff', color: '#1E293B',
 }
 
 interface NodeCardProps {
@@ -270,9 +270,10 @@ interface NodeCardProps {
   onRefresh: () => void
   onToggle: (userId: number) => void
   onGrantToggle: (node: WHAccount) => void
+  onResetPassword: (node: WHAccount) => void
 }
 
-const NodeCard: React.FC<NodeCardProps> = ({ node, currentUserId, isAdmin, onRefresh, onToggle, onGrantToggle }) => {
+const NodeCard: React.FC<NodeCardProps> = ({ node, currentUserId, isAdmin, onRefresh, onToggle, onGrantToggle, onResetPassword }) => {
   const displayTier = node.tier
   const color = TIER_COLOR[displayTier]
   const bg    = TIER_BG[displayTier]
@@ -283,6 +284,8 @@ const NodeCard: React.FC<NodeCardProps> = ({ node, currentUserId, isAdmin, onRef
   // Ai được cấp/thu hồi quyền tự tạo cho 1 hub: admin, hoặc chính người đã tạo ra hub đó
   const canManageGrant = displayTier === 'hub' && (isAdmin || node.created_by === currentUserId)
   const hasGrant = node.permissions.includes('warehouse_create_district')
+  const hasChildren = node.children.length > 0
+  const [collapsed, setCollapsed] = useState(false)
 
   const indent = node.depth * 28
 
@@ -304,6 +307,11 @@ const NodeCard: React.FC<NodeCardProps> = ({ node, currentUserId, isAdmin, onRef
       }}>
         {/* Header row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {hasChildren && (
+            <button onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng cấp dưới' : 'Ẩn cấp dưới'} style={{
+              background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#64748B', padding: '2px 4px',
+            }}>{collapsed ? '▶' : '▼'}</button>
+          )}
           <span style={{ fontSize: 20 }}>
             {displayTier === 'dept' ? '🏢' : displayTier === 'hub' ? '🏭' : displayTier === 'district' ? '🏪' : '🏠'}
           </span>
@@ -330,6 +338,13 @@ const NodeCard: React.FC<NodeCardProps> = ({ node, currentUserId, isAdmin, onRef
               border: `1px solid ${hasGrant ? '#DC2626' : '#1D4ED8'}44`,
               cursor: 'pointer', whiteSpace: 'nowrap',
             }}>{hasGrant ? '🔓 Thu hồi quyền tạo' : '🔒 Cho phép tạo cấp 2/3'}</button>
+          )}
+          {(isAdmin || node.created_by === currentUserId) && (
+            <button onClick={() => onResetPassword(node)} style={{
+              fontSize: 11, padding: '3px 10px', borderRadius: 6,
+              background: '#FFF7ED', color: '#C2410C', border: '1px solid #C2410C44',
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}>🔑 Reset mật khẩu</button>
           )}
           {isAdmin && (
             <button onClick={() => onToggle(node.user_id)} style={{
@@ -360,11 +375,12 @@ const NodeCard: React.FC<NodeCardProps> = ({ node, currentUserId, isAdmin, onRef
       </div>
 
       {/* Render children */}
-      {node.children.length > 0 && (
+      {hasChildren && !collapsed && (
         <div style={{ marginLeft: 14, marginTop: 4, borderLeft: `2px solid ${color}33`, paddingLeft: 12 }}>
           {node.children.map(child => (
             <NodeCard key={child.user_id} node={child} currentUserId={currentUserId}
-              isAdmin={isAdmin} onRefresh={onRefresh} onToggle={onToggle} onGrantToggle={onGrantToggle} />
+              isAdmin={isAdmin} onRefresh={onRefresh} onToggle={onToggle} onGrantToggle={onGrantToggle}
+              onResetPassword={onResetPassword} />
           ))}
         </div>
       )}
@@ -418,6 +434,16 @@ const WarehouseAccountTreePage: React.FC = () => {
       load()
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || 'Thao tác thất bại')
+    }
+  }
+
+  const handleResetPassword = async (acc: WHAccount) => {
+    if (!window.confirm(`Đặt lại mật khẩu về mặc định cho ${acc.full_name}?`)) return
+    try {
+      const res = await API.post(`/api/v1/warehouse-accounts/${acc.user_id}/reset-password`)
+      toast.success(`Mật khẩu mới: ${res.data.password}`, { autoClose: 10000 })
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Đặt lại mật khẩu thất bại')
     }
   }
 
@@ -524,6 +550,7 @@ const WarehouseAccountTreePage: React.FC = () => {
               onRefresh={load}
               onToggle={handleToggle}
               onGrantToggle={handleGrantToggle}
+              onResetPassword={handleResetPassword}
             />
           ))}
         </div>
