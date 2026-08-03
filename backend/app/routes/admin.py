@@ -189,8 +189,52 @@ def delete_shop(shop_id: int, current_user: User = Depends(require_admin), db: S
         raise HTTPException(status_code=404, detail="Shop không tồn tại")
 
     try:
-        db.execute(text("UPDATE products SET status='archived' WHERE shop_id=:sid"), {"sid": shop_id})
-        db.execute(text("DELETE FROM shops WHERE shop_id=:sid"), {"sid": shop_id})
+        # Cascade xóa đúng thứ tự để tránh FK violation
+        # Lấy danh sách product_id của shop
+        pid_sub = "SELECT product_id FROM products WHERE shop_id = :sid"
+
+        # 1. carts → products
+        db.execute(text(f"DELETE FROM carts WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 2. product_reviews → products
+        db.execute(text(f"DELETE FROM product_reviews WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 3. stock_reservations → products
+        db.execute(text(f"DELETE FROM stock_reservations WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 4. product_deletion_audit_log → product_deletion_requests → products
+        db.execute(text(f"""
+            DELETE FROM product_deletion_audit_log
+            WHERE request_id IN (
+                SELECT request_id FROM product_deletion_requests WHERE product_id IN ({pid_sub})
+            )
+        """), {"sid": shop_id})
+        db.execute(text(f"DELETE FROM product_deletion_requests WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 5. order_items → products
+        db.execute(text(f"DELETE FROM order_items WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 6. product_variants → products
+        db.execute(text(f"DELETE FROM product_variants WHERE product_id IN ({pid_sub})"), {"sid": shop_id})
+        # 7. products → shops
+        db.execute(text("DELETE FROM products WHERE shop_id = :sid"), {"sid": shop_id})
+        # 8. banner_bids của shop (shop_id FK, DB có CASCADE nhưng xóa tường minh cho chắc)
+        db.execute(text("DELETE FROM banner_bids WHERE shop_id = :sid"), {"sid": shop_id})
+        # 9. shop_employees → shops (không có ON DELETE CASCADE)
+        db.execute(text("DELETE FROM employee_role_permissions WHERE employee_id IN (SELECT employee_id FROM shop_employees WHERE shop_id = :sid)"), {"sid": shop_id})
+        db.execute(text("DELETE FROM shop_employees WHERE shop_id = :sid"), {"sid": shop_id})
+        # 10. shop_wallet_transactions & shop_wallet (có ON DELETE CASCADE, nhưng xóa tường minh)
+        db.execute(text("DELETE FROM shop_wallet_transactions WHERE shop_id = :sid"), {"sid": shop_id})
+        db.execute(text("DELETE FROM shop_wallet WHERE shop_id = :sid"), {"sid": shop_id})
+        # 11. vouchers (FK tới users.user_id, không cascade)
+        db.execute(text("DELETE FROM vouchers WHERE created_by = :sid"), {"sid": shop_id})
+        # 12. shop_registrations (FK tới users, không xóa tự động)
+        db.execute(text("DELETE FROM shop_registrations WHERE user_id = :sid"), {"sid": shop_id})
+        # 13. Xóa role 'shop' khỏi user_roles — dùng USING JOIN cho chắc
+        db.execute(text("""
+            DELETE FROM user_roles
+            USING roles
+            WHERE user_roles.role_id = roles.role_id
+              AND roles.role_name = 'shop'
+              AND user_roles.user_id = :sid
+        """), {"sid": shop_id})
+        # 14. Cuối cùng xóa shop (banner_auctions.winner_shop_id sẽ SET NULL tự động)
+        db.execute(text("DELETE FROM shops WHERE shop_id = :sid"), {"sid": shop_id})
         db.commit()
     except Exception as e:
         db.rollback()
@@ -249,7 +293,18 @@ def shop_regs(
     items, total, pages = get_shop_registrations(db, page, limit, status)
     return {
         "registrations": [
-            {"reg_id": r.reg_id, "user_id": r.user_id, "shop_name": r.shop_name, "status": r.status, "created_at": str(r.created_at)}
+            {
+                "reg_id":            r.reg_id,
+                "user_id":           r.user_id,
+                "full_name":         r.user.full_name if r.user else None,
+                "shop_name":         r.shop_name,
+                "description":       r.description,
+                "address":           r.address,
+                "product_images":    r.product_images,
+                "business_reg_url":  r.business_reg_url,
+                "status":            r.status,
+                "created_at":        r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else None,
+            }
             for r in items
         ],
         "total": total,
@@ -278,7 +333,25 @@ def shipper_regs(
     items, total, pages = get_shipper_registrations(db, page, limit, status)
     return {
         "registrations": [
-            {"reg_id": r.reg_id, "user_id": r.user_id, "vehicle_type": r.vehicle_type, "status": r.status}
+            {
+                "reg_id":           r.reg_id,
+                "user_id":          r.user_id,
+                "full_name":        r.user.full_name if r.user else None,
+                "email":            r.user.email if r.user else None,
+                "phone":            r.user.phone if r.user else None,
+                "vehicle_type":     r.vehicle_type,
+                "license_plate":    r.license_plate,
+                "shipper_type":     r.shipper_type,
+                "zone_province":    r.zone_province,
+                "zone_district":    getattr(r, "zone_district", None),
+                "zone_ward":        getattr(r, "zone_ward", None),
+                "license_url":      r.license_url,
+                "registration_url": r.registration_url,
+                "vehicle_photo_url": getattr(r, "vehicle_photo_url", None),
+                "status":           r.status,
+                "created_at":       str(r.created_at) if r.created_at else None,
+                "rejection_reason": r.rejection_reason,
+            }
             for r in items
         ],
         "total": total,

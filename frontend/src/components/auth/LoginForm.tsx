@@ -30,86 +30,111 @@ const LoginForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setValidErr('')
-
     if (DANGEROUS.test(form.email) || DANGEROUS.test(form.password)) {
       setValidErr('Không được dùng ký tự: < > ? / : ; " \' | \\')
       return
     }
-
     const result = await dispatch(login(form))
     if (login.fulfilled.match(result)) {
       const user: any = result.payload?.user
       const roles: string[] = (user?.roles ?? []).map((r: any) => r.role_name)
       const primary = user?.current_role ?? roles[0]
-
       toast.success('Đăng nhập thành công!')
-
       if (primary === 'superadmin' || primary === 'admin') navigate('/admin')
       else if (primary === 'shop')     navigate('/shop')
       else if (primary === 'shipper')  navigate('/shipper')
       else if (primary === 'employee') navigate('/employee')
       else navigate('/')
     } else {
-      const errMsg = result.payload as string || 'Đăng nhập thất bại'
-      setValidErr(errMsg)
-      console.error('[LOGIN ERROR]', result)
+      setValidErr(result.payload as string || 'Đăng nhập thất bại')
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div>
-        <label className="input-label">Email / Tên đăng nhập</label>
-        <input
-          className="input"
-          type="text"
-          value={form.email}
-          onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-          placeholder="email@example.com hoặc admin"
-          required
-          autoComplete="username"
-        />
-      </div>
+    <>
+      <style>{`
+        @keyframes fieldIn {
+          from { opacity: 0; transform: translateY(14px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .auth-field {
+          animation: fieldIn 0.4s cubic-bezier(0.22,1,0.36,1) both;
+        }
+        .auth-submit {
+          transition: transform 0.15s, box-shadow 0.15s !important;
+        }
+        .auth-submit:hover:not(:disabled) {
+          transform: translateY(-2px) !important;
+          box-shadow: 0 6px 20px rgba(124,58,237,0.35) !important;
+        }
+        .auth-submit:active:not(:disabled) {
+          transform: scale(0.98) !important;
+        }
+      `}</style>
 
-      <div>
-        <label className="input-label">Mật khẩu</label>
-        <div style={{ position: 'relative' }}>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        <div className="auth-field" style={{ animationDelay: '0.05s' }}>
+          <label className="input-label">Email / Tên đăng nhập</label>
           <input
             className="input"
-            type={showPw ? 'text' : 'password'}
-            value={form.password}
-            onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-            placeholder="••••••"
+            type="text"
+            value={form.email}
+            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+            placeholder="email@example.com hoặc admin"
             required
-            autoComplete="current-password"
-            style={{ paddingRight: 40 }}
+            autoComplete="username"
           />
+        </div>
+
+        <div className="auth-field" style={{ animationDelay: '0.12s' }}>
+          <label className="input-label">Mật khẩu</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              className="input"
+              type={showPw ? 'text' : 'password'}
+              value={form.password}
+              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+              placeholder="••••••"
+              required
+              autoComplete="current-password"
+              style={{ paddingRight: 40 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw(v => !v)}
+              style={{
+                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--gray-400)', padding: 0, display: 'flex', alignItems: 'center',
+              }}
+              tabIndex={-1}
+            >
+              <EyeIcon open={showPw} />
+            </button>
+          </div>
+        </div>
+
+        {validErr && (
+          <p style={{ color: '#DC2626', fontSize: 13, margin: 0 }}>{validErr}</p>
+        )}
+
+        <div className="auth-field" style={{ display: 'flex', justifyContent: 'flex-end', animationDelay: '0.18s' }}>
+          <Link to="/forgot-password" style={{ fontSize: 13, color: 'var(--primary)' }}>Quên mật khẩu?</Link>
+        </div>
+
+        <div className="auth-field" style={{ animationDelay: '0.24s' }}>
           <button
-            type="button"
-            onClick={() => setShowPw(v => !v)}
-            style={{
-              position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--gray-400)', padding: 0, display: 'flex', alignItems: 'center',
-            }}
-            tabIndex={-1}
-            title={showPw ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+            type="submit"
+            className="btn btn-primary btn-lg w-full auth-submit"
+            disabled={loading}
           >
-            <EyeIcon open={showPw} />
+            {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
           </button>
         </div>
-      </div>
 
-      {validErr && <p style={{ color: '#DC2626', fontSize: 13, margin: 0 }}>{validErr}</p>}
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <Link to="/forgot-password" style={{ fontSize: 13, color: 'var(--primary)' }}>Quên mật khẩu?</Link>
-      </div>
-
-      <button type="submit" className="btn btn-primary btn-lg w-full" disabled={loading}>
-        {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
-      </button>
-    </form>
+      </form>
+    </>
   )
 }
 

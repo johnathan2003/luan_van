@@ -59,6 +59,75 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+def _ensure_shop_registration_columns():
+    """Tự động thêm cột product_images vào bảng shop_registrations nếu chưa có."""
+    from sqlalchemy import text
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        exists = db.execute(text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name='shop_registrations' AND column_name='product_images'"
+        )).fetchone()
+        if not exists:
+            db.execute(text("ALTER TABLE shop_registrations ADD COLUMN product_images TEXT"))
+            db.commit()
+            logger.info("[startup] Added column shop_registrations.product_images")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[startup] Could not ensure shop_registrations columns: {e}")
+    finally:
+        db.close()
+
+
+def _ensure_variant_attrs_column():
+    """Thêm cột attrs_json vào product_variants nếu chưa có."""
+    from sqlalchemy import text
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        exists = db.execute(text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name='product_variants' AND column_name='attrs_json'"
+        )).fetchone()
+        if not exists:
+            db.execute(text("ALTER TABLE product_variants ADD COLUMN attrs_json TEXT"))
+            db.commit()
+            logger.info("[startup] Added column product_variants.attrs_json")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[startup] Could not ensure product_variants.attrs_json: {e}")
+    finally:
+        db.close()
+
+
+def _ensure_shipper_registration_columns():
+    """Thêm các cột mới vào shipper_registrations nếu chưa có."""
+    from sqlalchemy import text
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        cols = [
+            ("zone_district",    "VARCHAR(100)"),
+            ("zone_ward",        "VARCHAR(100)"),
+            ("vehicle_photo_url","VARCHAR(500)"),
+        ]
+        for col, col_type in cols:
+            exists = db.execute(text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name='shipper_registrations' AND column_name=:col"
+            ), {"col": col}).fetchone()
+            if not exists:
+                db.execute(text(f"ALTER TABLE shipper_registrations ADD COLUMN {col} {col_type}"))
+                db.commit()
+                logger.info(f"[startup] Added column shipper_registrations.{col}")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[startup] Could not ensure shipper_registration columns: {e}")
+    finally:
+        db.close()
+
+
 def _ensure_shop_status_columns():
     """Tự động thêm các cột status/suspended_reason/suspended_at vào bảng shops nếu chưa có."""
     from sqlalchemy import text
@@ -91,7 +160,10 @@ async def lifespan(app: FastAPI):
     init_main_loop()   # capture asyncio loop sớm nhất — trước mọi request
     logger.info(f"Starting E-Commerce API [{settings.ENVIRONMENT}]...")
     logger.info("Schema managed by Alembic. Skipping create_all().")
+    _ensure_shop_registration_columns()
     _ensure_shop_status_columns()
+    _ensure_variant_attrs_column()
+    _ensure_shipper_registration_columns()
     yield
     logger.info("Shutting down E-Commerce API...")
 

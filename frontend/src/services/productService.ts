@@ -14,6 +14,8 @@ export const productService = {
   requestDeletion: (id: number, reason: string) => API.post(`/api/v1/products/${id}/deletion-request`, { reason }),
   getCategories: () => API.get('/api/v1/products/categories'),
   createCategory: (data: any) => API.post('/api/v1/products/categories', data),
+  syncVariants: (productId: number, variants: any[]) =>
+    API.post(`/api/v1/products/${productId}/variants/sync`, variants),
   uploadImage: (file: File) => {
     const fd = new FormData(); fd.append('file', file)
     // Không set Content-Type thủ công — axios tự xoá để browser thêm boundary vào

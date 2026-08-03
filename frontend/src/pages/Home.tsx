@@ -525,7 +525,15 @@ const NewProductsSection: React.FC = () => {
 const Home: React.FC = () => {
   const dispatch = useAppDispatch()
   const [searchParams] = useSearchParams()
-  const { products, categories, filters, loading, total, pages, page } = useAppSelector(s => s.product)
+  const { products, categories, filters, loading, total, pages } = useAppSelector(s => s.product)
+
+  // ── Infinite scroll ────────────────────────────────────────────────────────
+  const [accProducts, setAccProducts] = useState<any[]>([])
+  const virtualPageRef  = useRef(1)
+  const totalPagesRef   = useRef(1)
+  const isMouseBelowRef = useRef(false)
+  const timerRef        = useRef<ReturnType<typeof setInterval> | null>(null)
+  const featuresRef     = useRef<HTMLDivElement>(null)
 
   // filterMountedRef: ngăn useEffect[filters] chạy lần render đầu tiên
   const filterMountedRef = useRef(false)
@@ -535,13 +543,61 @@ const Home: React.FC = () => {
     dispatch(fetchCategories())
     const search = searchParams.get('search')
     const params = { page: 1, limit: 12, sort: 'popular' as const, ...(search ? { search } : {}) }
-    dispatch(resetFilters(search ? { search } : undefined))  // sync filters state
-    dispatch(fetchProducts(params))                          // luôn fetch, không phụ thuộc cascade
+    dispatch(resetFilters(search ? { search } : undefined))
+    dispatch(fetchProducts(params))
   }, [])
+
+  // Khi Redux products thay đổi (do filter hoặc init) → reset acc list
+  useEffect(() => {
+    if (products.length > 0) {
+      setAccProducts(products)
+      virtualPageRef.current = 1
+    }
+  }, [products])
+
+  // Cập nhật totalPages khi Redux pages thay đổi
+  useEffect(() => { totalPagesRef.current = pages || 1 }, [pages])
+
+  // Mouse tracking — dừng khi chuột xuống dưới khu vực features
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!featuresRef.current) return
+      const rect = featuresRef.current.getBoundingClientRect()
+      isMouseBelowRef.current = e.clientY > rect.bottom
+    }
+    document.addEventListener('mousemove', onMove)
+    return () => document.removeEventListener('mousemove', onMove)
+  }, [])
+
+  // Auto-load mỗi 5s
+  useEffect(() => {
+    const loadNext = async () => {
+      if (isMouseBelowRef.current) return
+      const nextPage = virtualPageRef.current >= totalPagesRef.current
+        ? 1   // loop lại từ đầu
+        : virtualPageRef.current + 1
+      virtualPageRef.current = nextPage
+      try {
+        const params = new URLSearchParams()
+        const f = { ...filters, page: nextPage, limit: 12 }
+        Object.entries(f).forEach(([k, v]) => { if (v !== undefined && v !== null) params.set(k, String(v)) })
+        const res = await API.get(`/api/v1/products?${params}`)
+        const newItems: any[] = res.data?.products ?? []
+        if (newItems.length > 0) {
+          setAccProducts(prev => [...prev, ...newItems])
+        }
+      } catch { /* ignore */ }
+    }
+
+    timerRef.current = setInterval(loadNext, 5000)
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [filters])
 
   // Fetch khi filter thay đổi SAU lần mount đầu
   useEffect(() => {
     if (!filterMountedRef.current) { filterMountedRef.current = true; return }
+    setAccProducts([])
+    virtualPageRef.current = 1
     dispatch(fetchProducts(filters))
   }, [filters, dispatch])
 
@@ -599,9 +655,6 @@ const Home: React.FC = () => {
         </div>
       </div>
 
-      {/* Sản phẩm mới nhất */}
-      <NewProductsSection />
-
       {/* Sản phẩm nổi bật + Bộ lọc — cùng 1 section */}
       <div ref={productSectionRef} id="products-section" style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-page)' }}>
         <div className="container" style={{ paddingTop: 48, paddingBottom: 56 }}>
@@ -634,36 +687,13 @@ const Home: React.FC = () => {
               />
             </div>
 
-            {/* Products + pagination */}
+            {/* Products — infinite scroll, no pagination */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <ProductList products={products} loading={loading} />
-
-              {/* Pagination */}
-              {pages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 32, flexWrap: 'wrap' }}>
-                  <button
-                    disabled={page <= 1}
-                    onClick={() => dispatch(setFilters({ page: page - 1 }))}
-                    style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid var(--border-subtle)', background: 'var(--bg-card)', color: page <= 1 ? 'var(--text-secondary)' : 'var(--text-primary)', cursor: page <= 1 ? 'not-allowed' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}>
-                    ← Truoc
-                  </button>
-                  {Array.from({ length: Math.min(pages, 7) }, (_, i) => {
-                    const p = pages <= 7 ? i + 1 : page <= 4 ? i + 1 : page >= pages - 3 ? pages - 6 + i : page - 3 + i
-                    return (
-                      <button key={p}
-                        onClick={() => dispatch(setFilters({ page: p }))}
-                        style={{ width: 38, height: 38, borderRadius: 8, border: page === p ? 'none' : '1.5px solid var(--border-subtle)', background: page === p ? 'var(--primary, #7C3AED)' : 'var(--bg-card)', color: page === p ? '#fff' : 'var(--text-primary)', cursor: 'pointer', fontWeight: page === p ? 700 : 400, fontSize: 14 }}>
-                        {p}
-                      </button>
-                    )
-                  })}
-                  <button
-                    disabled={page >= pages}
-                    onClick={() => dispatch(setFilters({ page: page + 1 }))}
-                    style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid var(--border-subtle)', background: 'var(--bg-card)', color: page >= pages ? 'var(--text-secondary)' : 'var(--text-primary)', cursor: page >= pages ? 'not-allowed' : 'pointer', opacity: page >= pages ? 0.5 : 1 }}>
-                    Sau →
-                  </button>
-                </div>
+              <ProductList products={accProducts} loading={loading} />
+              {accProducts.length > 0 && (
+                <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)', marginTop: 24, opacity: 0.6 }}>
+                  Đang tải thêm sản phẩm...
+                </p>
               )}
             </div>
 
@@ -672,7 +702,7 @@ const Home: React.FC = () => {
       </div>
 
       {/* Features */}
-      <div className="section-surface" style={{ padding: '48px 0', marginBottom: 32, borderTop: '1px solid var(--border-subtle)' }}>
+      <div ref={featuresRef} className="section-surface" style={{ padding: '48px 0', marginBottom: 32, borderTop: '1px solid var(--border-subtle)' }}>
         <div className="container">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24, textAlign: 'center' }}>
             {[

@@ -1,5 +1,6 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, Query, UploadFile, File
+import json as _json
+from typing import Optional, List
+from fastapi import APIRouter, Depends, Query, UploadFile, File, Body
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -80,6 +81,18 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
         "category_id": product.category_id,
         "category_name": product.category.category_name if product.category else None,
         "created_at": str(product.created_at) if product.created_at else None,
+        "variants": [
+            {
+                "variant_id": v.variant_id,
+                "variant_name": v.variant_name,
+                "sku": v.sku,
+                "price": str(v.price),
+                "stock": v.stock,
+                "image_url": v.image_url,
+                "attrs": _json.loads(v.attrs_json) if v.attrs_json else [],
+            }
+            for v in (product.variants or [])
+        ],
     }
 
 
@@ -149,6 +162,51 @@ def request_deletion(
 def add_category(data: CategoryCreate, db: Session = Depends(get_db)):
     cat = create_category(db, data)
     return {"message": "Category created", "category_id": cat.category_id}
+
+
+@router.post("/{product_id}/variants/sync")
+def sync_product_variants(
+    product_id: int,
+    variants: List[dict] = Body(...),
+    current_user: User = Depends(require_shop_owner),
+    db: Session = Depends(get_db),
+):
+    """Đồng bộ variants (bao gồm attrs) từ localStorage lên DB."""
+    from sqlalchemy import text
+    from app.models.product import Product as ProductModel
+    from fastapi import HTTPException
+    product = db.query(ProductModel).filter(ProductModel.product_id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    # Check ownership (owner or employee)
+    if product.shop_id != current_user.user_id:
+        from app.models.shop import ShopEmployee
+        emp = db.query(ShopEmployee).filter(
+            ShopEmployee.user_id == current_user.user_id,
+            ShopEmployee.shop_id == product.shop_id,
+            ShopEmployee.status == "active",
+        ).first()
+        if not emp:
+            raise HTTPException(status_code=403, detail="Not authorized")
+    # Replace all variants
+    db.execute(text("DELETE FROM product_variants WHERE product_id = :pid"), {"pid": product_id})
+    for v in variants:
+        img_list = v.get("image_urls") or []
+        image_url = img_list[0] if img_list else v.get("image_url")
+        db.execute(text("""
+            INSERT INTO product_variants (product_id, variant_name, sku, price, stock, image_url, attrs_json)
+            VALUES (:pid, :name, :sku, :price, :stock, :image_url, :attrs_json)
+        """), {
+            "pid": product_id,
+            "name": v.get("name", ""),
+            "sku": str(v.get("id", "")),
+            "price": float(v.get("price", 0)),
+            "stock": int(v.get("stock", 0)),
+            "image_url": image_url,
+            "attrs_json": _json.dumps(v.get("attrs", [])),
+        })
+    db.commit()
+    return {"message": "Variants synced", "count": len(variants)}
 
 
 @router.post("/upload-image")

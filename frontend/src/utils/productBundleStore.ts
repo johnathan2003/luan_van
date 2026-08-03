@@ -107,18 +107,18 @@ function writeAll(key: string, data: Record<string, any[]>) {
   }
 }
 
-// ── Strip image_urls from storage (không cần lưu, fetch lại từ server) ───────
+// ── Strip base64 image_urls from storage (giữ server URLs, bỏ data: URLs) ──────
 
 function stripImages<T extends { image_urls?: string[] }>(items: T[]): T[] {
-  return items.map(item => ({ ...item, image_urls: [] }))
+  return items.map(item => ({ ...item, image_urls: (item.image_urls || []).filter(u => !u.startsWith('data:')) }))
 }
 function stripBundleImages(items: BundleItem[]): BundleItem[] {
-  return items.map(b => ({ ...b, image_urls: [] }))
+  return items.map(b => ({ ...b, image_urls: (b.image_urls || []).filter(u => !u.startsWith('data:')) }))
 }
 function stripVariantImages(variants: VariantLocal[]): VariantLocal[] {
   return variants.map(v => ({
     ...v,
-    image_urls: [],
+    image_urls: (v.image_urls || []).filter(u => !u.startsWith('data:')),
     bundleItems: v.bundleItems ? stripBundleImages(v.bundleItems) : undefined,
   }))
 }

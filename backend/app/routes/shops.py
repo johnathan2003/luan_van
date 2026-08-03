@@ -112,18 +112,37 @@ def get_public_shop(shop_id: int, db: Session = Depends(get_db)):
 
 @router.get("/me")
 def my_shop(current_user: User = Depends(require_shop_owner), db: Session = Depends(get_db)):
-    shop = get_shop(db, current_user.user_id)
+    from sqlalchemy import text
+    # Dùng raw SQL để lấy cả status/suspended_reason (cột có thể mới thêm)
+    row = db.execute(
+        text("""
+            SELECT shop_id, shop_name, description, avatar_url, address, phone,
+                   rating, total_followers, total_orders, verification_status,
+                   COALESCE(status, 'active') AS status,
+                   suspended_reason, suspended_at,
+                   mall_request_status
+            FROM shops WHERE shop_id = :sid
+        """),
+        {"sid": current_user.user_id}
+    ).fetchone()
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Shop not found")
     return {
-        "shop_id": shop.shop_id,
-        "shop_name": shop.shop_name,
-        "description": shop.description,
-        "avatar_url": shop.avatar_url,
-        "address": shop.address,
-        "phone": shop.phone,
-        "rating": shop.rating,
-        "total_followers": shop.total_followers,
-        "total_orders": shop.total_orders,
-        "verification_status": shop.verification_status,
+        "shop_id":              row.shop_id,
+        "shop_name":            row.shop_name,
+        "description":          row.description,
+        "avatar_url":           row.avatar_url,
+        "address":              row.address,
+        "phone":                row.phone,
+        "rating":               row.rating,
+        "total_followers":      row.total_followers,
+        "total_orders":         row.total_orders,
+        "verification_status":  row.verification_status,
+        "status":               row.status,
+        "suspended_reason":     row.suspended_reason,
+        "suspended_at":         str(row.suspended_at) if row.suspended_at else None,
+        "mall_request_status":  row.mall_request_status,
     }
 
 
@@ -156,11 +175,14 @@ def shop_products(
             {
                 "product_id": p.product_id,
                 "product_name": p.product_name,
+                "description": p.description,
                 "price": p.price,
                 "stock_quantity": p.stock_quantity,
                 "status": p.status,
                 "sales_count": p.sales_count,
                 "image_urls": p.image_urls,
+                "category_id": p.category_id,
+                "category_name": p.category.category_name if p.category else None,
             }
             for p in products
         ]

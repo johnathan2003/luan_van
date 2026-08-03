@@ -10,6 +10,7 @@ import { formatCurrency, formatRating } from '../../utils/formatters'
 import { getImageUrl } from '../../utils/helpers'
 import { trackMissionEvent } from '../../utils/eventsStore'
 import API from '../../services/api'
+import { variantStore } from '../../utils/productBundleStore'
 
 const C = {
   primary: '#1D4ED8', navy: '#1E3A8A',
@@ -293,6 +294,8 @@ const ProductDetailPage: React.FC = () => {
   const [qty, setQty] = useState(1)
   const [imgIdx, setImgIdx] = useState(0)
   const [addedMsg, setAddedMsg] = useState(false)
+  const [selectedVariant, setSelectedVariant] = useState<any>(null)
+  const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({}) // attrId → label đã chọn
   const [vouchers, setVouchers] = useState<any[]>([])
   const [showAllVouchers, setShowAllVouchers] = useState(false)
   const [reviews, setReviews] = useState<Review[]>([])
@@ -338,18 +341,69 @@ const ProductDetailPage: React.FC = () => {
     }
   }, [product])
 
-  const handleAddToCart = async () => { if (!isAuthenticated) { navigate('/login'); return }; await add(product!.product_id, qty); setAddedMsg(true); setTimeout(() => setAddedMsg(false), 2000) }
+  // Ưu tiên variants từ localStorage (shop lưu local), fallback sang API
+  const localVariants = product ? variantStore.get(product.product_id) : []
+  const productVariants: any[] = localVariants.length > 0
+    ? localVariants.map(v => ({ variant_id: v.id, variant_name: v.name, price: v.price, stock: v.stock, image_url: v.image_urls?.[0] || null, image_urls: v.image_urls, attrs: v.attrs }))
+    : ((product as any)?.variants || [])
+
+  // Auto-chọn phiên bản đầu tiên khi product/variants load → thuộc tính hiện ngay
+  useEffect(() => {
+    if (!product) { setSelectedVariant(null); return }
+    const lv = variantStore.get(product.product_id)
+    const vs: any[] = lv.length > 0
+      ? lv.map(v => ({ variant_id: v.id, variant_name: v.name, price: v.price, stock: v.stock, image_url: v.image_urls?.[0] || null, image_urls: v.image_urls, attrs: v.attrs }))
+      : ((product as any)?.variants || [])
+    if (vs.length > 0) { setSelectedVariant(vs[0]); setImgIdx(0); setSelectedAttrs({}) }
+    else { setSelectedVariant(null); setSelectedAttrs({}) }
+  }, [product?.product_id])
+
+  // Tổng chênh lệch giá từ các giá trị thuộc tính đã chọn
+  const attrPriceDelta = selectedVariant
+    ? (selectedVariant.attrs || []).reduce((sum: number, attr: any) => {
+        const chosen = attr.values.find((av: any) => av.label === selectedAttrs[attr.id])
+        return sum + (chosen?.price_delta || 0)
+      }, 0)
+    : 0
+  const variantPrice = selectedVariant ? Number(selectedVariant.price) : null
+  const variantStock = selectedVariant ? (selectedVariant.stock ?? 0) : null
+  const displayPrice = (variantPrice !== null ? variantPrice : Number((product as any)?.price || 0)) + attrPriceDelta
+  const displayStock = variantStock !== null ? variantStock : ((product as any)?.stock_quantity ?? 0)
+
+  // Kiểm tra đã chọn đủ thuộc tính chưa
+  const allAttrsSelected = !selectedVariant || (selectedVariant.attrs || []).every((attr: any) => !!selectedAttrs[attr.id])
+  const missingAttr = selectedVariant
+    ? (selectedVariant.attrs || []).find((attr: any) => !selectedAttrs[attr.id])
+    : null
+
+  // Chuỗi mô tả thuộc tính đã chọn (dùng khi checkout)
+  const selectedAttrDesc = selectedVariant
+    ? (selectedVariant.attrs || []).map((attr: any) => `${attr.name}: ${selectedAttrs[attr.id] || '?'}`).join(', ')
+    : ''
+
+  const handleAddToCart = async () => {
+    if (!isAuthenticated) { navigate('/login'); return }
+    if (productVariants.length > 0 && !selectedVariant) { alert('Vui lòng chọn phiên bản sản phẩm'); return }
+    if (!allAttrsSelected) { alert(`Vui lòng chọn ${missingAttr?.name}`); return }
+    await add(product!.product_id, qty)
+    setAddedMsg(true); setTimeout(() => setAddedMsg(false), 2000)
+  }
   const handleBuyNow = async () => {
     if (!isAuthenticated) { navigate('/login'); return }
+    if (productVariants.length > 0 && !selectedVariant) { alert('Vui lòng chọn phiên bản sản phẩm'); return }
+    if (!allAttrsSelected) { alert(`Vui lòng chọn ${missingAttr?.name}`); return }
     await add(product!.product_id, qty)
+    const variantLabel = selectedVariant
+      ? `${selectedVariant.variant_name}${selectedAttrDesc ? ` · ${selectedAttrDesc}` : ''}`
+      : ''
     navigate('/checkout', {
       state: {
         cartItems: [{
           cart_id: 0,
           product_id: product!.product_id,
-          product_name: product!.product_name,
-          product_image: (product as any).image_urls?.[0] ?? (product as any).image_url ?? '',
-          price: Number(product!.price),
+          product_name: variantLabel ? `${product!.product_name} - ${variantLabel}` : product!.product_name,
+          product_image: selectedVariant?.image_url || (product as any).image_urls?.[0] || (product as any).image_url || '',
+          price: displayPrice,
           quantity: qty,
           shop_id: (product as any).shop_id ?? 0,
           shop_name: (product as any).shop_name ?? 'Shop',
@@ -367,9 +421,13 @@ const ProductDetailPage: React.FC = () => {
     </div>
   )
 
-  const images = product.image_urls?.length ? product.image_urls : ['/images/placeholder.png']
+  // Nếu variant được chọn có hình ảnh riêng → dùng hình đó
+  const variantImages: string[] = selectedVariant?.image_url ? [selectedVariant.image_url] : (selectedVariant?.image_urls || [])
+  const baseImages = product.image_urls?.length ? product.image_urls : ['/images/placeholder.png']
+  const images = variantImages.length > 0 ? variantImages : baseImages
   const ratingNum = Math.round(Number(product.rating) || 0)
-  const inStock = product.stock_quantity > 0
+  const variants = productVariants
+  const inStock = displayStock > 0
   const delivery = getDeliveryInfo()
   const starCounts = [5,4,3,2,1].map(s => ({ star: s, count: reviews.filter(r => r.rating === s).length }))
   const visibleReviews = reviewFilter === 0 ? reviews : reviews.filter(r => r.rating === reviewFilter)
@@ -460,7 +518,89 @@ const ProductDetailPage: React.FC = () => {
               <span style={{ fontSize: 13, color: C.gray }}>({product.total_reviews} đánh giá)</span>
               <span style={{ fontSize: 13, color: C.gray }}>· Đã bán {product.sales_count?.toLocaleString('vi-VN') ?? 0}</span>
             </div>
-            <div style={{ fontSize: 34, fontWeight: 900, color: '#E11D48', marginBottom: 16, letterSpacing: '-0.03em' }}>{formatCurrency(product.price)}</div>
+            <div style={{ fontSize: 34, fontWeight: 900, color: '#E11D48', marginBottom: 16, letterSpacing: '-0.03em' }}>{formatCurrency(displayPrice)}</div>
+
+            {/* Variants + Attrs */}
+            {variants.length > 0 && (
+              <div style={{ marginBottom: 16, background: '#F8FAFC', borderRadius: 12, padding: '12px 14px', border: '1px solid var(--gray-200)' }}>
+                {/* Chọn phiên bản */}
+                <p style={{ fontSize: 12, fontWeight: 700, color: C.gray, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>Phiên bản</p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                  {variants.map((v: any) => {
+                    const active = selectedVariant?.variant_id === v.variant_id
+                    const outOfStock = v.stock <= 0
+                    return (
+                      <button key={v.variant_id}
+                        onClick={() => { setSelectedVariant(v); setSelectedAttrs({}); setQty(1); setImgIdx(0) }}
+                        disabled={outOfStock}
+                        style={{
+                          padding: '7px 16px', borderRadius: 8, cursor: outOfStock ? 'not-allowed' : 'pointer', fontSize: 13,
+                          border: `2px solid ${active ? C.primary : 'var(--gray-200)'}`,
+                          background: active ? '#DBEAFE' : outOfStock ? '#F8FAFC' : 'white',
+                          color: active ? C.primary : outOfStock ? '#CBD5E1' : '#374151',
+                          fontWeight: active ? 700 : 500,
+                          transition: 'all 0.15s',
+                          boxShadow: active ? `0 0 0 2px ${C.primary}33` : 'none',
+                        }}>
+                        {v.variant_name}
+                        {outOfStock && <span style={{ fontSize: 10, marginLeft: 4, color: C.error }}>(Hết)</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Thuộc tính — có thể click chọn */}
+                {selectedVariant && (selectedVariant.attrs || []).length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {selectedVariant.attrs.map((attr: any) => {
+                      const chosen = selectedAttrs[attr.id]
+                      const missing = !chosen
+                      return (
+                        <div key={attr.id}>
+                          <p style={{ fontSize: 12, fontWeight: 700, color: missing ? C.error : C.gray, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {attr.name}:
+                            {chosen
+                              ? <span style={{ fontWeight: 600, color: C.purple }}>{chosen}</span>
+                              : <span style={{ fontWeight: 400, color: C.error, fontSize: 11 }}>— Chưa chọn</span>
+                            }
+                          </p>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {attr.values.map((av: any, i: number) => {
+                              const isChosen = chosen === av.label
+                              return (
+                                <button key={i}
+                                  onClick={() => setSelectedAttrs(prev => ({ ...prev, [attr.id]: av.label }))}
+                                  style={{
+                                    padding: '5px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: isChosen ? 700 : 500,
+                                    border: `2px solid ${isChosen ? C.purple : 'var(--gray-200)'}`,
+                                    background: isChosen ? '#EDE9FE' : 'white',
+                                    color: isChosen ? C.purple : '#374151',
+                                    transition: 'all 0.15s',
+                                    boxShadow: isChosen ? `0 0 0 2px ${C.purple}33` : 'none',
+                                  }}>
+                                  {av.label}
+                                  {av.price_delta ? <span style={{ fontSize: 11, marginLeft: 4, color: C.success }}>+{formatCurrency(av.price_delta)}</span> : null}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Stock info */}
+                {selectedVariant && (
+                  <p style={{ fontSize: 12, color: C.gray, marginTop: 10, marginBottom: 0 }}>
+                    {selectedVariant.stock > 0
+                      ? <span style={{ color: C.success }}>✓ Còn {selectedVariant.stock} sản phẩm</span>
+                      : <span style={{ color: C.error }}>✗ Hết hàng</span>
+                    }
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Voucher */}
             <div style={{ background: '#FFF7ED', border: '1.5px solid #FED7AA', borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
@@ -504,9 +644,9 @@ const ProductDetailPage: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--gray-200)', borderRadius: 10, overflow: 'hidden' }}>
                 <button onClick={() => setQty(q => Math.max(1, q - 1))} style={{ width: 38, height: 38, border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, color: C.gray }}>−</button>
                 <span style={{ width: 44, textAlign: 'center', fontWeight: 700, fontSize: 15 }}>{qty}</span>
-                <button onClick={() => setQty(q => Math.min(product.stock_quantity, q + 1))} style={{ width: 38, height: 38, border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, color: C.gray }}>+</button>
+                <button onClick={() => setQty(q => Math.min(displayStock, q + 1))} style={{ width: 38, height: 38, border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, color: C.gray }}>+</button>
               </div>
-              <span style={{ fontSize: 13, color: inStock ? C.success : C.error, fontWeight: 600 }}>{inStock ? `Còn ${product.stock_quantity} sp` : 'Hết hàng'}</span>
+              <span style={{ fontSize: 13, color: inStock ? C.success : C.error, fontWeight: 600 }}>{inStock ? `Còn ${displayStock} sp` : 'Hết hàng'}</span>
             </div>
 
             {/* Buttons */}

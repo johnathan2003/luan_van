@@ -72,6 +72,7 @@ class ProductVariant(Base):
     price = Column(Numeric(10, 2), nullable=False)
     stock = Column(Integer, default=0)
     image_url = Column(String(500))
+    attrs_json = Column(Text, nullable=True)   # JSON array of VariantAttr
     created_at = Column(DateTime, server_default=func.now())
 
     __table_args__ = (

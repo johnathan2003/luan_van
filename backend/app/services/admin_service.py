@@ -141,13 +141,24 @@ def reject_shop_registration(db: Session, admin_id: int, reg_id: int, reason: st
     reg.reviewed_by = admin_id
     reg.reviewed_at = datetime.utcnow()
 
+    # Xóa role "shop" nếu có (stale role)
+    shop_role = db.query(Role).filter(Role.role_name == "shop").first()
+    if shop_role:
+        stale = db.query(UserRole).filter(
+            UserRole.user_id == reg.user_id,
+            UserRole.role_id == shop_role.role_id,
+        ).first()
+        if stale:
+            db.delete(stale)
+
     _log(db, admin_id, "shop_rejected", "shop_registration", reg_id)
     db.commit()
     create_notification(db, reg.user_id, "Shop bị từ chối", f"Đăng ký shop bị từ chối: {reason}", "shop_rejected")
 
 
 def get_shipper_registrations(db: Session, page: int = 1, limit: int = 20, reg_status: str = "pending"):
-    query = db.query(ShipperRegistration)
+    from sqlalchemy.orm import joinedload
+    query = db.query(ShipperRegistration).options(joinedload(ShipperRegistration.user))
     if reg_status:
         query = query.filter(ShipperRegistration.status == reg_status)
     return paginate(query.order_by(ShipperRegistration.created_at.desc()), page, limit)

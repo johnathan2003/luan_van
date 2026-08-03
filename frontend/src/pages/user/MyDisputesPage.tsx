@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAppSelector } from '../../store/hooks'
+import { useShopStatus } from '../../App'
 import { getDisputesByComplainant, getDisputesByTarget, seedUserDemoDisputesIfNeeded } from '../../utils/disputeStore'
 import type { Dispute } from '../../types/dispute'
 import { DISPUTE_STATUS_LABELS, DISPUTE_STATUS_COLORS, DISPUTE_TARGET_LABELS } from '../../types/dispute'
@@ -12,6 +13,7 @@ type Tab = 'sent' | 'received'
 // Giao dien dang danh sach (table) giong style OrderManagement - bam vao dong de xem chi tiet trong modal
 const MyDisputesPage: React.FC = () => {
   const { user } = useAppSelector(s => s.auth)
+  const { isSuspended, suspendedReason } = useShopStatus()
   const role = user?.current_role
   const isShop = role === 'shop'
   const isShipper = role === 'shipper'
@@ -40,6 +42,44 @@ const MyDisputesPage: React.FC = () => {
 
   return (
     <div>
+      {/* Banner thông báo đình chỉ — chỉ hiện với shop bị suspend */}
+      {isSuspended && isShop && (
+        <div style={{
+          background: 'linear-gradient(135deg, #FEF2F2, #FFF5F5)',
+          border: '1.5px solid #FECACA', borderRadius: 14,
+          padding: '18px 20px', marginBottom: 20,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+              background: 'linear-gradient(135deg, #DC2626, #ef4444)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+            }}>⛔</div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontWeight: 800, fontSize: 15, color: '#991B1B', marginBottom: 4 }}>
+                Cửa hàng của bạn đang bị đình chỉ
+              </p>
+              {suspendedReason && (
+                <p style={{ fontSize: 13, color: '#B91C1C', marginBottom: 8, lineHeight: 1.5 }}>
+                  <strong>Lý do:</strong> {suspendedReason}
+                </p>
+              )}
+              <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 10, lineHeight: 1.6 }}>
+                Nếu bạn cho rằng quyết định này không chính xác, bạn có thể gửi khiếu nại
+                tới ban quản trị sàn bên dưới hoặc liên hệ hỗ trợ qua email.
+              </p>
+              <a href="mailto:support@buyzo.vn" style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                background: '#DC2626', color: 'white', borderRadius: 8,
+                padding: '8px 16px', fontSize: 13, fontWeight: 700, textDecoration: 'none',
+              }}>
+                📧 Liên hệ hỗ trợ
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       <p style={{ color: 'var(--text-secondary)', fontSize: 13.5, marginBottom: 16 }}>
         {isShipper
           ? 'Các khiếu nại mà khách hàng hoặc shop gửi liên quan tới quá trình giao hàng của bạn — sàn (admin) sẽ xem xét và xử lý.'

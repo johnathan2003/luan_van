@@ -10,6 +10,10 @@ export const userService = {
     const fd = new FormData(); fd.append('file', file)
     return API.post('/api/v1/users/me/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
+  uploadImage: (file: File) => {
+    const fd = new FormData(); fd.append('file', file)
+    return API.post('/api/v1/users/me/upload-image', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
   registerShop: (data: any) => API.post('/api/v1/users/register-shop', data),
   getShopRegistration: () => API.get('/api/v1/users/me/shop-registration'),
   registerShipper: (data: any) => API.post('/api/v1/users/register-shipper', data),

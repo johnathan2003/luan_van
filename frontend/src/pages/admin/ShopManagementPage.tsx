@@ -37,6 +37,10 @@ const ShopManagementPage: React.FC = () => {
   const [suspendReasonErr, setSuspendReasonErr] = useState(false)
   const [suspending, setSuspending]         = useState(false)
 
+  // Delete confirm modal
+  const [deleteTarget, setDeleteTarget]     = useState<any | null>(null)
+  const [deleting, setDeleting]             = useState(false)
+
   const load = () => {
     setLoading(true)
     adminService.getShops()
@@ -76,15 +80,17 @@ const ShopManagementPage: React.FC = () => {
     }
   }
 
-  const handleDelete = async (shop: any) => {
-    if (!window.confirm(`Xóa vĩnh viễn shop "${shop.shop_name}"? Không thể hoàn tác!`)) return
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      await adminService.deleteShop(shop.shop_id)
-      toast.success(`Đã xóa shop "${shop.shop_name}"`)
+      await adminService.deleteShop(deleteTarget.shop_id)
+      toast.success(`Đã xóa shop "${deleteTarget.shop_name}"`)
+      setDeleteTarget(null)
       load()
     } catch (e: any) {
       toast.error(e.response?.data?.detail || 'Lỗi xóa shop')
-    }
+    } finally { setDeleting(false) }
   }
 
   if (loading) return <Loading />
@@ -180,7 +186,7 @@ const ShopManagementPage: React.FC = () => {
                         Kích hoạt
                       </button>
                     )}
-                    <button onClick={() => handleDelete(shop)}
+                    <button onClick={() => setDeleteTarget(shop)}
                       style={{ fontSize: 12, fontWeight: 600, padding: '5px 10px', border: 'none', borderRadius: 6, background: '#FEF3C7', color: C.warning, cursor: 'pointer' }}>
                       Xóa
                     </button>
@@ -207,6 +213,39 @@ const ShopManagementPage: React.FC = () => {
                 <span style={{ fontSize: 13, color: C.navy }}>{String(v ?? '—')}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm modal */}
+      {deleteTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
+          onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="card" style={{ width: 420, padding: '32px 28px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+            {/* Icon */}
+            <div style={{ width: 68, height: 68, borderRadius: '50%', background: 'linear-gradient(135deg,#DC2626,#ef4444)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 18px', boxShadow: '0 8px 24px rgba(220,38,38,0.35)' }}>
+              🗑️
+            </div>
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 8 }}>Xóa vĩnh viễn shop?</h2>
+            <p style={{ fontSize: 13.5, color: '#6B7280', lineHeight: 1.6, marginBottom: 16 }}>
+              Thao tác này <strong style={{ color: C.error }}>không thể hoàn tác</strong>. Toàn bộ dữ liệu của shop sẽ bị xóa khỏi hệ thống.
+            </p>
+            {/* Shop name box */}
+            <div style={{ background: '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: 10, padding: '10px 16px', marginBottom: 24 }}>
+              <p style={{ fontSize: 13, color: '#374151', margin: 0 }}>
+                Shop: <strong style={{ color: C.navy }}>{deleteTarget.shop_name}</strong> (#{deleteTarget.shop_id})
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setDeleteTarget(null)} disabled={deleting}
+                style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #E5E7EB', background: 'white', color: '#6B7280', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                Hủy
+              </button>
+              <button onClick={handleDelete} disabled={deleting}
+                style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#DC2626,#ef4444)', color: 'white', fontWeight: 700, fontSize: 14, cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.7 : 1, boxShadow: '0 4px 14px rgba(220,38,38,0.35)' }}>
+                {deleting ? 'Đang xóa...' : '🗑️ Xóa vĩnh viễn'}
+              </button>
+            </div>
           </div>
         </div>
       )}
