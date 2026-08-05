@@ -158,6 +158,29 @@ input, textarea, select { font-family: inherit; }
 .input-label { font-size: var(--font-size-sm); font-weight: 500; color: var(--gray-700); margin-bottom: 6px; display: block; }
 .input-error { font-size: var(--font-size-xs); color: var(--error); margin-top: 4px; }
 
+/* Disabled inputs trong admin — xám nhẹ để phân biệt chế độ xem */
+[data-role="admin"] input:disabled,
+[data-role="admin"] select:disabled,
+[data-role="admin"] textarea:disabled {
+  background: #f3f4f6 !important;
+  color: #6b7280 !important;
+  cursor: default;
+}
+
+/* Force light inputs on admin/shop/shipper — overrides inline styles & dark OS */
+[data-role="admin"] input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]):not([type="submit"]):not([type="button"]),
+[data-role="admin"] select,
+[data-role="admin"] textarea,
+[data-role="shop"] input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]):not([type="submit"]):not([type="button"]),
+[data-role="shop"] select,
+[data-role="shop"] textarea,
+[data-role="shipper"] input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]):not([type="submit"]):not([type="button"]),
+[data-role="shipper"] select,
+[data-role="shipper"] textarea {
+  background: #fff !important;
+  color: #222 !important;
+}
+
 /* Badge */
 .badge {
   display: inline-flex;

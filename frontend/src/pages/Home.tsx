@@ -469,7 +469,7 @@ const Home: React.FC = () => {
   const dispatch = useAppDispatch()
   const [searchParams] = useSearchParams()
 
-  const { products, categories, filters, loading, total, pages } = useAppSelector(s => s.product)
+  const { products, categories, filters, loading, loadingMore, loopLoading, total, pages } = useAppSelector(s => s.product)
 
   // ── Infinite scroll ────────────────────────────────────────────────────────
   const [accProducts, setAccProducts] = useState<any[]>([])

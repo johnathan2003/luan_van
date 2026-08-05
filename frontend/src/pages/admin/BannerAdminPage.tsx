@@ -517,10 +517,14 @@ const BannerAdminPage: React.FC = () => {
   // ── Auction card renderer ────────────────────────────────────────────
   const renderAuctionCard = ({ kind, sub }: AuctionSub) => {
     const rawImageRef = (sub as any).image || (sub as any).productImage || ''
-    // IDB refs phải chờ async resolve vào imageMap — không dùng chuỗi 'idb:...' làm src
+    // IDB refs: chờ async resolve vào imageMap. Path /img/...: không hỗ trợ (cũ). Data URL / https: dùng thẳng.
     const image = rawImageRef.startsWith('idb:')
-      ? (imageMap[rawImageRef] || '')
-      : (imageMap[rawImageRef] ?? resolveImage(rawImageRef))
+      ? (imageMap[rawImageRef] || '')           // '' → show placeholder khi chưa resolve xong
+      : rawImageRef.startsWith('ref:')
+      ? (imageMap[rawImageRef] || resolveImage(rawImageRef))
+      : rawImageRef.startsWith('data:') || rawImageRef.startsWith('http')
+      ? rawImageRef
+      : ''  // path tương đối /img/... → không serve được từ admin, bỏ qua
     const isBanner = kind === 'banner'
     const posLabel = isBanner
       ? BANNER_POSITIONS.find(p => p.key === (sub as BannerSubmission).position)?.label

@@ -1235,25 +1235,34 @@ const BannerAuctionPage: React.FC = () => {
                       </label>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
                         <input type="file" accept="image/*" id={`banner-pick-${posKey}`} style={{ display: 'none' }}
-                          onChange={e => {
+                          onChange={async e => {
                             const file = e.target.files?.[0]; if (!file) return
-                            const path = `/img/banner/${file.name}`
                             const previewUrl = URL.createObjectURL(file)
                             setPrepBannerImgErr(prev => ({ ...prev, [posKey]: '' }))
                             setPrepBannerSaved(prev => ({ ...prev, [posKey]: false }))
-                            setPrepBannerForms(f => ({ ...f, [posKey]: { ...(f[posKey] ?? { title: '', link: '', image: '' }), image: path } }))
                             setBannerPreview(prev => ({ ...prev, [posKey]: previewUrl }))
+                            try {
+                              const { idbSave } = await import('../../utils/imageDB')
+                              const dataUrl = await new Promise<string>((res, rej) => {
+                                const reader = new FileReader()
+                                reader.onload = () => res(reader.result as string)
+                                reader.onerror = rej
+                                reader.readAsDataURL(file)
+                              })
+                              const imageRef = await idbSave(dataUrl)
+                              setPrepBannerForms(f => ({ ...f, [posKey]: { ...(f[posKey] ?? { title: '', link: '', image: '' }), image: imageRef } }))
+                            } catch {
+                              toast.error('Không thể lưu ảnh, vui lòng thử lại')
+                            }
                           }} />
                         <button type="button"
                           onClick={() => document.getElementById(`banner-pick-${posKey}`)?.click()}
                           style={{ padding: '7px 14px', background: C.blueLight, color: C.blue, border: `1px solid ${C.blue}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                          📂 Chọn file từ /img/banner/
+                          📂 Chọn ảnh banner
                         </button>
-                        {form.image && <span style={{ fontSize: 12, color: C.gray }}>{form.image}</span>}
+                        {form.image && !form.image.startsWith('idb:') && <span style={{ fontSize: 12, color: C.gray }}>{form.image}</span>}
+                        {form.image && form.image.startsWith('idb:') && <span style={{ fontSize: 12, color: C.success }}>✅ Đã lưu ảnh</span>}
                       </div>
-                      <p style={{ fontSize: 11, color: C.gray, marginBottom: 6 }}>
-                        💡 Trước khi chọn, hãy copy ảnh vào thư mục <code>public/img/banner/</code>
-                      </p>
                       {imgErr && <p style={{ color: '#DC2626', fontSize: 12, marginTop: 4 }}>{imgErr}</p>}
                       {(bannerPreview[posKey] || form.image || draft?.image) && (
                         <img

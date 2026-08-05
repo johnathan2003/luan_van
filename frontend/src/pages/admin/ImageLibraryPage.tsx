@@ -30,9 +30,9 @@ const C = {
   amberLight:'rgba(245,158,11,0.12)',
   red:      '#ef4444',
   redLight: 'rgba(239,68,68,0.12)',
-  text:     '#f1f5f9',
+  text:     '#222',
   muted:    '#64748b',
-  input:    '#1e1e33',
+  input:    '#fff',
 }
 
 const SOURCE_LABEL: Record<string, { label: string; color: string; bg: string }> = {

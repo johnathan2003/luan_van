@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import {
   BANNER_POSITIONS, BannerPositionKey, BannerAuctionSession,
@@ -7,7 +8,9 @@ import {
   getHistory as getBannerHistory,
   getAdminSettings as getBannerSettings,
   updateAdminSettings as updateBannerSettings,
-  lockPosition, openAuction as openBannerAuction,
+  lockPosition, cancelAuction as cancelBannerAuction,
+  freezeAuction as freezeBannerAuction, unfreezeAuction as unfreezeBannerAuction,
+  openAuction as openBannerAuction,
 } from '../../utils/bannerAuctionStore'
 import {
   PoolSession as FlashPoolSession, PoolSettings as FlashPoolSettings,
@@ -18,6 +21,8 @@ import {
   updateSettings as updateFlashPoolSettings,
   openAuction as openFlashPoolAuction,
   lockAuction as lockFlashPoolAuction,
+  cancelAuction as cancelFlashPoolAuction,
+  freezeAuction as freezeFlashPoolAuction, unfreezeAuction as unfreezeFlashPoolAuction,
   isAuctionLive as isFlashLive,
   msUntilEnd as msFlashEnd,
 } from '../../utils/flashSalePoolStore'
@@ -28,7 +33,9 @@ import {
   getHistory as getTopHistory,
   getAdminSettings as getTopSettings,
   updateAdminSettings as updateTopSettings,
-  lockSlot as lockTopSlot, openAuction as openTopAuction,
+  lockSlot as lockTopSlot, cancelAuction as cancelTopAuction,
+  freezeAuction as freezeTopAuction, unfreezeAuction as unfreezeTopAuction,
+  openAuction as openTopAuction,
 } from '../../utils/topSlotAuctionStore'
 
 const C = {
@@ -47,7 +54,7 @@ const btnStyle = (bg: string, color = 'white', small = false): React.CSSProperti
 const badge = (color: string, bg: string): React.CSSProperties => ({
   display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, color, background: bg,
 })
-const inputStyle: React.CSSProperties = { display: 'block', width: '100%', marginTop: 4, padding: '6px 10px', border: `1px solid ${C.border}`, borderRadius: 6, boxSizing: 'border-box' }
+const inputStyle: React.CSSProperties = { display: 'block', width: '100%', marginTop: 4, padding: '6px 10px', border: `1px solid ${C.border}`, borderRadius: 6, boxSizing: 'border-box', background: '#fff', color: '#222' }
 
 interface OpenModal { type: 'banner' | 'flash' | 'top'; key: string; label: string }
 
@@ -66,14 +73,18 @@ const PoolCard: React.FC<{
   settings: FlashPoolSettings;
   onUpdateSettings: (patch: Partial<FlashPoolSettings>) => void;
   onOpen: () => void;
+  onCancel: () => void;
+  onFreeze: () => void;
+  onUnfreeze: () => void;
   onLock: () => void;
   computeAlloc: (bids: any[], total: number) => any[];
   getSlotsFilled: (bids: any[]) => number;
   tick: number;
-}> = ({ color, colorLight, label, emoji, imgStorageKey, session, settings, onUpdateSettings, onOpen, onLock, computeAlloc, getSlotsFilled, tick }) => {
+}> = ({ color, colorLight, label, emoji, imgStorageKey, session, settings, onUpdateSettings, onOpen, onCancel, onFreeze, onUnfreeze, onLock, computeAlloc, getSlotsFilled, tick }) => {
   const [imgUrl, setImgUrl] = React.useState<string>(() => {
     try { return localStorage.getItem(imgStorageKey) || '' } catch { return '' }
   })
+  const [isEditing, setIsEditing] = React.useState(false)
   const handleImgUpload = (file: File) => {
     const reader = new FileReader()
     reader.onload = e => {
@@ -112,27 +123,41 @@ const PoolCard: React.FC<{
             </span>
           )}
         </div>
-        {session
-          ? <button style={btnStyle(C.red, 'white', true)} onClick={onLock}>🔒 Khoá phiên</button>
-          : <button style={btnStyle(color, 'white', true)} onClick={onOpen}>🟢 Mở phiên mới</button>
-        }
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {!session && !settings.locked && (isEditing
+            ? <button onClick={() => { setIsEditing(false); toast.success('Đã lưu') }} style={btnStyle(color, 'white', true)}>💾 Lưu</button>
+            : <button onClick={() => setIsEditing(true)} style={{ background: 'transparent', color, border: `1px solid ${color}`, borderRadius: 8, padding: '5px 10px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>✏️ Chỉnh sửa</button>
+          )}
+          {session
+            ? <>
+                <button style={btnStyle(C.red, 'white', true)} onClick={onCancel}>🗑️ Huỷ phiên</button>
+                {session.paused
+                  ? <button style={btnStyle(color, 'white', true)} onClick={onUnfreeze}>▶️ Mở</button>
+                  : <button style={btnStyle(C.orange, 'white', true)} onClick={onFreeze}>⏸ Khoá</button>
+                }
+              </>
+            : <button disabled={isEditing} style={{ ...btnStyle(color, 'white', true), opacity: isEditing ? 0.4 : 1, cursor: isEditing ? 'not-allowed' : 'pointer' }} onClick={onOpen}>🟢 Mở phiên mới</button>
+          }
+        </div>
       </div>
 
-      {/* Image upload */}
+      {/* Image — always visible, upload controls only when editing */}
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', background: `${color}08`, border: `1px solid ${color}30`, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
         <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
           {imgUrl
-            ? <img src={imgUrl} alt="preview" style={{ width: 90, height: 60, objectFit: 'cover', borderRadius: 6, border: `1px solid ${C.border}`, display: 'block' }} />
+            ? <img src={imgUrl} alt="preview" style={{ width: 90, height: 60, objectFit: 'cover', borderRadius: 6, border: `1px solid ${C.border}`, display: 'block', cursor: 'zoom-in' }} />
             : <div style={{ width: 90, height: 60, borderRadius: 6, border: `2px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: C.gray, textAlign: 'center' }}>Chưa có ảnh</div>
           }
-          <label style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, color, background: colorLight, border: `1px solid ${color}44`, borderRadius: 6, padding: '3px 10px', whiteSpace: 'nowrap' }}>
-            📷 {imgUrl ? 'Đổi ảnh' : 'Tải ảnh lên'}
-            <input type="file" accept="image/*" style={{ display: 'none' }}
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleImgUpload(f) }} />
-          </label>
-          {imgUrl && (
-            <button onClick={removeImg} style={{ fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>✕ Xoá ảnh</button>
-          )}
+          {isEditing && (<>
+            <label style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, color, background: colorLight, border: `1px solid ${color}44`, borderRadius: 6, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+              📷 {imgUrl ? 'Đổi ảnh' : 'Tải ảnh lên'}
+              <input type="file" accept="image/*" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleImgUpload(f) }} />
+            </label>
+            {imgUrl && (
+              <button onClick={removeImg} style={{ fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>✕ Xoá ảnh</button>
+            )}
+          </>)}
         </div>
         <div style={{ fontSize: 12, color: C.gray, paddingTop: 4 }}>
           <div style={{ fontWeight: 700, color, marginBottom: 4 }}>🖼️ Ảnh đại diện phiên</div>
@@ -142,36 +167,70 @@ const PoolCard: React.FC<{
       </div>
 
       {/* Settings */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: session ? 16 : 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.6fr 0.6fr 0.6fr 0.55fr 0.55fr', gap: 10, marginBottom: session ? 16 : 0 }}>
         <label style={{ fontSize: 12, color: C.gray }}>
           Số slot tổng
           <input type="number" step={10} defaultValue={settings.totalSlots}
+            disabled={!isEditing}
             onBlur={e => onUpdateSettings({ totalSlots: Number(e.target.value) })}
             style={inputStyle} />
         </label>
         <label style={{ fontSize: 12, color: C.gray }}>
           Tối đa slot/shop
           <input type="number" step={1} min={1} max={100} defaultValue={settings.maxSlotsPerShop}
+            disabled={!isEditing}
             onBlur={e => onUpdateSettings({ maxSlotsPerShop: Number(e.target.value) })}
             style={inputStyle} />
         </label>
-        <label style={{ fontSize: 12, color: C.gray }}>
-          Giá/slot tối thiểu (đ)
-          <input key={settings.basePrice} type="text" defaultValue={settings.basePrice.toLocaleString('vi-VN')}
-            onBlur={e => onUpdateSettings({ basePrice: Number(e.target.value.replace(/\./g, '')) })}
+        <label style={{ fontSize: 11, color: C.gray }}>
+          💰 Giá bắt đầu (đ)
+          <input key={`bp-${settings.basePrice}`} type="text" defaultValue={settings.basePrice.toLocaleString('vi-VN')}
+            disabled={!isEditing}
+            onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
+            onBlur={e => onUpdateSettings({ basePrice: Number(e.target.value.replace(/[^\d]/g, '')) })}
             style={inputStyle} />
         </label>
-        <label style={{ fontSize: 12, color: C.gray }}>
+        <label style={{ fontSize: 11, color: C.gray }}>
+          🏁 Giá kết thúc (đ)
+          <input key={`ep-${settings.endPrice}`} type="text" defaultValue={(settings.endPrice ?? 0).toLocaleString('vi-VN')}
+            disabled={!isEditing}
+            onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
+            onBlur={e => {
+              const val = Number(e.target.value.replace(/[^\d]/g, ''))
+              if (val && val < settings.basePrice) {
+                toast.error('Giá kết thúc không được nhỏ hơn giá bắt đầu')
+                const fallback = settings.basePrice * 5
+                e.target.value = fallback.toLocaleString('vi-VN')
+                onUpdateSettings({ endPrice: fallback })
+                return
+              }
+              onUpdateSettings({ endPrice: val || undefined })
+            }}
+            style={inputStyle} />
+        </label>
+        <label style={{ fontSize: 11, color: C.gray }}>
+          ⚡ Giá mua hết (đ)
+          <input key={`bn-${settings.buyNowPrice}`} type="text" defaultValue={(settings.buyNowPrice ?? 0).toLocaleString('vi-VN')}
+            disabled={!isEditing}
+            onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
+            onBlur={e => onUpdateSettings({ buyNowPrice: Number(e.target.value.replace(/[^\d]/g, '')) || undefined })}
+            style={inputStyle} />
+        </label>
+        <label style={{ fontSize: 11, color: C.gray }}>
           Thời gian phiên (phút)
           <input type="number" defaultValue={Math.round(settings.biddingDurationMs / 60000)}
+            disabled={!isEditing}
+            onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
             onBlur={e => onUpdateSettings({ biddingDurationMs: Number(e.target.value) * 60000 })}
-            style={inputStyle} />
+            style={{ ...inputStyle, fontSize: 12 }} />
         </label>
-        <label style={{ fontSize: 12, color: C.gray }}>
+        <label style={{ fontSize: 11, color: C.gray }}>
           Hiển thị sau thắng (giờ)
           <input type="number" defaultValue={Math.round(settings.displayDurationMs / 3600000)}
+            disabled={!isEditing}
+            onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
             onBlur={e => onUpdateSettings({ displayDurationMs: Number(e.target.value) * 3600000 })}
-            style={inputStyle} />
+            style={{ ...inputStyle, fontSize: 12 }} />
         </label>
       </div>
 
@@ -198,11 +257,15 @@ const PoolCard: React.FC<{
 }
 
 const AuctionManagementPage: React.FC = () => {
+  const navigate = useNavigate()
   const [tab, setTab] = useState<'banner' | 'flash' | 'top' | 'history'>('banner')
   const [openModal, setOpenModal] = useState<OpenModal | null>(null)
   const [startDelay, setStartDelay] = useState(0)
   const [auctionDesc, setAuctionDesc] = useState('')
+  const [imageModal, setImageModal] = useState<string | null>(null)
   const [imgSpecKey, setImgSpecKey] = useState<string | null>(null)
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [customPreviews, setCustomPreviews] = useState<Record<string, string>>(() => {
     // Đọc riêng từng key thay vì 1 JSON chung → tránh vượt quota 5MB
     const result: Record<string, string> = {}
@@ -301,18 +364,24 @@ const AuctionManagementPage: React.FC = () => {
           {BANNER_POSITIONS.map(p => {
             const s = bannerSettings[p.key]; if (!s) return null
             const isOpen = !!bannerSessions[p.key]
+            const isFrozen = !!bannerSessions[p.key]?.paused
             const isLocked = !isOpen && !!s.locked
-            const statusColor = isOpen ? C.primary : isLocked ? C.red : C.orange
-            const statusBg = isOpen ? C.primaryLight : isLocked ? C.redLight : C.orangeLight
-            const statusLabel = isOpen ? '🟢 Đang mở' : isLocked ? '🔴 Bị khoá' : '⏸ Chờ mở phiên mới'
+            const statusColor = isOpen ? (isFrozen ? C.orange : C.primary) : isLocked ? C.red : C.gray
+            const statusBg = isOpen ? (isFrozen ? C.orangeLight : C.primaryLight) : isLocked ? C.redLight : 'rgba(156,163,175,0.12)'
+            const statusLabel = isOpen ? (isFrozen ? '⏸ Đang đóng băng' : '🟢 Đang mở') : isLocked ? '🔴 Bị khoá' : '⏸ Chờ mở phiên mới'
             return (
               <div key={p.key} style={cardStyle}>
+                {(() => { const isEditing = editingKey === p.key; return (<>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <div>
                     <h4 style={{ margin: 0 }}>{p.label}</h4>
                     <span style={badge(statusColor, statusBg)}>{statusLabel}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {!isOpen && !isLocked && (isEditing
+                      ? <button onClick={() => { setEditingKey(null); toast.success('Đã lưu') }} style={btnStyle(C.primary, 'white', true)}>💾 Lưu</button>
+                      : <button onClick={() => setEditingKey(p.key)} style={{ background: 'transparent', color: C.blue, border: `1px solid ${C.blue}`, borderRadius: 8, padding: '5px 10px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>✏️ Chỉnh sửa</button>
+                    )}
                     <button
                       title="Xem yêu cầu hình ảnh"
                       onClick={() => setImgSpecKey(imgSpecKey === p.key ? null : p.key)}
@@ -320,8 +389,14 @@ const AuctionManagementPage: React.FC = () => {
                       🖼️ Ảnh
                     </button>
                     {isOpen
-                      ? <button style={btnStyle(C.red, 'white', true)} onClick={() => { lockPosition(p.key); refresh(); toast('🔒 Đã khoá phiên.') }}>🔒 Khoá</button>
-                      : <button style={btnStyle(C.primary, 'white', true)} onClick={() => { setStartDelay(0); setAuctionDesc(''); setOpenModal({ type: 'banner', key: p.key, label: p.label }) }}>🟢 Mở phiên mới</button>
+                      ? <>
+                          <button style={btnStyle(C.red, 'white', true)} onClick={() => setConfirmDialog({ message: 'Huỷ phiên đấu giá? Toàn bộ dữ liệu phiên sẽ bị xoá, không ghi nhận lịch sử.', onConfirm: () => { cancelBannerAuction(p.key); refresh(); toast('🗑️ Đã huỷ phiên.') } })}>🗑️ Huỷ phiên</button>
+                          {isFrozen
+                            ? <button style={btnStyle(C.primary, 'white', true)} onClick={() => { unfreezeBannerAuction(p.key); refresh(); toast('▶️ Đã mở lại phiên.') }}>▶️ Mở</button>
+                            : <button style={btnStyle(C.orange, 'white', true)} onClick={() => { freezeBannerAuction(p.key); refresh(); toast('⏸ Đã đóng băng phiên.') }}>⏸ Khoá</button>
+                          }
+                        </>
+                      : <button disabled={isEditing} style={{ ...btnStyle(C.primary, 'white', true), opacity: isEditing ? 0.4 : 1, cursor: isEditing ? 'not-allowed' : 'pointer' }} onClick={() => { setStartDelay(0); setAuctionDesc(''); setOpenModal({ type: 'banner', key: p.key, label: p.label }) }}>🟢 Mở phiên mới</button>
                     }
                   </div>
                 </div>
@@ -334,23 +409,26 @@ const AuctionManagementPage: React.FC = () => {
                       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
                         <div style={{ position: 'relative', width: 140, height: 80 }}>
                           {displayImg
-                            ? <img src={displayImg} alt={p.label} style={{ width: 140, height: 80, objectFit: 'cover', borderRadius: 6, border: `1px solid ${C.border}`, display: 'block' }} />
+                            ? <img src={displayImg} alt={p.label} onClick={() => setImageModal(displayImg)}
+                                style={{ width: 140, height: 80, objectFit: 'cover', borderRadius: 6, border: `1px solid ${C.border}`, display: 'block', cursor: 'zoom-in' }} />
                             : <div style={{ width: 140, height: 80, borderRadius: 6, border: `2px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: C.gray }}>Chưa có ảnh</div>
                           }
                         </div>
-                        <label style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, color: C.blue, background: 'rgba(37,99,235,0.1)', border: `1px solid rgba(37,99,235,0.3)`, borderRadius: 6, padding: '3px 10px', whiteSpace: 'nowrap' }}>
-                          📷 Đổi ảnh
-                          <input type="file" accept="image/*" style={{ display: 'none' }}
-                            onChange={e => { const f = e.target.files?.[0]; if (f) handlePreviewUpload(p.key, f) }} />
-                        </label>
-                        {customPreviews[p.key] && (
-                          <button onClick={() => {
-                            setCustomPreviews(prev => { const next = { ...prev }; delete next[p.key]; return next })
-                            try { localStorage.removeItem(`admin_preview_${p.key}`) } catch {}
-                          }} style={{ fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                            ✕ Xoá ảnh tuỳ chỉnh
-                          </button>
-                        )}
+                        {isEditing && (<>
+                          <label style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, color: C.blue, background: 'rgba(37,99,235,0.1)', border: `1px solid rgba(37,99,235,0.3)`, borderRadius: 6, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+                            📷 Đổi ảnh
+                            <input type="file" accept="image/*" style={{ display: 'none' }}
+                              onChange={e => { const f = e.target.files?.[0]; if (f) handlePreviewUpload(p.key, f) }} />
+                          </label>
+                          {customPreviews[p.key] && (
+                            <button onClick={() => {
+                              setCustomPreviews(prev => { const next = { ...prev }; delete next[p.key]; return next })
+                              try { localStorage.removeItem(`admin_preview_${p.key}`) } catch {}
+                            }} style={{ fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                              ✕ Xoá ảnh tuỳ chỉnh
+                            </button>
+                          )}
+                        </>)}
                       </div>
                       <div style={{ fontSize: 13 }}>
                         <div style={{ fontWeight: 700, color: C.blue, marginBottom: 8 }}>📐 Yêu cầu hình ảnh — {p.label}</div>
@@ -367,26 +445,81 @@ const AuctionManagementPage: React.FC = () => {
                   )
                 })()}
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                  <label style={{ fontSize: 12, color: C.gray }}>
-                    Giá khởi điểm (đ)
-                    <input key={s.basePrice} type="text" defaultValue={s.basePrice.toLocaleString('vi-VN')}
-                      onBlur={e => { updateBannerSettings(p.key, { basePrice: Number(e.target.value.replace(/\./g, '')) }); refresh() }}
+                {/* Row 1: các field chính */}
+                <div style={{ display: 'grid', gridTemplateColumns: '0.6fr 0.6fr 0.55fr 0.55fr', gap: 8, marginBottom: 8 }}>
+                  <label style={{ fontSize: 11, color: C.gray }}>
+                    💰 Giá bắt đầu (đ)
+                    <input key={`bp-${s.basePrice}`} type="text" defaultValue={s.basePrice.toLocaleString('vi-VN')}
+                      disabled={!isEditing}
+                      onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
+                      onBlur={e => { updateBannerSettings(p.key, { basePrice: Number(e.target.value.replace(/[^\d]/g, '')) }); refresh() }}
                       style={inputStyle} />
                   </label>
-                  <label style={{ fontSize: 12, color: C.gray }}>
+                  <label style={{ fontSize: 11, color: C.gray }}>
+                    🏁 Giá kết thúc (đ)
+                    <input key={`ep-${s.endPrice}`} type="text" defaultValue={(s.endPrice ?? 0).toLocaleString('vi-VN')}
+                      disabled={!isEditing}
+                      onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
+                      onBlur={e => {
+                        const val = Number(e.target.value.replace(/[^\d]/g, ''))
+                        if (val && val < s.basePrice) {
+                          toast.error('Giá kết thúc không được nhỏ hơn giá bắt đầu')
+                          const fallback = s.basePrice * 5
+                          e.target.value = fallback.toLocaleString('vi-VN')
+                          updateBannerSettings(p.key, { endPrice: fallback }); refresh()
+                          return
+                        }
+                        updateBannerSettings(p.key, { endPrice: val || undefined }); refresh()
+                      }}
+                      style={inputStyle} />
+                  </label>
+                  <label style={{ fontSize: 11, color: C.gray }}>
                     Thời gian phiên (phút)
                     <input type="number" defaultValue={Math.round(s.biddingDurationMs / 60000)}
+                      disabled={!isEditing}
+                      onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
                       onBlur={e => { updateBannerSettings(p.key, { biddingDurationMs: Number(e.target.value) * 60000 }); refresh() }}
                       style={inputStyle} />
                   </label>
-                  <label style={{ fontSize: 12, color: C.gray }}>
+                  <label style={{ fontSize: 11, color: C.gray }}>
                     Hiển thị sau thắng (giờ)
                     <input type="number" defaultValue={Math.round(s.displayDurationMs / 3600000)}
+                      disabled={!isEditing}
+                      onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
                       onBlur={e => { updateBannerSettings(p.key, { displayDurationMs: Number(e.target.value) * 3600000 }); refresh() }}
                       style={inputStyle} />
                   </label>
                 </div>
+
+                {/* Toggle + 2 input nâng cao */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: s.advancedEnabled ? 8 : 0 }}>
+                  <div onClick={() => { if (!isEditing) return; updateBannerSettings(p.key, { advancedEnabled: !(s.advancedEnabled ?? false) }); refresh() }}
+                    style={{ width: 34, height: 18, borderRadius: 9, background: s.advancedEnabled ? '#22c55e' : '#ccc', position: 'relative', cursor: isEditing ? 'pointer' : 'default', transition: 'background 0.2s', flexShrink: 0, opacity: isEditing ? 1 : 0.6 }}>
+                    <div style={{ position: 'absolute', top: 2, left: s.advancedEnabled ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px #0003' }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: C.gray }}>⚡ Giá mua hết &amp; Số slot</span>
+                </div>
+                {s.advancedEnabled && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '0.6fr 0.4fr', gap: 8 }}>
+                    <label style={{ fontSize: 11, color: C.gray }}>
+                      ⚡ Giá mua hết (đ)
+                      <input key={`bn-${s.buyNowPrice}`} type="text" defaultValue={(s.buyNowPrice ?? 0).toLocaleString('vi-VN')}
+                        disabled={!isEditing}
+                        onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
+                        onBlur={e => { updateBannerSettings(p.key, { buyNowPrice: Number(e.target.value.replace(/[^\d]/g, '')) || undefined }); refresh() }}
+                        style={inputStyle} />
+                    </label>
+                    <label style={{ fontSize: 11, color: C.gray }}>
+                      🎰 Số slot
+                      <select value={s.slots ?? 1} disabled={!isEditing}
+                        onChange={e => { updateBannerSettings(p.key, { slots: Number(e.target.value) }); refresh() }}
+                        style={{ ...inputStyle, cursor: isEditing ? 'pointer' : 'default' }}>
+                        {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                )}
+                </>)})()}
               </div>
             )
           })}
@@ -408,6 +541,9 @@ const AuctionManagementPage: React.FC = () => {
             settings={flashSettings}
             onUpdateSettings={p => { updateFlashPoolSettings(p); refresh() }}
             onOpen={() => { setStartDelay(0); setAuctionDesc(''); setOpenModal({ type: 'flash', key: '', label: `Flash Sale — ${flashSettings.totalSlots} slot` }) }}
+            onCancel={() => setConfirmDialog({ message: 'Huỷ phiên Flash Sale? Toàn bộ dữ liệu phiên sẽ bị xoá, không ghi nhận lịch sử.', onConfirm: () => { cancelFlashPoolAuction(); refresh(); toast('🗑️ Đã huỷ phiên Flash Sale.') } })}
+            onFreeze={() => { freezeFlashPoolAuction(); refresh(); toast('⏸ Đã đóng băng phiên Flash Sale.') }}
+            onUnfreeze={() => { unfreezeFlashPoolAuction(); refresh(); toast('▶️ Đã mở lại phiên Flash Sale.') }}
             onLock={() => { lockFlashPoolAuction(); refresh(); toast('🔒 Đã khoá phiên Flash Sale.') }}
             computeAlloc={computeFlashAllocation}
             getSlotsFilled={getFlashSlotsFilled}
@@ -426,45 +562,60 @@ const AuctionManagementPage: React.FC = () => {
           {TOP_SLOTS.map(sl => {
             const s = topSettings[sl.key]; if (!s) return null
             const isOpen = !!topSessions[sl.key]
+            const isFrozen = !!topSessions[sl.key]?.paused
             const isLocked = !isOpen && !!s.locked
-            const statusColor = isOpen ? C.purple : isLocked ? C.red : C.gray
-            const statusBg = isOpen ? C.purpleLight : isLocked ? C.redLight : 'rgba(156,163,175,0.12)'
-            const statusLabel = isOpen ? '🟢 Đang mở' : isLocked ? '🔴 Bị khoá' : '⏸ Chờ mở phiên mới'
+            const statusColor = isOpen ? (isFrozen ? C.orange : C.purple) : isLocked ? C.red : C.gray
+            const statusBg = isOpen ? (isFrozen ? C.orangeLight : C.purpleLight) : isLocked ? C.redLight : 'rgba(156,163,175,0.12)'
+            const statusLabel = isOpen ? (isFrozen ? '⏸ Đang đóng băng' : '🟢 Đang mở') : isLocked ? '🔴 Bị khoá' : '⏸ Chờ mở phiên mới'
             return (
               <div key={sl.key} style={cardStyle}>
+                {(() => { const isEditing = editingKey === sl.key; return (<>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <div>
                     <h4 style={{ margin: 0 }}>{sl.label}</h4>
                     <span style={badge(statusColor, statusBg)}>{statusLabel}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {!isOpen && !isLocked && (isEditing
+                      ? <button onClick={() => { setEditingKey(null); toast.success('Đã lưu') }} style={btnStyle(C.purple, 'white', true)}>💾 Lưu</button>
+                      : <button onClick={() => setEditingKey(sl.key)} style={{ background: 'transparent', color: C.purple, border: `1px solid ${C.purple}`, borderRadius: 8, padding: '5px 10px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>✏️ Chỉnh sửa</button>
+                    )}
                     {isOpen
-                      ? <button style={btnStyle(C.red, 'white', true)} onClick={() => { lockTopSlot(sl.key); refresh(); toast('🔒 Đã khoá phiên.') }}>🔒 Khoá</button>
-                      : <button style={btnStyle(C.purple, 'white', true)} onClick={() => { setStartDelay(0); setAuctionDesc(''); setOpenModal({ type: 'top', key: sl.key, label: sl.label }) }}>🟢 Mở phiên mới</button>
+                      ? <>
+                          <button style={btnStyle(C.red, 'white', true)} onClick={() => setConfirmDialog({ message: 'Huỷ phiên đấu giá? Toàn bộ dữ liệu phiên sẽ bị xoá, không ghi nhận lịch sử.', onConfirm: () => { cancelTopAuction(sl.key); refresh(); toast('🗑️ Đã huỷ phiên.') } })}>🗑️ Huỷ phiên</button>
+                          {isFrozen
+                            ? <button style={btnStyle(C.purple, 'white', true)} onClick={() => { unfreezeTopAuction(sl.key); refresh(); toast('▶️ Đã mở lại phiên.') }}>▶️ Mở</button>
+                            : <button style={btnStyle(C.orange, 'white', true)} onClick={() => { freezeTopAuction(sl.key); refresh(); toast('⏸ Đã đóng băng phiên.') }}>⏸ Khoá</button>
+                          }
+                        </>
+                      : <button disabled={isEditing} style={{ ...btnStyle(C.purple, 'white', true), opacity: isEditing ? 0.4 : 1, cursor: isEditing ? 'not-allowed' : 'pointer' }} onClick={() => { setStartDelay(0); setAuctionDesc(''); setOpenModal({ type: 'top', key: sl.key, label: sl.label }) }}>🟢 Mở phiên mới</button>
                     }
                   </div>
                 </div>
 
-                {/* Image upload — always visible */}
+                {/* Image — always visible, upload controls only when editing */}
                 <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', background: 'rgba(124,58,237,0.05)', border: '1px solid rgba(124,58,237,0.18)', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
                   <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
                     {customPreviews[sl.key]
-                      ? <img src={customPreviews[sl.key]} alt={sl.label} style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 6, border: `1px solid ${C.border}`, display: 'block' }} />
+                      ? <img src={customPreviews[sl.key]} alt={sl.label} onClick={() => setImageModal(customPreviews[sl.key])}
+                          style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 6, border: `1px solid ${C.border}`, display: 'block', cursor: 'zoom-in' }} />
                       : <div style={{ width: 80, height: 80, borderRadius: 6, border: `2px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: C.gray, textAlign: 'center' }}>Chưa có ảnh</div>
                     }
-                    <label style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, color: C.purple, background: C.purpleLight, border: '1px solid rgba(124,58,237,0.3)', borderRadius: 6, padding: '3px 10px', whiteSpace: 'nowrap' }}>
-                      📷 {customPreviews[sl.key] ? 'Đổi ảnh' : 'Tải lên'}
-                      <input type="file" accept="image/*" style={{ display: 'none' }}
-                        onChange={e => { const f = e.target.files?.[0]; if (f) handlePreviewUpload(sl.key, f) }} />
-                    </label>
-                    {customPreviews[sl.key] && (
-                      <button onClick={() => {
-                        setCustomPreviews(prev => { const next = { ...prev }; delete next[sl.key]; return next })
-                        try { localStorage.removeItem(`admin_preview_${sl.key}`) } catch {}
-                      }} style={{ fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                        ✕ Xoá ảnh
-                      </button>
-                    )}
+                    {isEditing && (<>
+                      <label style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, color: C.purple, background: C.purpleLight, border: '1px solid rgba(124,58,237,0.3)', borderRadius: 6, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+                        📷 {customPreviews[sl.key] ? 'Đổi ảnh' : 'Tải lên'}
+                        <input type="file" accept="image/*" style={{ display: 'none' }}
+                          onChange={e => { const f = e.target.files?.[0]; if (f) handlePreviewUpload(sl.key, f) }} />
+                      </label>
+                      {customPreviews[sl.key] && (
+                        <button onClick={() => {
+                          setCustomPreviews(prev => { const next = { ...prev }; delete next[sl.key]; return next })
+                          try { localStorage.removeItem(`admin_preview_${sl.key}`) } catch {}
+                        }} style={{ fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                          ✕ Xoá ảnh
+                        </button>
+                      )}
+                    </>)}
                   </div>
                   <div style={{ fontSize: 12, color: C.gray, paddingTop: 4 }}>
                     <div style={{ fontWeight: 700, color: C.purple, marginBottom: 4 }}>🖼️ Ảnh đại diện vị trí</div>
@@ -477,26 +628,81 @@ const AuctionManagementPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                  <label style={{ fontSize: 12, color: C.gray }}>
-                    Giá khởi điểm (đ)
-                    <input key={s.basePrice} type="text" defaultValue={s.basePrice.toLocaleString('vi-VN')}
-                      onBlur={e => { updateTopSettings(sl.key, { basePrice: Number(e.target.value.replace(/\./g, '')) }); refresh() }}
+                {/* Row 1: các field chính */}
+                <div style={{ display: 'grid', gridTemplateColumns: '0.6fr 0.6fr 0.55fr 0.55fr', gap: 8, marginBottom: 8 }}>
+                  <label style={{ fontSize: 11, color: C.gray }}>
+                    💰 Giá bắt đầu (đ)
+                    <input key={`bp-${s.basePrice}`} type="text" defaultValue={s.basePrice.toLocaleString('vi-VN')}
+                      disabled={!isEditing}
+                      onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
+                      onBlur={e => { updateTopSettings(sl.key, { basePrice: Number(e.target.value.replace(/[^\d]/g, '')) }); refresh() }}
                       style={inputStyle} />
                   </label>
-                  <label style={{ fontSize: 12, color: C.gray }}>
+                  <label style={{ fontSize: 11, color: C.gray }}>
+                    🏁 Giá kết thúc (đ)
+                    <input key={`ep-${s.endPrice}`} type="text" defaultValue={(s.endPrice ?? 0).toLocaleString('vi-VN')}
+                      disabled={!isEditing}
+                      onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
+                      onBlur={e => {
+                        const val = Number(e.target.value.replace(/[^\d]/g, ''))
+                        if (val && val < s.basePrice) {
+                          toast.error('Giá kết thúc không được nhỏ hơn giá bắt đầu')
+                          const fallback = s.basePrice * 5
+                          e.target.value = fallback.toLocaleString('vi-VN')
+                          updateTopSettings(sl.key, { endPrice: fallback }); refresh()
+                          return
+                        }
+                        updateTopSettings(sl.key, { endPrice: val || undefined }); refresh()
+                      }}
+                      style={inputStyle} />
+                  </label>
+                  <label style={{ fontSize: 11, color: C.gray }}>
                     Thời gian phiên (phút)
                     <input type="number" defaultValue={Math.round(s.biddingDurationMs / 60000)}
+                      disabled={!isEditing}
+                      onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
                       onBlur={e => { updateTopSettings(sl.key, { biddingDurationMs: Number(e.target.value) * 60000 }); refresh() }}
                       style={inputStyle} />
                   </label>
-                  <label style={{ fontSize: 12, color: C.gray }}>
+                  <label style={{ fontSize: 11, color: C.gray }}>
                     Hiển thị sau thắng (giờ)
                     <input type="number" defaultValue={Math.round(s.displayDurationMs / 3600000)}
+                      disabled={!isEditing}
+                      onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
                       onBlur={e => { updateTopSettings(sl.key, { displayDurationMs: Number(e.target.value) * 3600000 }); refresh() }}
                       style={inputStyle} />
                   </label>
                 </div>
+
+                {/* Toggle + 2 input nâng cao */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: s.advancedEnabled ? 8 : 0 }}>
+                  <div onClick={() => { if (!isEditing) return; updateTopSettings(sl.key, { advancedEnabled: !(s.advancedEnabled ?? false) }); refresh() }}
+                    style={{ width: 34, height: 18, borderRadius: 9, background: s.advancedEnabled ? '#22c55e' : '#ccc', position: 'relative', cursor: isEditing ? 'pointer' : 'default', transition: 'background 0.2s', flexShrink: 0, opacity: isEditing ? 1 : 0.6 }}>
+                    <div style={{ position: 'absolute', top: 2, left: s.advancedEnabled ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px #0003' }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: C.gray }}>⚡ Giá mua hết &amp; Số slot</span>
+                </div>
+                {s.advancedEnabled && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '0.6fr 0.4fr', gap: 8 }}>
+                    <label style={{ fontSize: 11, color: C.gray }}>
+                      ⚡ Giá mua hết (đ)
+                      <input key={`bn-${s.buyNowPrice}`} type="text" defaultValue={(s.buyNowPrice ?? 0).toLocaleString('vi-VN')}
+                        disabled={!isEditing}
+                        onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
+                        onBlur={e => { updateTopSettings(sl.key, { buyNowPrice: Number(e.target.value.replace(/[^\d]/g, '')) || undefined }); refresh() }}
+                        style={inputStyle} />
+                    </label>
+                    <label style={{ fontSize: 11, color: C.gray }}>
+                      🎰 Số slot
+                      <select value={s.slots ?? 1} disabled={!isEditing}
+                        onChange={e => { updateTopSettings(sl.key, { slots: Number(e.target.value) }); refresh() }}
+                        style={{ ...inputStyle, cursor: isEditing ? 'pointer' : 'default' }}>
+                        {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                )}
+                </>)})()}
               </div>
             )
           })}
@@ -557,6 +763,33 @@ const AuctionManagementPage: React.FC = () => {
             <div style={{ textAlign: 'center', color: C.gray, padding: 40 }}>Chưa có lịch sử phiên nào.</div>
           )}
         </>
+      )}
+
+      {/* ── Confirm dialog ────────────────────── */}
+      {confirmDialog && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '90vw', boxShadow: '0 8px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize: 15, color: '#111', marginBottom: 20, lineHeight: 1.6 }}>{confirmDialog.message}</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setConfirmDialog(null)}
+                style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #d1d5db', background: '#f9fafb', color: '#374151', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>
+                Huỷ
+              </button>
+              <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null) }}
+                style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: C.red, color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>
+                Xác nhận
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Lightbox ảnh ──────────────────────── */}
+      {imageModal && (
+        <div onClick={() => setImageModal(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}>
+          <img src={imageModal} alt="preview" style={{ maxWidth: '90vw', maxHeight: '85vh', borderRadius: 10, boxShadow: '0 8px 40px rgba(0,0,0,0.5)', display: 'block' }} />
+        </div>
       )}
 
       {/* ── Modal Mở phiên mới ─────────────────── */}

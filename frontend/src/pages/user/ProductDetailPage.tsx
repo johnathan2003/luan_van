@@ -413,6 +413,40 @@ const ProductDetailPage: React.FC = () => {
     return () => observer.disconnect()
   }, [loadMoreRecommended, recommended.length])
 
+  // ── Variant / attribute state derived from variantStore + DB ────────────────
+  const productVariants: any[] = (() => {
+    if (!product) return []
+    const lv = variantStore.get(product.product_id)
+    return lv.length > 0
+      ? lv.map(v => ({ variant_id: v.id, variant_name: v.name, price: v.price, stock: v.stock, image_url: v.image_urls?.[0] || null, image_urls: v.image_urls, attrs: v.attrs }))
+      : ((product as any)?.variants || [])
+  })()
+
+  // Auto-select first variant when product changes
+  useEffect(() => {
+    if (!product) { setSelectedVariant(null); return }
+    const lv = variantStore.get(product.product_id)
+    const vs: any[] = lv.length > 0
+      ? lv.map(v => ({ variant_id: v.id, variant_name: v.name, price: v.price, stock: v.stock, image_url: v.image_urls?.[0] || null, image_urls: v.image_urls, attrs: v.attrs }))
+      : ((product as any)?.variants || [])
+    if (vs.length > 0) { setSelectedVariant(vs[0]); setImgIdx(0); setSelectedAttrs({}) }
+    else { setSelectedVariant(null); setSelectedAttrs({}) }
+  }, [product?.product_id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const attrPriceDelta = selectedVariant?.attrs?.reduce((sum: number, attr: any) => {
+    const chosen = selectedAttrs[attr.id || attr.name]
+    const val = (attr.values || []).find((v: any) => v.label === chosen)
+    return sum + (val?.price_delta ? Number(val.price_delta) : 0)
+  }, 0) || 0
+
+  const variantPrice = selectedVariant ? Number(selectedVariant.price) : Number(product?.price || 0)
+  const displayPrice = variantPrice + attrPriceDelta
+  const displayStock = selectedVariant ? selectedVariant.stock : (product?.stock_quantity ?? 0)
+
+  const allAttrsSelected = !selectedVariant || (selectedVariant.attrs || []).every((a: any) => selectedAttrs[a.id || a.name])
+  const missingAttr = (selectedVariant?.attrs || []).find((a: any) => !selectedAttrs[a.id || a.name])
+  const selectedAttrDesc = selectedVariant?.attrs?.map((a: any) => `${a.name}: ${selectedAttrs[a.id || a.name] || ''}`).filter((s: string) => s.includes(': ')).join(', ') || ''
+
   const handleAddToCart = async () => { if (!isAuthenticated) { navigate('/login'); return }; await add(product!.product_id, qty); setAddedMsg(true); setTimeout(() => setAddedMsg(false), 2000) }
 
   const handleBuyNow = async () => {

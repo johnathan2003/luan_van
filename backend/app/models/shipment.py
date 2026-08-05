@@ -103,9 +103,10 @@ class ShipperRegistration(Base):
     zone_ward        = Column(String(100))
     home_warehouse_id = Column(Integer, ForeignKey("warehouses.warehouse_id"), nullable=True)
 
-    license_url      = Column(String(500))
-    registration_url = Column(String(500))
-    id_card_url      = Column(String(500))
+    license_url       = Column(String(500))
+    registration_url  = Column(String(500))
+    vehicle_photo_url = Column(String(500))
+    id_card_url       = Column(String(500))
     status           = Column(Enum("pending", "approved", "rejected", native_enum=False), default="pending", index=True)
 
     rejection_reason = Column(String(500))

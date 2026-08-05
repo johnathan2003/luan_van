@@ -193,7 +193,11 @@ export const variantStore = {
   save(productId: number | string, variants: VariantLocal[]) {
     const pid = String(productId)
     const all = readAll(VARIANT_KEY)
-    all[pid] = stripVariantImages(variants)
+    // image_urls là server URLs (ngắn) — giữ lại để hiển thị đúng ảnh từng phiên bản
+    all[pid] = variants.map(v => ({
+      ...v,
+      bundleItems: v.bundleItems ? stripBundleImages(v.bundleItems) : undefined,
+    }))
     touchOrder(VARIANT_KEY, pid)
     writeAll(VARIANT_KEY, all)
   },

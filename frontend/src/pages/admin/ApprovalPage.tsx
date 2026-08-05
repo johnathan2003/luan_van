@@ -79,10 +79,12 @@ const ApprovalPage: React.FC = () => {
       if (tab === 'product') {
         await adminService.approveProduct(id)
         setProducts(s => s.map(x => x.product_id === id ? { ...x, status: 'active' } : x))
-      } else {
+      } else if (tab === 'shop') {
         await adminService.approveShop(id)
-        if (tab === 'shop')    setShops(s => s.map(x => x.reg_id === id ? { ...x, status: 'approved' } : x))
-        if (tab === 'shipper') setShippers(s => s.map(x => x.reg_id === id ? { ...x, status: 'approved' } : x))
+        setShops(s => s.map(x => x.reg_id === id ? { ...x, status: 'approved' } : x))
+      } else if (tab === 'shipper') {
+        await adminService.approveShipper(id)
+        setShippers(s => s.map(x => x.reg_id === id ? { ...x, status: 'approved' } : x))
       }
       toast.success('Đã phê duyệt')
     } catch (err: any) { toast.error(err?.response?.data?.detail || 'Lỗi duyệt') }
@@ -94,13 +96,16 @@ const ApprovalPage: React.FC = () => {
       if (tab === 'product') {
         await adminService.rejectProduct(rejectModal!, rejectReason)
         setProducts(s => s.map(x => x.product_id === rejectModal ? { ...x, status: 'rejected' } : x))
-      } else {
-        if (tab === 'shop')    setShops(s => s.map(x => x.reg_id === rejectModal ? { ...x, status: 'rejected' } : x))
-        if (tab === 'shipper') setShippers(s => s.map(x => x.reg_id === rejectModal ? { ...x, status: 'rejected' } : x))
+      } else if (tab === 'shop') {
+        await adminService.rejectShop(rejectModal!, rejectReason)
+        setShops(s => s.map(x => x.reg_id === rejectModal ? { ...x, status: 'rejected' } : x))
+      } else if (tab === 'shipper') {
+        await adminService.rejectShipper(rejectModal!, rejectReason)
+        setShippers(s => s.map(x => x.reg_id === rejectModal ? { ...x, status: 'rejected' } : x))
       }
       toast.success('Đã từ chối')
       setRejectModal(null); setRejectReason('')
-    } catch { toast.error('Lỗi') }
+    } catch (err: any) { toast.error(err?.response?.data?.detail || 'Lỗi') }
   }
 
   const pendingShops    = shops.filter(x => x.status === 'pending').length
@@ -212,7 +217,7 @@ const ApprovalPage: React.FC = () => {
               <div className="card" style={{ padding: 40, textAlign: 'center', color: C.gray }}>✅ Không có yêu cầu nào</div>
             ) : items.map((item: any, idx) => {
               const id  = item.reg_id ?? item.product_id
-              const title = item.shop_name ?? `Shipper #${item.user_id}`
+              const title = item.shop_name ?? item.full_name ?? `Shipper #${item.user_id}`
               const sub   = tab === 'shop'
                 ? `UID #${item.user_id} · ${item.address ?? '—'}`
                 : `UID #${item.user_id} · ${item.vehicle_type} · ${item.license_plate}`
@@ -429,7 +434,11 @@ const ApprovalPage: React.FC = () => {
         const id = item.reg_id ?? item.product_id
         const st = STATUS_STYLE[item.status] ?? STATUS_STYLE.pending
         const isShop = tabType === 'shop'
-        const accent = isShop ? C.blue : C.warning
+        const VEHICLE_LABELS: Record<string, string> = {
+          motorcycle: '🏍️ Xe máy', car: '🚗 Xe hơi', truck: '🚛 Xe tải',
+          van: '🚐 Van', bicycle: '🚲 Xe đạp', electric_bike: '⚡ Xe điện',
+        }
+        const addressParts = [item.zone_ward, item.zone_district, item.zone_province].filter(Boolean)
         const rows = isShop ? [
           ['🏪 Tên shop',   item.shop_name ?? '—'],
           ['👤 Chủ shop',   `UID #${item.user_id}`],
@@ -439,19 +448,27 @@ const ApprovalPage: React.FC = () => {
         ] : [
           ['👤 Họ tên',       item.full_name ?? `Shipper #${item.user_id}`],
           ['🆔 UID',          `#${item.user_id}`],
-          ['🚗 Phương tiện',  item.vehicle_type ?? '—'],
+          ['📧 Email',        item.email ?? '—'],
+          ['📞 SĐT',          item.phone ?? '—'],
+          ['🚗 Phương tiện',  VEHICLE_LABELS[item.vehicle_type] ?? item.vehicle_type ?? '—'],
           ['🔢 Biển số',      item.license_plate ?? '—'],
-          ['📅 Ngày nộp',     item.created_at ?? '—'],
-          ['📝 Ghi chú',      item.note ?? 'Không có'],
+          ['📍 Khu vực',      addressParts.length ? addressParts.join(', ') : '—'],
+          ['📅 Ngày nộp',     item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : '—'],
         ]
+        const shipperDocs = isShop ? [] : [
+          { label: '📋 Đăng ký xe', url: item.registration_url },
+          { label: '📸 Hình xe',    url: item.vehicle_photo_url },
+          { label: '🪪 Bằng lái',   url: item.license_url },
+          { label: '🪪 CCCD',       url: item.id_card_url },
+        ].filter(d => d.url)
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
             onClick={() => setDetailReg(null)}>
-            <div style={{ background: 'var(--bg-card)', borderRadius: 18, width: '100%', maxWidth: 520, boxShadow: '0 24px 72px rgba(0,0,0,0.3)', overflow: 'hidden' }}
+            <div style={{ background: 'var(--bg-card)', borderRadius: 18, width: '100%', maxWidth: 620, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 72px rgba(0,0,0,0.3)', overflow: 'hidden' }}
               onClick={e => e.stopPropagation()}>
 
               {/* Header */}
-              <div style={{ background: isShop ? 'linear-gradient(135deg,#1D4ED8,#2563EB)' : 'linear-gradient(135deg,#D97706,#F59E0B)', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ background: isShop ? 'linear-gradient(135deg,#1D4ED8,#2563EB)' : 'linear-gradient(135deg,#D97706,#F59E0B)', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                 <div>
                   <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: 600, marginBottom: 4 }}>
                     {isShop ? '🏪 ĐƠN ĐĂNG KÝ MỞ SHOP' : '🚚 ĐƠN ĐĂNG KÝ SHIPPER'}
@@ -463,18 +480,40 @@ const ApprovalPage: React.FC = () => {
                 <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: st.bg, color: st.color }}>{st.label}</span>
               </div>
 
-              {/* Body */}
-              <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Body — scrollable */}
+              <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {rows.map(([label, value]) => (
                   <div key={label as string} style={{ display: 'flex', gap: 12, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10 }}>
                     <span style={{ minWidth: 130, fontSize: 13, color: C.gray, fontWeight: 600 }}>{label}</span>
                     <span style={{ fontSize: 13, color: C.navy, fontWeight: 500 }}>{value}</span>
                   </div>
                 ))}
+
+                {/* Ảnh giấy tờ — chỉ shipper */}
+                {shipperDocs.length > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: C.gray, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>📄 Hồ sơ ảnh giấy tờ</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(shipperDocs.length, 2)}, 1fr)`, gap: 12 }}>
+                      {shipperDocs.map(doc => (
+                        <div key={doc.label}>
+                          <p style={{ fontSize: 11, fontWeight: 600, color: C.gray, marginBottom: 6 }}>{doc.label}</p>
+                          <a href={getImageUrl(doc.url!)} target="_blank" rel="noreferrer">
+                            <img
+                              src={getImageUrl(doc.url!)}
+                              alt={doc.label}
+                              style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 10, border: '1.5px solid var(--border-subtle)', cursor: 'zoom-in', display: 'block' }}
+                              onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                            />
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Footer */}
-              <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, justifyContent: 'flex-end', flexShrink: 0 }}>
                 <button onClick={() => setDetailReg(null)} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Đóng</button>
                 {item.status === 'pending' && (
                   <>
