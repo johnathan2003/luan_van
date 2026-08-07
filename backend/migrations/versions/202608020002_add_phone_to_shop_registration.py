@@ -15,8 +15,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column('shop_registrations', sa.Column('phone', sa.String(20), nullable=True))
+    # NOTE: 'phone' column is already added by 202608020001_add_price_images_to_shop_registration.
+    # This migration became a duplicate after merging branches; kept as a no-op so the
+    # revision id stays valid for migrations that depend on it (202608030005, 202608030006).
+    pass
 
 
 def downgrade() -> None:
-    op.drop_column('shop_registrations', 'phone')
+    pass

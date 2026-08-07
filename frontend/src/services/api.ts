@@ -22,7 +22,17 @@ API.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config
-    if (error.response?.status === 401 && !original._retry) {
+    // 401 = token hết hạn/không hợp lệ (có gửi nhưng sai).
+    // 403 với detail "Not authenticated" = FastAPI HTTPBearer báo KHÔNG có
+    // Authorization header nào cả (token đã bị xoá khỏi localStorage, ví dụ
+    // do checkAuth() thất bại trước đó). Nếu không xử lý case này, mọi
+    // request sau đó cứ 403 lặp lại mãi mà không bao giờ thử refresh hay
+    // đưa người dùng về lại trang login — y hệt lỗi "⚠️ Not authenticated"
+    // treo mãi trên chatbot.
+    const isAuthError =
+      error.response?.status === 401 ||
+      (error.response?.status === 403 && error.response?.data?.detail === 'Not authenticated')
+    if (isAuthError && !original._retry) {
       original._retry = true
       const refreshToken = getRefreshToken()
       if (refreshToken) {
@@ -37,9 +47,12 @@ API.interceptors.response.use(
           return API(original)
         } catch {
           removeToken()
-          window.location.href = '/login'
+          if (window.location.pathname !== '/login') window.location.href = '/login'
         }
-      } else {
+      } else if (window.location.pathname !== '/login') {
+        // Không có refresh_token để thử lại → đưa về login. Chỉ redirect khi
+        // CHƯA ở trang login, tránh vòng lặp reload liên tục (App mount lại →
+        // checkAuth chạy lại → 403 → redirect → App mount lại → ...).
         window.location.href = '/login'
       }
     }

@@ -204,12 +204,22 @@ def shop_orders(
             {
                 "order_id": o.order_id,
                 "user_id": o.user_id,
+                "user_name": o.recipient_name or (o.user.full_name if o.user else None),
+                "phone": o.recipient_phone or (o.user.phone if o.user else None),
+                "delivery_address": o.shipping_address,
                 "final_price": o.final_price,
                 "payment_method": o.payment_method,
                 "payment_status": o.payment_status,
                 "order_status": o.order_status,
                 "created_at": str(o.created_at),
-                "items": [{"product_name": i.product_name, "quantity": i.quantity} for i in o.items],
+                "items": [
+                    {
+                        "product_name": i.product_name,
+                        "quantity": i.quantity,
+                        "price": float(i.price_at_order) if i.price_at_order is not None else 0,
+                    }
+                    for i in o.items
+                ],
             }
             for o in items
         ],

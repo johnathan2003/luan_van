@@ -8,6 +8,8 @@ export const productService = {
     return API.get(`/api/v1/products?${params}`)
   },
   getById: (id: number) => API.get(`/api/v1/products/${id}`),
+  findSimilar: (name: string, excludeId?: number) =>
+    API.get('/api/v1/products/similar', { params: { name, exclude_id: excludeId } }),
   create: (data: ProductCreate) => API.post('/api/v1/products', data),
   update: (id: number, data: ProductUpdate) => API.put(`/api/v1/products/${id}`, data),
   delete: (id: number) => API.delete(`/api/v1/products/${id}`),

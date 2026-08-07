@@ -12,7 +12,7 @@ from app.schemas.product import ProductCreate, ProductUpdate, DeletionRequestCre
 from app.services.product_service import (
     get_products, get_product_by_id, create_product, update_product,
     delete_product_direct, approve_product, reject_product, activate_product,
-    create_deletion_request, get_categories, create_category,
+    create_deletion_request, get_categories, create_category, find_similar_products,
 )
 from app.utils.upload_service import save_upload_file
 
@@ -58,6 +58,18 @@ def list_products(
 def list_categories(db: Session = Depends(get_db)):
     cats = get_categories(db)
     return {"categories": [{"category_id": c.category_id, "category_name": c.category_name, "icon_url": c.icon_url} for c in cats]}
+
+
+@router.get("/similar")
+def similar_products(
+    name: str = Query(..., min_length=1),
+    exclude_id: Optional[int] = None,
+    current_user: User = Depends(require_shop_owner),
+    db: Session = Depends(get_db),
+):
+    """Shop gõ tên sản phẩm mới → gợi ý sản phẩm đã tồn tại có tên tương tự,
+    để tránh đăng trùng lặp hàng hoá lên sàn."""
+    return {"products": find_similar_products(db, name, exclude_product_id=exclude_id)}
 
 
 @router.get("/{product_id}")

@@ -17,8 +17,10 @@ from app.middleware.logging import RequestLoggingMiddleware
 from app.routes import (
     auth, users, products, carts, orders,
     payments, shipments, shops, admin, notifications, vouchers, chat, employee,
-    wallet, banners, bot, feedback, disputes,
+    wallet, banners, feedback, disputes,
 )
+# Chatbot đã tách thành service riêng (../chatbot, port 8002) — xem
+# docker-compose.yml + chatbot/main.py. Không còn router "bot" ở đây.
 from app.routes.warehouses import router as warehouses_router
 from app.routes.warehouse_accounts import router as warehouse_accounts_router
 from app.routes.config_public import router as config_public_router
@@ -231,7 +233,6 @@ app.include_router(warehouses_router,                                      tags=
 app.include_router(warehouse_accounts_router, prefix="/api/v1/warehouse-accounts", tags=["WarehouseAccounts"])
 app.include_router(wallet.router,                                          tags=["Wallet"])
 app.include_router(banners.router,                                         tags=["Banners"])
-app.include_router(bot.router,           prefix="/api/v1/bot",            tags=["Bot"])
 app.include_router(config_public_router, prefix="/api/v1",                tags=["Config"])
 
 # Superadmin — chỉ mount nếu module tồn tại

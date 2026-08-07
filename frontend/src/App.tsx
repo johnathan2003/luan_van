@@ -9,6 +9,7 @@ import { checkAuth } from './store/slices/authSlice'
 import { setEventsEmail } from './utils/eventsStore'
 import { setBannerDraftEmail, clearBase64Drafts } from './utils/bannerDraftStore'
 import { shopService } from './services/shopService'
+import { getToken } from './utils/localStorage'
 
 /* ─── Context trạng thái đình chỉ ──────────────────────────────────────────── */
 export interface ShopStatusCtx { isSuspended: boolean; suspendedReason: string }
@@ -114,7 +115,12 @@ const AppContent: React.FC = () => {
   const [modalDismissed, setModalDismissed] = useState(false)
 
   useEffect(() => {
-    dispatch(checkAuth())
+    // Chỉ gọi /users/me nếu thực sự có token — gọi vô điều kiện khi không có
+    // token sẽ luôn bị backend trả 403 "Not authenticated", và nếu interceptor
+    // vì đó mà redirect về /login (window.location.href = full reload) thì App
+    // mount lại → useEffect này chạy lại → lặp vô hạn, gây cảm giác
+    // "hệ thống load liên tục" khi chưa đăng nhập / token đã mất.
+    if (getToken()) dispatch(checkAuth())
     clearBase64Drafts()
   }, [dispatch])
 

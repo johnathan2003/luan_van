@@ -6,7 +6,7 @@
  */
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useAuth } from '../../hooks/useAuth'
-import API from '../../services/api'
+import ChatbotAPI from '../../services/chatbotApi'
 
 // ── Role config ───────────────────────────────────────────────────────────────
 const ROLE_CONFIG: Record<string, {
@@ -219,7 +219,7 @@ const ChatbotWidget: React.FC = () => {
     setMsgs(m => [...m, { role: 'user', text: msg, ts: new Date() }])
     setLoading(true)
     try {
-      const res = await API.post('/api/v1/bot/query', { message: msg })
+      const res = await ChatbotAPI.post('/api/v1/bot/query', { message: msg })
       const reply: string = res.data.reply
       setMsgs(m => [...m, { role: 'bot', text: reply, ts: new Date() }])
     } catch (e: any) {
@@ -238,7 +238,7 @@ const ChatbotWidget: React.FC = () => {
   }
 
   const handleClear = async () => {
-    try { await API.post('/api/v1/bot/clear') } catch {}
+    try { await ChatbotAPI.post('/api/v1/bot/clear') } catch {}
     setMsgs([{ role: 'bot', text: cfg.greeting, ts: new Date() }])
     setShowChips(true)
   }

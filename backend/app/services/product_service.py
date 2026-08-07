@@ -1,3 +1,6 @@
+import re
+import unicodedata
+from difflib import SequenceMatcher
 from typing import Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
@@ -6,6 +9,66 @@ from app.models.product import Product, ProductCategory, ProductDeletionRequest,
 from app.models.user import User
 from app.schemas.product import ProductCreate, ProductUpdate, DeletionRequestCreate
 from app.utils.helpers import paginate
+
+
+def _normalize_name(name: str) -> str:
+    """Chuẩn hoá tên sản phẩm để so khớp gần đúng: bỏ dấu tiếng Việt, lowercase,
+    gọn khoảng trắng — để "Áo Thun Nam" và "ao thun nam" được coi là giống nhau."""
+    if not name:
+        return ""
+    nfkd = unicodedata.normalize("NFD", name)
+    no_accent = "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
+    no_accent = no_accent.replace("đ", "d").replace("Đ", "D")
+    return re.sub(r"\s+", " ", no_accent.lower()).strip()
+
+
+def find_similar_products(
+    db: Session,
+    name: str,
+    exclude_product_id: Optional[int] = None,
+    limit: int = 5,
+    threshold: float = 0.55,
+):
+    """Tìm sản phẩm có tên tương đồng với `name` (dùng khi shop thêm sản phẩm
+    mới — gợi ý "sản phẩm này có thể đã tồn tại", và khi admin duyệt — cảnh
+    báo có sản phẩm trùng lặp). So khớp gần đúng bằng tỉ lệ tương đồng chuỗi
+    sau khi đã chuẩn hoá (bỏ dấu, lowercase), không chỉ khớp tuyệt đối.
+    """
+    norm_target = _normalize_name(name)
+    if len(norm_target) < 3:
+        return []
+
+    # KHÔNG dùng ILIKE để prefilter: tên đã chuẩn hoá (bỏ dấu) trong khi
+    # product_name trong DB vẫn còn dấu tiếng Việt, nên ILIKE trên chuỗi bỏ
+    # dấu sẽ không khớp được với dữ liệu có dấu (vd tìm "ao" sẽ không khớp
+    # "Áo"). Quy mô sản phẩm của hệ thống còn nhỏ nên quét trực tiếp một tập
+    # ứng viên giới hạn (500 sản phẩm mới nhất) rồi tính similarity trong
+    # Python là đủ nhanh và chính xác hơn.
+    query = db.query(Product).filter(Product.deleted_at.is_(None))
+    if exclude_product_id:
+        query = query.filter(Product.product_id != exclude_product_id)
+    candidates = query.order_by(Product.created_at.desc()).limit(500).all()
+
+    scored = []
+    for p in candidates:
+        ratio = SequenceMatcher(None, norm_target, _normalize_name(p.product_name)).ratio()
+        if ratio >= threshold:
+            scored.append((ratio, p))
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    return [
+        {
+            "product_id": p.product_id,
+            "product_name": p.product_name,
+            "shop_id": p.shop_id,
+            "shop_name": p.shop.shop_name if p.shop else None,
+            "price": str(p.price),
+            "image_urls": p.image_urls or [],
+            "status": p.status,
+            "similarity": round(ratio, 2),
+        }
+        for ratio, p in scored[:limit]
+    ]
 
 
 def get_products(
@@ -127,11 +190,18 @@ def delete_product_direct(db: Session, product_id: int, deleted_by: int, reason:
 
 
 def approve_product(db: Session, product_id: int, reviewer_id: int) -> Product:
+    """Admin duyệt sản phẩm → hiện luôn trên sàn (status='active').
+
+    Trước đây set status='approved' và bắt shop phải tự bấm "Đăng bán"
+    (activate_product) mới thật sự lên sàn — mâu thuẫn với thông báo gửi cho
+    shop lúc duyệt ("đã được duyệt và đang được bày bán trên hệ thống").
+    Nay duyệt xong là active ngay, không cần bước thủ công thứ hai.
+    """
     from datetime import datetime
     product = db.query(Product).filter(Product.product_id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    product.status = "approved"
+    product.status = "active"
     product.approved_at = datetime.utcnow()
     db.commit()
     db.refresh(product)

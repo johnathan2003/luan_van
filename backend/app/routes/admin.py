@@ -13,7 +13,7 @@ from app.services.admin_service import (
     get_shipper_registrations, approve_shipper_registration, reject_shipper_registration,
     get_deletion_requests, resolve_dispute, get_admin_dashboard, create_system_employee,
 )
-from app.services.product_service import approve_product, reject_product, get_pending_products, get_products
+from app.services.product_service import approve_product, reject_product, get_pending_products, get_products, find_similar_products
 from app.models.product import Product
 from app.services.notification_service import create_notification
 
@@ -680,6 +680,15 @@ def all_products(
         q = q.filter(Product.product_name.ilike(f"%{search}%"))
     total = q.count()
     items = q.order_by(Product.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+
+    # Với sản phẩm đang chờ duyệt → tìm luôn sản phẩm tên tương tự đã tồn tại
+    # trên sàn, để admin thấy cảnh báo "có N sản phẩm tương tự" ngay khi duyệt,
+    # tránh đăng trùng lặp hàng hoá.
+    def _similar_for(p: Product):
+        if p.status != "pending":
+            return []
+        return find_similar_products(db, p.product_name, exclude_product_id=p.product_id, limit=3)
+
     return {
         "products": [
             {
@@ -692,6 +701,7 @@ def all_products(
                 "status": p.status,
                 "is_featured": getattr(p, "is_featured", False),
                 "sales_count": p.sales_count,
+                "similar_products": _similar_for(p),
             }
             for p in items
         ],

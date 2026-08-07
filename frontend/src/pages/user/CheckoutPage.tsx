@@ -134,6 +134,21 @@ const loadExtra = (email: string) => {
   } catch { return { addresses: [] } }
 }
 
+// ─── saveExtraAddress: lưu địa chỉ mới nhập vào hồ sơ (dùng chung key với
+// ProfilePage) để lần đặt hàng sau chỉ cần tích chọn, không phải nhập lại ──────
+const saveExtraAddress = (email: string, address: string) => {
+  if (!email || !address.trim()) return
+  try {
+    const key = `buyzo_profile_extra_${email}`
+    const raw = JSON.parse(localStorage.getItem(key) || '{}')
+    const addresses: string[] = Array.isArray(raw.addresses) ? raw.addresses : []
+    if (addresses.includes(address)) return // đã có sẵn, khỏi lưu trùng
+    // Đưa lên đầu danh sách → trở thành địa chỉ mặc định cho lần đặt hàng kế tiếp
+    const next = { ...raw, addresses: [address, ...addresses] }
+    localStorage.setItem(key, JSON.stringify(next))
+  } catch { /* localStorage lỗi (private mode...) → bỏ qua, không chặn đặt hàng */ }
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const CheckoutPage: React.FC = () => {
   const navigate  = useNavigate()
@@ -400,6 +415,12 @@ const CheckoutPage: React.FC = () => {
         : 'BZ' + Date.now().toString().slice(-8)
 
       setOrderId(realOrderId)
+
+      // Địa chỉ vừa nhập (chưa có trong danh sách đã lưu) → lưu lại làm mặc định
+      // cho lần đặt hàng sau, người dùng chỉ cần tích chọn thay vì nhập lại.
+      if (user?.email && selectedAddrIdx === null && shippingAddress) {
+        saveExtraAddress(user.email, shippingAddress)
+      }
 
       // Trừ xu nếu dùng
       if (xuToApply > 0) {

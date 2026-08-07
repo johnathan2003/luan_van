@@ -119,6 +119,23 @@ const ProductManagement: React.FC = () => {
   const [simpleVideoUploading, setSimpleVideoUploading] = useState(false)
   const simpleImgRef   = useRef<HTMLInputElement>(null)
   const simpleVideoRef = useRef<HTMLInputElement>(null)
+  // ── gợi ý sản phẩm trùng tên (chống đăng trùng lặp) ──────
+  const [similarProducts, setSimilarProducts] = useState<any[]>([])
+  const [similarChecking, setSimilarChecking] = useState(false)
+
+  useEffect(() => {
+    if (!simpleModalOpen) { setSimilarProducts([]); return }
+    const name = simpleForm.product_name.trim()
+    if (name.length < 3) { setSimilarProducts([]); return }
+    setSimilarChecking(true)
+    const t = setTimeout(() => {
+      productService.findSimilar(name)
+        .then(res => setSimilarProducts(res.data?.products || []))
+        .catch(() => setSimilarProducts([]))
+        .finally(() => setSimilarChecking(false))
+    }, 500) // debounce — chờ người dùng gõ xong mới gọi API
+    return () => clearTimeout(t)
+  }, [simpleForm.product_name, simpleModalOpen])
   // UI
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [hoverImg, setHoverImg]     = useState<{ url: string; x: number; y: number; name?: string; price?: number; type?: string; stock?: number } | null>(null)
@@ -1094,6 +1111,27 @@ const ProductManagement: React.FC = () => {
             <label className="input-label">Tên sản phẩm <span style={{ color: 'var(--error)' }}>*</span></label>
             <input className="input" type="text" value={simpleForm.product_name}
               onChange={e => setSimpleForm(f => ({ ...f, product_name: e.target.value }))} placeholder="Nhập tên sản phẩm" />
+            {similarChecking && (
+              <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 6 }}>Đang kiểm tra sản phẩm trùng lặp…</div>
+            )}
+            {!similarChecking && similarProducts.length > 0 && (
+              <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 8, background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: '#B45309', marginBottom: 6 }}>
+                  ⚠️ Có thể sản phẩm này đã tồn tại — kiểm tra trước khi đăng để tránh trùng lặp:
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {similarProducts.map((sp: any) => (
+                    <a key={sp.product_id} href={`/products/${sp.product_id}`} target="_blank" rel="noreferrer"
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#92400E', textDecoration: 'none' }}>
+                      {sp.image_urls?.[0] && <img src={getImageUrl(sp.image_urls[0])} alt="" style={{ width: 28, height: 28, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }} />}
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sp.product_name}</span>
+                      <span style={{ flexShrink: 0, fontWeight: 600 }}>{formatCurrency(Number(sp.price))}</span>
+                      <span style={{ flexShrink: 0, textDecoration: 'underline' }}>Xem →</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Danh mục */}

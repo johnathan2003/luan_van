@@ -27,10 +27,15 @@ const ALL_STATUS_STYLE: Record<string, { label: string; color: string; bg: strin
   pending:  { label: 'Chờ duyệt', color: C.warning, bg: '#FEF3C7' },
   rejected: { label: 'Từ chối',   color: C.error,   bg: '#FEE2E2' },
 }
+interface SimilarProduct {
+  product_id: number; product_name: string; shop_id: number; shop_name?: string
+  price: string; image_urls: string[]; status: string; similarity: number
+}
 interface Product {
   product_id: number; product_name: string; shop_id: number
   price: string; stock_quantity: number; image_urls: string[]
   status: string; sales_count?: number; description?: string; video_url?: string
+  similar_products?: SimilarProduct[]
 }
 type Ann = { id: string; section: string; label: string; note: string; imgMarkers?: { x: number; y: number }[] }
 
@@ -205,6 +210,23 @@ const ProductDetailModal: React.FC<{
           {!annotateMode && (
             <div style={{ background: '#EFF6FF', borderBottom: '1px solid #BFDBFE', padding: '6px 22px', fontSize: 11, color: C.blue, flexShrink: 0 }}>
               🔍 Click vào ảnh sản phẩm để phóng to và zoom
+            </div>
+          )}
+
+          {(p.similar_products?.length ?? 0) > 0 && (
+            <div style={{ background: '#FFFBEB', borderBottom: '1px solid #FDE68A', padding: '10px 22px', flexShrink: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#B45309', marginBottom: 6 }}>
+                ⚠️ Có {p.similar_products.length} sản phẩm tên tương tự đã tồn tại trên sàn — kiểm tra trùng lặp trước khi duyệt:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {p.similar_products.map((sp: SimilarProduct) => (
+                  <a key={sp.product_id} href={`/products/${sp.product_id}`} target="_blank" rel="noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, background: '#FEF3C7', textDecoration: 'none', fontSize: 12, color: '#92400E', fontWeight: 600 }}>
+                    {sp.image_urls?.[0] && <img src={getImageUrl(sp.image_urls[0])} alt="" style={{ width: 22, height: 22, borderRadius: 4, objectFit: 'cover' }} />}
+                    {sp.product_name} · Shop #{sp.shop_id} · {formatCurrency(Number(sp.price))} · {Math.round(sp.similarity * 100)}% giống →
+                  </a>
+                ))}
+              </div>
             </div>
           )}
 
@@ -611,6 +633,7 @@ const ProductAdminPage: React.FC = () => {
             const st          = ALL_STATUS_STYLE[p.status] ?? ALL_STATUS_STYLE.pending
             const openDetail  = () => setDetail({ p, variants, allAttrs, allPromos, accessories, gifts, imgs, price, stock })
             const rejection   = rejectionStore.get(p.product_id)
+            const similar     = p.similar_products || []
 
             return (
               <div key={p.product_id} className="card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -628,6 +651,11 @@ const ProductAdminPage: React.FC = () => {
                       <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--primary)' }}>{formatCurrency(price)}</span>
                       <span style={{ fontSize: 11, color: C.gray }}>Shop #{p.shop_id} · Tồn: {stock}</span>
                     </div>
+                    {similar.length > 0 && (
+                      <div onClick={openDetail} style={{ marginTop: 5, fontSize: 11, fontWeight: 700, color: C.warning, background: '#FEF3C7', display: 'inline-block', padding: '3px 8px', borderRadius: 6, cursor: 'pointer' }}>
+                        ⚠️ {similar.length} sản phẩm tương tự đã tồn tại
+                      </div>
+                    )}
                   </div>
                   <div style={{ marginTop: 'auto', display: 'flex', gap: 6 }}>
                     {p.status === 'pending' ? (
