@@ -119,6 +119,7 @@ const LoginForm: React.FC = () => {
                 color: 'var(--gray-400)', padding: 0, display: 'flex', alignItems: 'center',
               }}
               tabIndex={-1}
+              title={showPw ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
             >
               <EyeIcon open={showPw} />
             </button>

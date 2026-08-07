@@ -369,7 +369,29 @@ def shipper_regs(
     items, total, pages = get_shipper_registrations(db, page, limit, status)
     return {
         "registrations": [
-            {"reg_id": r.reg_id, "user_id": r.user_id, "vehicle_type": r.vehicle_type, "status": r.status}
+            {
+                "reg_id":           r.reg_id,
+                "user_id":          r.user_id,
+                "full_name":        r.user.full_name if r.user else None,
+                "email":            r.user.email if r.user else None,
+                "phone":            r.user.phone if r.user else None,
+                "vehicle_type":     r.vehicle_type,
+                "license_plate":    r.license_plate,
+                "shipper_type":     r.shipper_type,
+                "zone_province":    r.zone_province,
+                "zone_district":    getattr(r, "zone_district", None),
+                "zone_ward":        getattr(r, "zone_ward", None),
+                "home_warehouse_id": r.home_warehouse_id,
+                "license_url":      r.license_url,
+                "registration_url": r.registration_url,
+                "vehicle_photo_url": getattr(r, "vehicle_photo_url", None),
+                "id_card_url":      r.id_card_url,
+                "status":           r.status,
+                "rejection_reason": r.rejection_reason,
+                "reviewed_by_name": r.reviewer.full_name if r.reviewer else None,
+                "reviewed_at":      r.reviewed_at.isoformat() if r.reviewed_at else None,
+                "created_at":       r.created_at.isoformat() if r.created_at else None,
+            }
             for r in items
         ],
         "total": total,

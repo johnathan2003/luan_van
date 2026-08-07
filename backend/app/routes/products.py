@@ -1,7 +1,7 @@
 
 import json as _json
 from typing import Optional, List
-from fastapi import APIRouter, Depends, Query, UploadFile, File, Body
+from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException, Body
 
 from sqlalchemy.orm import Session
 

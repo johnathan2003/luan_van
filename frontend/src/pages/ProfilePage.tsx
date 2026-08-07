@@ -394,8 +394,8 @@ const ProfilePage: React.FC = () => {
     padding: '10px 12px',
     border: '2px solid #3b82f6',
     borderRadius: 8, fontSize: 14,
-    background: 'var(--bg-card)',
-    color: 'var(--text-primary)',
+    background: '#fff',
+    color: '#222',
     outline: 'none',
     boxShadow: '0 0 0 3px rgba(59,130,246,0.12)',
   }

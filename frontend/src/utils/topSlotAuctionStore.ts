@@ -52,6 +52,7 @@ export interface TopBid {
 
 export interface TopAuctionSession {
   id: string; slot: TopSlotKey; startedAt: string; endsAt: string; bids: TopBid[]
+  paused?: boolean
   status: 'active' | 'ended'; winner?: TopBid
   scheduledStartAt?: string
   description?: string
@@ -70,7 +71,14 @@ export function msUntilStart(session: TopAuctionSession): number {
 }
 
 export interface AuctionAdminSettings {
-  basePrice: number; biddingDurationMs: number; displayDurationMs: number; locked: boolean
+  slots: number           // Số slot top slot có thể thắng
+  advancedEnabled: boolean // Bật/tắt Giá mua hết & Số slot
+  basePrice: number       // Giá bắt đầu (giá đặt tối thiểu)
+  endPrice?: number       // Giá kết thúc
+  buyNowPrice?: number    // Giá mua hết
+  biddingDurationMs: number
+  displayDurationMs: number
+  locked: boolean
 }
 
 export interface PlaceBidResult { ok: boolean; error?: string; session?: TopAuctionSession }
@@ -105,7 +113,7 @@ const FAKE_SHOP_NAMES = [
 const FAKE_PRODUCTS = ['Tai nghe Bluetooth', 'Kem dưỡng da Hàn', 'Giày thể thao', 'Bình giữ nhiệt', 'Đèn LED', 'Nồi chiên không dầu']
 
 function defaultSettings(basePrice: number): AuctionAdminSettings {
-  return { basePrice, biddingDurationMs: AUCTION_DURATION_MS, displayDurationMs: 24 * 60 * 60 * 1000, locked: false }
+  return { slots: 1, advancedEnabled: false, basePrice, biddingDurationMs: AUCTION_DURATION_MS, displayDurationMs: 24 * 60 * 60 * 1000, locked: false }
 }
 
 function newSession(
@@ -203,6 +211,7 @@ export function getShopCooldownRemaining(slot: TopSlotKey, shopName: string): nu
 export function placeBid(slot: TopSlotKey, shopName: string, productName: string, amount: number, productImage?: string): PlaceBidResult {
   const data = getStore(); const session = rollIfExpired(data, slot)
   if (!session) return { ok: false, error: 'Vị trí này đang bị Admin tạm khoá, chưa thể đặt giá.' }
+  if (session.paused) return { ok: false, error: 'Phiên đấu giá đang bị tạm dừng bởi Admin.' }
   const basePrice = data.settings[slot]?.basePrice ?? TOP_SLOTS.find(d => d.key === slot)!.basePrice
   const minNext = (session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice - MIN_STEP) + MIN_STEP
   if (new Date(session.endsAt).getTime() <= Date.now()) return { ok: false, error: 'Phiên đấu giá đã kết thúc, vui lòng đặt giá ở phiên mới.' }
@@ -303,6 +312,23 @@ export function rejectTopSubmission(id: string, reason?: string): boolean {
 export function getAdminSettings(): Record<TopSlotKey, AuctionAdminSettings> { return getStore().settings }
 export function updateAdminSettings(slot: TopSlotKey, patch: Partial<Omit<AuctionAdminSettings, 'locked'>>): void {
   const data = getStore(); data.settings[slot] = { ...data.settings[slot], ...patch }; saveStore(data)
+}
+
+export function freezeAuction(slot: TopSlotKey): void {
+  const data = getStore()
+  if (data.sessions[slot]) { data.sessions[slot] = { ...data.sessions[slot]!, paused: true }; saveStore(data) }
+}
+
+export function unfreezeAuction(slot: TopSlotKey): void {
+  const data = getStore()
+  if (data.sessions[slot]) { data.sessions[slot] = { ...data.sessions[slot]!, paused: false }; saveStore(data) }
+}
+
+export function cancelAuction(slot: TopSlotKey): void {
+  const data = getStore()
+  delete (data.sessions as any)[slot]
+  data.settings[slot] = { ...data.settings[slot], locked: false }
+  saveStore(data)
 }
 
 export function lockSlot(slot: TopSlotKey): void {

@@ -34,6 +34,7 @@ export interface PoolSession {
   id: string
   startedAt: string
   endsAt: string
+  paused?: boolean
   status: 'active' | 'ended'
   scheduledStartAt?: string
   description?: string
@@ -46,7 +47,9 @@ export interface PoolSession {
 export interface PoolSettings {
   totalSlots: number        // default 100
   maxSlotsPerShop: number   // default 5
-  basePrice: number         // giá tối thiểu/slot
+  basePrice: number         // Giá bắt đầu (giá tối thiểu/slot)
+  endPrice?: number         // Giá kết thúc
+  buyNowPrice?: number      // Giá mua hết
   biddingDurationMs: number
   displayDurationMs: number
   locked: boolean
@@ -200,6 +203,23 @@ export function openAuction(opts?: { startDelayMinutes?: number; description?: s
   return session
 }
 
+export function freezeAuction(): void {
+  const d = getStore()
+  if (d.session) { d.session = { ...d.session, paused: true }; saveStore(d) }
+}
+
+export function unfreezeAuction(): void {
+  const d = getStore()
+  if (d.session) { d.session = { ...d.session, paused: false }; saveStore(d) }
+}
+
+export function cancelAuction(): void {
+  const d = getStore()
+  d.session = null
+  d.settings.locked = false
+  saveStore(d)
+}
+
 export function lockAuction(): void {
   const d = getStore(); rollIfExpired(d)
   if (d.session) {
@@ -221,6 +241,7 @@ export function placeBid(
 ): PlaceBidResult {
   const d = getStore(); rollIfExpired(d)
   if (!d.session || d.session.status !== 'active') return { ok: false, error: 'Chưa có phiên đấu giá nào đang mở.' }
+  if (d.session.paused) return { ok: false, error: 'Phiên đấu giá đang bị tạm dừng bởi Admin.' }
   if (!isAuctionLive(d.session)) return { ok: false, error: 'Phiên chưa bắt đầu, vui lòng chờ.' }
   if (new Date(d.session.endsAt).getTime() <= Date.now()) return { ok: false, error: 'Phiên đấu giá đã kết thúc.' }
   if (slotsRequested < 1 || slotsRequested > d.session.maxSlotsPerShop) {

@@ -97,6 +97,7 @@ export interface BannerAuctionSession {
   scheduledStartAt?: string  // nếu set → chờ đến thời điểm này mới mở đặt giá
   description?: string       // mô tả admin đặt khi mở phiên
   bids: BannerBid[]
+  paused?: boolean
   status: 'active' | 'ended'
   winner?: BannerBid
   confirmation?: 'pending' | 'deposit_paid' | 'declined' | 'expired' | 'paid'
@@ -118,7 +119,11 @@ export function msUntilStart(session: BannerAuctionSession): number {
 }
 
 export interface AuctionAdminSettings {
-  basePrice: number
+  slots: number           // Số slot banner có thể thắng
+  advancedEnabled: boolean // Bật/tắt Giá mua hết & Số slot
+  basePrice: number       // Giá bắt đầu (giá đặt tối thiểu)
+  endPrice?: number       // Giá kết thúc (mốc kết thúc phiên sớm nếu đạt)
+  buyNowPrice?: number    // Giá mua hết (shop trả giá này → thắng ngay)
   biddingDurationMs: number
   displayDurationMs: number
   locked: boolean
@@ -175,7 +180,7 @@ const FAKE_SHOP_NAMES = [
 const FAKE_EMOJIS = ['🔥', '🎉', '🛍️', '⚡', '🎁', '👗', '📱', '🍱', '✨']
 
 function defaultSettings(basePrice: number): AuctionAdminSettings {
-  return { basePrice, biddingDurationMs: AUCTION_DURATION_MS, displayDurationMs: 2 * 24 * 60 * 60 * 1000, locked: false }
+  return { slots: 1, advancedEnabled: false, basePrice, biddingDurationMs: AUCTION_DURATION_MS, displayDurationMs: 2 * 24 * 60 * 60 * 1000, locked: false }
 }
 
 function newSession(
@@ -279,6 +284,7 @@ export function getShopCooldownRemaining(position: BannerPositionKey, shopName: 
 export function placeBid(position: BannerPositionKey, shopName: string, amount: number, bannerImage?: string): PlaceBidResult {
   const data = getStore(); const session = rollIfExpired(data, position)
   if (!session) return { ok: false, error: 'Vị trí này đang bị Admin tạm khoá, chưa thể đặt giá.' }
+  if (session.paused) return { ok: false, error: 'Phiên đấu giá đang bị tạm dừng bởi Admin.' }
   const basePrice = data.settings[position]?.basePrice ?? BANNER_POSITIONS.find(d => d.key === position)!.basePrice
   const minNext = (session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice - MIN_STEP) + MIN_STEP
   if (!isAuctionLive(session)) return { ok: false, error: `⏳ Phiên chưa bắt đầu. Vui lòng chờ đến ${session.scheduledStartAt ? new Date(session.scheduledStartAt).toLocaleTimeString('vi-VN') : ''}` }
@@ -604,6 +610,23 @@ export function expireDisplaySubmission(id: string): boolean {
 export function getAdminSettings(): Record<BannerPositionKey, AuctionAdminSettings> { return getStore().settings }
 export function updateAdminSettings(position: BannerPositionKey, patch: Partial<Omit<AuctionAdminSettings, 'locked'>>): void {
   const data = getStore(); data.settings[position] = { ...data.settings[position], ...patch }; saveStore(data)
+}
+
+export function freezeAuction(position: BannerPositionKey): void {
+  const data = getStore()
+  if (data.sessions[position]) { data.sessions[position] = { ...data.sessions[position]!, paused: true }; saveStore(data) }
+}
+
+export function unfreezeAuction(position: BannerPositionKey): void {
+  const data = getStore()
+  if (data.sessions[position]) { data.sessions[position] = { ...data.sessions[position]!, paused: false }; saveStore(data) }
+}
+
+export function cancelAuction(position: BannerPositionKey): void {
+  const data = getStore()
+  delete (data.sessions as any)[position]
+  data.settings[position] = { ...data.settings[position], locked: false }
+  saveStore(data)
 }
 
 export function lockPosition(position: BannerPositionKey): void {

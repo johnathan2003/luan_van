@@ -78,10 +78,12 @@ const ApprovalPage: React.FC = () => {
       if (tab === 'product') {
         await adminService.approveProduct(id)
         setProducts(s => s.map(x => x.product_id === id ? { ...x, status: 'active' } : x))
-      } else {
+      } else if (tab === 'shop') {
         await adminService.approveShop(id)
-        if (tab === 'shop')    setShops(s => s.map(x => x.reg_id === id ? { ...x, status: 'approved' } : x))
-        if (tab === 'shipper') setShippers(s => s.map(x => x.reg_id === id ? { ...x, status: 'approved' } : x))
+        setShops(s => s.map(x => x.reg_id === id ? { ...x, status: 'approved' } : x))
+      } else if (tab === 'shipper') {
+        await adminService.approveShipper(id)
+        setShippers(s => s.map(x => x.reg_id === id ? { ...x, status: 'approved' } : x))
       }
       toast.success('Đã phê duyệt')
     } catch (err: any) { toast.error(err?.response?.data?.detail || 'Lỗi duyệt') }
@@ -445,6 +447,7 @@ const ApprovalPage: React.FC = () => {
           { label: '📋 Cà vẹt xe',  url: item.registration_url },
           { label: '🚗 Hình xe',     url: item.vehicle_photo_url },
           { label: '🪪 Bằng lái xe', url: item.license_url },
+          { label: '🪪 CCCD',       url: item.id_card_url },
         ]
         const rows = isShop ? [
           ['🏪 Tên shop',   item.shop_name ?? '—'],
@@ -555,7 +558,7 @@ const ApprovalPage: React.FC = () => {
               </div>
 
               {/* Footer */}
-              <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, justifyContent: 'flex-end', flexShrink: 0 }}>
                 <button onClick={() => setDetailReg(null)} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Đóng</button>
                 {item.status === 'pending' && (
                   <>
