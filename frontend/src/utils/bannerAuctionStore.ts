@@ -105,6 +105,7 @@ export interface BannerAuctionSession {
   depositAmount?: number     // 20% số tiền thắng
   paymentDeadline?: string   // hạn thanh toán đủ (sau khi cọc)
   displayDurationMs?: number
+  buyNowPurchases?: Array<{ shopName: string; time: string }> // danh sách shop đã mua slot
 }
 
 /** True khi phiên đã qua thời gian chờ và đang nhận đặt giá */
@@ -157,8 +158,9 @@ export interface BannerSubmission {
   title: string
   link?: string
   image: string
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'awaiting_edit'
   rejectReason?: string
+  rejectCount?: number      // số lần bị từ chối (tối đa 3 lần, lần 3 mới xoá hẳn)
   createdAt: string
   approvedAt?: string       // ISO — thời điểm admin duyệt
   paymentDeadline?: string  // approvedAt + 30 phút — hạn thanh toán phần còn lại
@@ -215,7 +217,33 @@ function getStore(): StoreData {
   return data
 }
 
-function saveStore(data: StoreData) { writeJSON(KEY, data) }
+const MAX_BIDS_PER_SESSION = 50
+
+/** Trước khi save: strip bannerImage khỏi bids (ảnh lớn không cần lưu ở đây)
+ *  và giới hạn bids ≤ MAX_BIDS_PER_SESSION để tránh vượt quota localStorage */
+function trimForStorage(data: StoreData): StoreData {
+  const sessions = { ...data.sessions }
+  for (const key of Object.keys(sessions) as BannerPositionKey[]) {
+    const s = sessions[key]
+    if (s) {
+      sessions[key] = {
+        ...s,
+        bids: s.bids
+          .slice(0, MAX_BIDS_PER_SESSION)
+          .map(({ bannerImage: _img, ...rest }) => rest as BannerBid),
+      }
+    }
+  }
+  const history = data.history.map(s => ({
+    ...s,
+    bids: s.bids
+      .slice(0, MAX_BIDS_PER_SESSION)
+      .map(({ bannerImage: _img, ...rest }) => rest as BannerBid),
+  }))
+  return { ...data, sessions, history }
+}
+
+function saveStore(data: StoreData) { writeJSON(KEY, trimForStorage(data)) }
 
 function rollIfExpired(data: StoreData, position: BannerPositionKey): BannerAuctionSession | undefined {
   const session = data.sessions[position]
@@ -303,6 +331,20 @@ export function placeBid(position: BannerPositionKey, shopName: string, amount: 
   return { ok: true, session }
 }
 
+/** Shop dùng "Mua ngay" — mua 1 slot, tối đa buySlots shop */
+export function placeBuyNow(position: BannerPositionKey, shopName: string, price: number, totalSlots: number): PlaceBidResult {
+  const data = getStore(); const session = rollIfExpired(data, position)
+  if (!session) return { ok: false, error: 'Vị trí này chưa mở phiên.' }
+  if (!isAuctionLive(session)) return { ok: false, error: '⏳ Phiên chưa bắt đầu.' }
+  const purchases = session.buyNowPurchases ?? []
+  if (purchases.some(p => p.shopName === shopName)) return { ok: false, error: 'Bạn đã mua slot này rồi.' }
+  if (purchases.length >= totalSlots) return { ok: false, error: 'Đã hết slot mua ngay.' }
+  session.buyNowPurchases = [...purchases, { shopName, time: new Date().toISOString() }]
+  data.sessions[position] = session
+  saveStore(data)
+  return { ok: true, session }
+}
+
 export function injectFakeBid(position: BannerPositionKey): BannerBid | null {
   const data = getStore(); const session = rollIfExpired(data, position)
   if (!session || new Date(session.endsAt).getTime() <= Date.now()) return null
@@ -341,7 +383,8 @@ export function sweepExpiredWins(): BannerAuctionSession[] {
 export function getPendingWinsForShop(shopName: string): BannerAuctionSession[] {
   sweepExpiredWins(); const data = getStore()
   return data.history.filter(h =>
-    h.winner?.shopName === shopName && h.confirmation === 'pending'
+    h.winner?.shopName === shopName &&
+    (h.confirmation === 'pending' || h.confirmation === 'deposit_paid')
   )
 }
 
@@ -408,6 +451,37 @@ export function getSubmissionByHistoryId(historyId: string): BannerSubmission | 
 }
 export function getAllSubmissions(): BannerSubmission[] { return getStore().submissions }
 
+/** Tạo historyId ảo cho buy-now (không phải từ đấu giá) */
+export function buyNowHistoryId(position: BannerPositionKey, shopName: string): string {
+  return `bn:${position}:${shopName}`
+}
+
+/** Lấy submission của giao dịch mua ngay */
+export function getBuyNowSubmission(position: BannerPositionKey, shopName: string): BannerSubmission | undefined {
+  return getStore().submissions.find(s => s.historyId === buyNowHistoryId(position, shopName))
+}
+
+/** Đăng banner cho giao dịch mua ngay */
+export function submitBannerBuyNow(
+  position: BannerPositionKey, shopName: string,
+  payload: { title: string; link?: string; image: string }
+): BannerSubmission | null {
+  const data = getStore()
+  const historyId = buyNowHistoryId(position, shopName)
+  const existingIdx = data.submissions.findIndex(s => s.historyId === historyId)
+  if (existingIdx !== -1 && !['rejected', 'awaiting_edit'].includes(data.submissions[existingIdx].status)) return null
+  const rejectCount = existingIdx !== -1 ? (data.submissions[existingIdx].rejectCount ?? 0) : 0
+  const submission: BannerSubmission = {
+    id: existingIdx !== -1 ? data.submissions[existingIdx].id : 'sub-bn-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    historyId, position, shopName,
+    title: payload.title, link: payload.link, image: payload.image,
+    status: 'pending', rejectCount, createdAt: new Date().toISOString(),
+  }
+  if (existingIdx !== -1) data.submissions[existingIdx] = submission
+  else data.submissions.unshift(submission)
+  saveStore(data); return submission
+}
+
 /** Seed 3 pending submissions (1 per position) — dùng để test admin UI */
 export function seedTestPendingSubmissions(): void {
   const data = getStore()
@@ -437,13 +511,47 @@ const PAYMENT_WINDOW_FINAL_MS = 30 * 60 * 1000 // 30 phút thanh toán phần c�
 export function approveSubmission(id: string): boolean {
   const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false
   const approvedAt = new Date().toISOString()
-  const paymentDeadline = new Date(Date.now() + PAYMENT_WINDOW_FINAL_MS).toISOString()
+  const isBuyNow = data.submissions[idx].historyId.startsWith('bn:')
+  // Buy-now: đã thanh toán đủ rồi, không cần paymentDeadline
+  const paymentDeadline = isBuyNow ? undefined : new Date(Date.now() + PAYMENT_WINDOW_FINAL_MS).toISOString()
   data.submissions[idx] = { ...data.submissions[idx], status: 'approved', rejectReason: undefined, approvedAt, paymentDeadline }
   saveStore(data); return true
 }
+export const MAX_REJECT_COUNT = 3
+export const MAX_REJECT_COUNT_BUYNOW = 10
+
 export function rejectSubmission(id: string, reason?: string): boolean {
-  const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false
-  data.submissions[idx] = { ...data.submissions[idx], status: 'rejected', rejectReason: reason }; saveStore(data); return true
+  const data = getStore()
+  const idx = data.submissions.findIndex(s => s.id === id)
+  if (idx === -1) return false
+  const cur = data.submissions[idx]
+  const isBuyNow = cur.historyId.startsWith('bn:')
+  const maxCount = isBuyNow ? MAX_REJECT_COUNT_BUYNOW : MAX_REJECT_COUNT
+  const newCount = (cur.rejectCount ?? 0) + 1
+  if (newCount >= maxCount) {
+    data.submissions[idx] = { ...cur, status: 'rejected', rejectReason: reason, rejectCount: newCount }
+  } else {
+    data.submissions[idx] = { ...cur, status: 'awaiting_edit', rejectReason: reason, rejectCount: newCount }
+  }
+  saveStore(data)
+  return true
+}
+
+/** Shop gửi lại sau khi sửa — chuyển awaiting_edit → pending */
+export function resubmitSubmission(id: string, patch?: { title?: string; link?: string; image?: string }): boolean {
+  const data = getStore()
+  const idx = data.submissions.findIndex(s => s.id === id)
+  if (idx === -1) return false
+  if (data.submissions[idx].status !== 'awaiting_edit') return false
+  data.submissions[idx] = {
+    ...data.submissions[idx],
+    ...(patch ?? {}),
+    status: 'pending',
+    rejectReason: undefined,
+    createdAt: new Date().toISOString(),
+  }
+  saveStore(data)
+  return true
 }
 export function cancelSubmissionExpired(id: string): boolean {
   const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false

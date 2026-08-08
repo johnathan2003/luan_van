@@ -263,7 +263,8 @@ export function sweepExpiredWins(): FlashAuctionSession[] {
 export function getPendingWinsForShop(shopName: string): FlashAuctionSession[] {
   sweepExpiredWins(); const data = getStore()
   return data.history.filter(h =>
-    h.winner?.shopName === shopName && h.confirmation === 'pending'
+    h.winner?.shopName === shopName &&
+    (h.confirmation === 'pending' || h.confirmation === 'deposit_paid')
   )
 }
 
