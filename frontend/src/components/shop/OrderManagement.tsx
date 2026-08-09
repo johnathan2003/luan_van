@@ -16,6 +16,14 @@ const STATUS_LABEL: Record<string, string> = {
   shipped: '🛵 Đang giao', delivered: '✅ Đã giao', completed: '🎉 Hoàn thành', cancelled: '❌ Đã hủy',
 }
 
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  cod: '💵 Thanh toán khi nhận hàng (COD)',
+  momo: '🟣 Ví MoMo',
+  vnpay: '🔵 VNPay',
+  zalopay: '🔷 ZaloPay',
+  credit_card: '💳 Thẻ tín dụng',
+}
+
 const C = { navy: '#0F172A', gray: '#64748B', orange: '#EA580C', success: '#16A34A', error: '#DC2626', border: '#E2E8F0' }
 
 /* ── Slip modal ──────────────────────────────────────────────────────────────── */
@@ -350,6 +358,44 @@ const OrderManagement: React.FC = () => {
                       <span style={{ fontSize: 13, color: '#475569' }}>{maskAddr(o.delivery_address || o.shipping_address || '')}</span>
                       <span style={{ fontSize: 10, color: '#94A3B8', marginLeft: 4, flexShrink: 0 }}>🔒 Đã ẩn</span>
                     </div>
+                  </div>
+                </div>
+
+                {/* Thanh toán */}
+                <div>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: C.gray, margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}>Thanh toán</p>
+                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 13, color: '#475569' }}>Phương thức</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: C.navy }}>
+                        {PAYMENT_METHOD_LABEL[o.payment_method as string] || o.payment_method?.toUpperCase() || '—'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 13, color: '#475569' }}>Trạng thái</span>
+                      <span style={{
+                        fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 20,
+                        background: o.payment_status === 'paid' ? '#dcfce7' : o.payment_status === 'failed' ? '#fee2e2' : '#fef3c7',
+                        color:      o.payment_status === 'paid' ? '#16a34a' : o.payment_status === 'failed' ? '#dc2626' : '#d97706',
+                      }}>
+                        {o.payment_status === 'paid' ? '✅ Đã thanh toán'
+                          : o.payment_status === 'failed' ? '❌ Thất bại'
+                          : o.payment_method === 'cod' ? '💵 Thu hộ khi giao (COD)'
+                          : '⏳ Chờ thanh toán'}
+                      </span>
+                    </div>
+                    {o.payment_trans_id && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 13, color: '#475569' }}>Mã giao dịch</span>
+                        <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#64748B' }}>{o.payment_trans_id}</span>
+                      </div>
+                    )}
+                    {o.payment_confirmed_at && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 13, color: '#475569' }}>Xác nhận lúc</span>
+                        <span style={{ fontSize: 12, color: '#64748B' }}>{formatDate(o.payment_confirmed_at)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

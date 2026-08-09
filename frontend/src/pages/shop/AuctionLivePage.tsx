@@ -35,6 +35,12 @@ interface Auction {
   winner_shop: string | null
   bid_count: number | null
   bids: AuctionBid[]
+  // Nội dung banner nộp sau khi thắng — xem POST /auctions/{id}/submit
+  banner_image_url?: string | null
+  banner_title?: string | null
+  banner_link?: string | null
+  banner_status?: 'pending' | 'approved' | 'rejected' | null
+  banner_reject_reason?: string | null
 }
 interface Wallet {
   balance: number
@@ -81,13 +87,117 @@ function fmtMs(ms: number): string {
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
 }
 
+// ── Nộp ảnh banner sau khi thắng đấu giá ────────────────────────────────────
+const BannerSubmitSection: React.FC<{
+  auction: Auction
+  onSubmitted: (auctionId: number, patch: Partial<Auction>) => void
+}> = ({ auction, onSubmitted }) => {
+  const [title, setTitle]       = useState(auction.banner_title || '')
+  const [link, setLink]         = useState(auction.banner_link || '')
+  const [preview, setPreview]   = useState(auction.banner_image_url || '')
+  const [file, setFile]         = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [open, setOpen] = useState(!auction.banner_status || auction.banner_status === 'rejected')
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return
+    setFile(f)
+    setPreview(URL.createObjectURL(f))
+    e.target.value = ''
+  }
+
+  const handleSubmit = async () => {
+    if (!file && !auction.banner_image_url) { toast.error('Vui lòng chọn ảnh banner'); return }
+    setSubmitting(true)
+    try {
+      let imageUrl = auction.banner_image_url || ''
+      if (file) {
+        setUploading(true)
+        const fd = new FormData()
+        fd.append('file', file)
+        const up = await API.post('/api/v1/banners/upload-image', fd, {
+          transformRequest: (data, headers) => { if (headers) delete (headers as any)['Content-Type']; return data },
+        })
+        imageUrl = up.data?.url
+        setUploading(false)
+      }
+      const res = await API.post(`/api/v1/banners/auctions/${auction.auction_id}/submit`, {
+        image_url: imageUrl, title, link,
+      })
+      toast.success('✅ Đã nộp banner — chờ superadmin duyệt')
+      onSubmitted(auction.auction_id, {
+        banner_image_url: res.data.banner_image_url,
+        banner_title: res.data.banner_title,
+        banner_link: res.data.banner_link,
+        banner_status: res.data.banner_status,
+        banner_reject_reason: res.data.banner_reject_reason,
+      })
+      setOpen(false)
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Nộp banner thất bại')
+    } finally {
+      setSubmitting(false)
+      setUploading(false)
+    }
+  }
+
+  const statusBadge = () => {
+    if (auction.banner_status === 'approved') return <span style={{ background: C.greenBg, color: C.green, borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>✅ Đã duyệt — đang hiển thị trên trang chủ</span>
+    if (auction.banner_status === 'pending')  return <span style={{ background: C.orangeBg, color: C.orange, borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>⏳ Đang chờ superadmin duyệt</span>
+    if (auction.banner_status === 'rejected') return <span style={{ background: '#FEE2E2', color: C.red, borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>❌ Bị từ chối{auction.banner_reject_reason ? `: ${auction.banner_reject_reason}` : ''}</span>
+    return null
+  }
+
+  return (
+    <div style={{ padding: '16px 20px', borderTop: `1px solid ${C.border}`, background: C.greenBg }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: open ? 12 : 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, fontSize: 13, color: C.green }}>🏆 Bạn đã thắng phiên này</span>
+          {statusBadge()}
+        </div>
+        {(!open && (!auction.banner_status || auction.banner_status === 'rejected')) && (
+          <button onClick={() => setOpen(true)} style={{ padding: '6px 14px', background: C.green, color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            📤 Nộp ảnh banner
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <label style={{
+            width: 140, height: 90, borderRadius: 8, border: `2px dashed ${C.border}`, background: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', flexShrink: 0,
+          }}>
+            {preview
+              ? <img src={preview.startsWith('blob:') || preview.startsWith('http') ? preview : preview} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <span style={{ fontSize: 11, color: C.gray, textAlign: 'center' }}>🖼️<br />Chọn ảnh</span>}
+            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 200 }}>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Tiêu đề banner (tùy chọn)"
+              style={{ padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13 }} />
+            <input value={link} onChange={e => setLink(e.target.value)} placeholder="Link khi bấm vào banner (tùy chọn)"
+              style={{ padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13 }} />
+            <button onClick={handleSubmit} disabled={submitting}
+              style={{ alignSelf: 'flex-start', padding: '8px 18px', background: submitting ? '#9CA3AF' : C.green, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: submitting ? 'default' : 'pointer' }}>
+              {uploading ? '⏳ Đang tải ảnh...' : submitting ? '⏳ Đang nộp...' : '✅ Nộp banner'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Single auction card ───────────────────────────────────────────────────────
 const AuctionCard: React.FC<{
   auction: Auction
   wallet: Wallet | null
   myShopId: number | null
   onBidPlaced: (auctionId: number, newAuction: Partial<Auction>) => void
-}> = ({ auction, wallet, myShopId, onBidPlaced }) => {
+  onBannerUpdated: (auctionId: number, patch: Partial<Auction>) => void
+}> = ({ auction, wallet, myShopId, onBidPlaced, onBannerUpdated }) => {
   const ms = useCountdown(auction.end_time)
   const [bidInput, setBidInput] = useState('')
   const [placing, setPlacing] = useState(false)
@@ -219,6 +329,11 @@ const AuctionCard: React.FC<{
           </div>
         )}
       </div>
+
+      {/* Nộp ảnh banner — chỉ hiện khi phiên đã kết thúc và bạn là người thắng */}
+      {auction.status === 'ended' && isWinning && (
+        <BannerSubmitSection auction={auction} onSubmitted={onBannerUpdated} />
+      )}
     </div>
   )
 }
@@ -229,7 +344,7 @@ const AuctionLivePage: React.FC = () => {
   const [wallet,   setWallet]     = useState<Wallet | null>(null)
   const [myShopId, setMyShopId]   = useState<number | null>(null)
   const [loading,  setLoading]    = useState(true)
-  const [status,   setStatus]     = useState<'active' | 'upcoming' | 'all'>('active')
+  const [status,   setStatus]     = useState<'active' | 'upcoming' | 'ended' | 'all'>('active')
   const [connected, setConnected] = useState(false)
   const socketRef = useRef<Socket | null>(null)
 
@@ -326,6 +441,11 @@ const AuctionLivePage: React.FC = () => {
     // socket sẽ tự cập nhật state qua banner:bid_update
   }, [loadWallet])
 
+  // ── Banner submitted callback ───────────────────────────────────────────────
+  const handleBannerUpdated = useCallback((auctionId: number, patch: Partial<Auction>) => {
+    setAuctions(prev => prev.map(a => a.auction_id === auctionId ? { ...a, ...patch } : a))
+  }, [])
+
   // ── Render ──────────────────────────────────────────────────────────────────
   const btnStyle = (active: boolean): React.CSSProperties => ({
     padding: '7px 16px', borderRadius: 8, border: `1px solid ${active ? C.purple : C.border}`,
@@ -369,6 +489,7 @@ const AuctionLivePage: React.FC = () => {
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         <button style={btnStyle(status === 'active')}   onClick={() => setStatus('active')}>🟢 Đang mở</button>
         <button style={btnStyle(status === 'upcoming')} onClick={() => setStatus('upcoming')}>⏳ Sắp mở</button>
+        <button style={btnStyle(status === 'ended')}    onClick={() => setStatus('ended')}>🏁 Đã kết thúc</button>
         <button style={btnStyle(status === 'all')}      onClick={() => setStatus('all')}>📋 Tất cả</button>
         <button onClick={() => loadAuctions(status)}
           style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.gray, cursor: 'pointer', fontSize: 12 }}>
@@ -396,6 +517,7 @@ const AuctionLivePage: React.FC = () => {
               wallet={wallet}
               myShopId={myShopId}
               onBidPlaced={handleBidPlaced}
+              onBannerUpdated={handleBannerUpdated}
             />
           ))}
         </div>

@@ -76,9 +76,11 @@ TIER_GRANTS = {
     "ward":     [],
 }
 
-# Role kho gán theo tier
+# Role kho gán theo tier — "dept" (Quản lý tổng) dùng role "Admin_emp" (trước
+# đây tên "warehouse_manager", đổi tên cho rõ nghĩa: đây là nhân viên nội bộ
+# do admin tạo, không phải khách hàng — xem middleware/auth.py::EMPLOYMENT_ROLES).
 TIER_ROLE = {
-    "dept":     "warehouse_manager",
+    "dept":     "Admin_emp",
     "hub":      "warehouse_hub_manager",
     "district": "warehouse_district_manager",
     "ward":     "warehouse_ward_manager",
@@ -534,7 +536,7 @@ def list_warehouse_accounts(
     my_roles = _user_roles(current_user)
     is_admin = "admin" in my_roles or "superadmin" in my_roles
 
-    # Nhận diện "tài khoản kho" qua Role thực (warehouse_manager/hub/district/ward),
+    # Nhận diện "tài khoản kho" qua Role thực (Admin_emp/hub/district/ward),
     # KHÔNG dựa vào SystemEmployee.role_name nữa — để cả 2 luồng tạo (form riêng
     # + checkbox "Quản lý kho" trong trang Nhân viên hệ thống) đều hiện ra đồng nhất.
     all_emps = (

@@ -210,6 +210,8 @@ def shop_orders(
                 "final_price": o.final_price,
                 "payment_method": o.payment_method,
                 "payment_status": o.payment_status,
+                "payment_trans_id": o.payment.trans_id if o.payment else None,
+                "payment_confirmed_at": str(o.payment.updated_at) if o.payment and o.payment.status == "success" else None,
                 "order_status": o.order_status,
                 "created_at": str(o.created_at),
                 "items": [

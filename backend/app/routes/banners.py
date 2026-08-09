@@ -22,7 +22,7 @@ import json
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -33,6 +33,7 @@ from app.models.wallet_auction import (
 )
 from app.models.shop import Shop
 from app.utils.helpers import paginate
+from app.utils.upload_service import save_upload_file
 from app.websocket.connection_manager import sio, fire
 
 router = APIRouter(prefix="/api/v1/banners", tags=["Banners"])
@@ -94,10 +95,59 @@ def _fmt_auction(a: BannerAuction, include_bids=False) -> dict:
         "winner_shop_id": a.winner_shop_id,
         "winner_shop":    a.winner_shop.shop_name if a.winner_shop else None,
         "bid_count":      len(a.bids) if include_bids else None,
+        # Nội dung banner nộp sau khi thắng — xem POST /auctions/{id}/submit
+        "banner_image_url":     a.banner_image_url,
+        "banner_title":         a.banner_title,
+        "banner_link":          a.banner_link,
+        "banner_status":        a.banner_status,
+        "banner_reject_reason": a.banner_reject_reason,
     }
     if include_bids:
         data["bids"] = [_fmt_bid(b) for b in sorted(a.bids, key=lambda b: b.created_at, reverse=True)]
     return data
+
+
+def get_live_banners(db: Session, position: str | None = None) -> list[dict]:
+    """Danh sách banner ĐANG THẬT SỰ hiển thị trên site — nguồn sự thật DUY
+    NHẤT dùng chung bởi:
+      - GET /api/v1/banners/live (public — Home.tsx trang chủ gọi)
+      - GET /api/super/banners/live (superadmin xem — PHẢI khớp 100% với
+        trang chủ, không có bản sao/logic riêng nào khác)
+    Điều kiện "đang live": auction đã ended, banner đã được duyệt
+    (banner_status='approved'), slot vẫn đang active. Mỗi slot chỉ lấy đúng 1
+    banner — auction được duyệt gần nhất (banner_reviewed_at desc).
+    """
+    query = (
+        db.query(BannerAuction)
+        .join(BannerSlot, BannerAuction.slot_id == BannerSlot.slot_id)
+        .filter(
+            BannerAuction.status == "ended",
+            BannerAuction.banner_status == "approved",
+            BannerSlot.is_active == True,
+        )
+    )
+    if position:
+        query = query.filter(BannerSlot.position == position)
+    auctions = query.order_by(BannerAuction.banner_reviewed_at.desc()).all()
+
+    seen_slots: set[int] = set()
+    result = []
+    for a in auctions:
+        if a.slot_id in seen_slots:
+            continue  # đã có banner mới hơn cho slot này rồi
+        seen_slots.add(a.slot_id)
+        result.append({
+            "position":   a.slot.position if a.slot else None,
+            "slot_id":    a.slot_id,
+            "slot_name":  a.slot.name if a.slot else None,
+            "auction_id": a.auction_id,
+            "image_url":  a.banner_image_url,
+            "title":      a.banner_title,
+            "link":       a.banner_link,
+            "shop_name":  a.winner_shop.shop_name if a.winner_shop else None,
+            "reviewed_at": str(a.banner_reviewed_at) if a.banner_reviewed_at else None,
+        })
+    return result
 
 
 def _fmt_bid(b: BannerBid) -> dict:
@@ -141,6 +191,15 @@ def get_auction(auction_id: int, db: Session = Depends(get_db)):
     if not a:
         raise HTTPException(status_code=404, detail="Auction not found")
     return _fmt_auction(a, include_bids=True)
+
+
+@router.get("/live")
+def live_banners(position: str | None = None, db: Session = Depends(get_db)):
+    """Banner ĐANG THẬT SỰ hiển thị trên site — Home.tsx gọi endpoint này cho
+    cả 4 vị trí (home_slider/mall_ads_main/mall_ads_fixed/mall_banner). Cùng
+    dữ liệu hệt như superadmin thấy ở GET /api/super/banners/live."""
+    _refresh_auction_statuses(db)
+    return {"banners": get_live_banners(db, position)}
 
 
 # ── Shop: đặt giá ────────────────────────────────────────────────────────────
@@ -277,6 +336,54 @@ def my_bids(
         .all()
     )
     return {"bids": [_fmt_bid(b) for b in bids]}
+
+
+@router.post("/upload-image")
+async def upload_banner_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_shop_owner),
+):
+    """Shop upload ảnh banner (dùng trước khi gọi /auctions/{id}/submit) —
+    tái dùng save_upload_file() y hệt cách /products/upload-image làm, chỉ
+    khác subfolder để tách riêng thư mục ảnh banner."""
+    url = await save_upload_file(file, "banners")
+    return {"url": url}
+
+
+@router.post("/auctions/{auction_id}/submit")
+def submit_banner(
+    auction_id: int,
+    body: dict,
+    current_user: User = Depends(require_shop_owner),
+    db: Session = Depends(get_db),
+):
+    """Shop nộp ảnh banner sau khi thắng đấu giá — bắt buộc auction đã kết
+    thúc (status='ended') và đúng là shop đã thắng. Nộp xong chuyển sang
+    banner_status='pending', chờ superadmin duyệt (POST /api/super/banners/
+    {id}/approve) mới thật sự lên site (xem get_live_banners() ở trên)."""
+    _refresh_auction_statuses(db)
+    auction = db.query(BannerAuction).filter(BannerAuction.auction_id == auction_id).first()
+    if not auction:
+        raise HTTPException(status_code=404, detail="Auction not found")
+    if auction.status != "ended":
+        raise HTTPException(status_code=400, detail="Phiên đấu giá chưa kết thúc")
+    if auction.winner_shop_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Bạn không phải người thắng phiên đấu giá này")
+
+    image_url = (body.get("image_url") or "").strip()
+    if not image_url:
+        raise HTTPException(status_code=400, detail="Thiếu ảnh banner")
+
+    auction.banner_image_url  = image_url
+    auction.banner_title      = (body.get("title") or "").strip() or None
+    auction.banner_link       = (body.get("link") or "").strip() or None
+    auction.banner_status     = "pending"
+    auction.banner_submitted_at = datetime.now()
+    auction.banner_reviewed_at  = None
+    auction.banner_reject_reason = None
+    db.commit()
+
+    return {"message": "Đã nộp banner, đang chờ superadmin duyệt", **_fmt_auction(auction)}
 
 
 # ── Admin: quản lý slots & auctions ─────────────────────────────────────────

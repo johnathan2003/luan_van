@@ -10,6 +10,7 @@ import { formatCurrency, formatRating } from '../../utils/formatters'
 import { getImageUrl } from '../../utils/helpers'
 import { trackMissionEvent } from '../../utils/eventsStore'
 import API from '../../services/api'
+import { productService } from '../../services/productService'
 import { variantStore } from '../../utils/productBundleStore'
 
 const C = {
@@ -299,6 +300,9 @@ const ProductDetailPage: React.FC = () => {
   const [vouchers, setVouchers] = useState<any[]>([])
   const [showAllVouchers, setShowAllVouchers] = useState(false)
   const [reviews, setReviews] = useState<Review[]>([])
+  const [apiReviews, setApiReviews] = useState<Review[]>([])
+  const [apiRatingBreakdown, setApiRatingBreakdown] = useState<Record<string, number>>({})
+  const [apiReviewsTotal, setApiReviewsTotal] = useState(0)
   const [showReviewForm, setShowReviewForm] = useState(false)
   const [reviewFilter, setReviewFilter] = useState<0|1|2|3|4|5>(0)
   const [shopProducts, setShopProducts] = useState<any[]>([])
@@ -330,6 +334,32 @@ const ProductDetailPage: React.FC = () => {
     return () => clearTimeout(timer)
   }, [product])
   useEffect(() => { if (id) setReviews(getProductReviews(Number(id))) }, [id])
+  useEffect(() => {
+    if (!id) return
+    // Đánh giá thật lưu ở backend (bảng product_reviews) — tách biệt với
+    // "reviews" ở trên (local demo, lưu localStorage). Gộp cả 2 khi hiển thị
+    // để thanh tỉ lệ sao và danh sách đánh giá phản ánh đúng số liệu thật
+    // (vd sản phẩm có 140 đánh giá thật thì thanh sao phải đổi theo).
+    productService.getReviews(Number(id), 1, 50)
+      .then(r => {
+        const data = r.data || {}
+        const adapted: Review[] = (data.reviews || []).map((rv: any) => ({
+          id: `api-${rv.review_id}`,
+          product_id: Number(id),
+          rating: rv.rating,
+          comment: [rv.title, rv.content].filter(Boolean).join(' — ') || '(Không có nội dung)',
+          image_data_urls: [],
+          visibility: 'public',
+          user_name: rv.user_name || 'Ẩn danh',
+          user_email: '',
+          created_at: rv.created_at,
+        }))
+        setApiReviews(adapted)
+        setApiRatingBreakdown(data.rating_breakdown || {})
+        setApiReviewsTotal(data.total || 0)
+      })
+      .catch(() => { setApiReviews([]); setApiRatingBreakdown({}); setApiReviewsTotal(0) })
+  }, [id])
   useEffect(() => {
     API.get('/api/v1/vouchers/platform').then(r => setVouchers((r.data?.vouchers || r.data || []).slice(0, 6))).catch(() => setVouchers([]))
   }, [])
@@ -500,8 +530,16 @@ const ProductDetailPage: React.FC = () => {
   const variants = productVariants
   const inStock = displayStock > 0
   const delivery = getDeliveryInfo()
-  const starCounts = [5,4,3,2,1].map(s => ({ star: s, count: reviews.filter(r => r.rating === s).length }))
-  const visibleReviews = reviewFilter === 0 ? reviews : reviews.filter(r => r.rating === reviewFilter)
+  // Đánh giá local (demo, localStorage) gộp với đánh giá thật (backend) — thanh
+  // tỉ lệ sao dùng rating_breakdown thật của TOÀN BỘ đánh giá (không chỉ trang
+  // đang tải), local review chỉ cộng thêm cho phần chưa kịp đồng bộ.
+  const combinedReviews = [...reviews, ...apiReviews]
+  const totalReviewCount = reviews.length + apiReviewsTotal
+  const starCounts = [5,4,3,2,1].map(s => ({
+    star: s,
+    count: reviews.filter(r => r.rating === s).length + (apiRatingBreakdown[String(s)] || 0),
+  }))
+  const visibleReviews = reviewFilter === 0 ? combinedReviews : combinedReviews.filter(r => r.rating === reviewFilter)
 
   const SectionTitle = ({ icon, children }: { icon: string; children: React.ReactNode }) => (
     <h2 style={{ fontSize: 18, fontWeight: 800, color: C.navy, marginBottom: 20, paddingBottom: 10, borderBottom: `2px solid ${C.light}`, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -759,14 +797,16 @@ const ProductDetailPage: React.FC = () => {
           <div style={{ display: 'flex', gap: 40, alignItems: 'center', marginBottom: 24, flexWrap: 'wrap' }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 56, fontWeight: 900, color: C.gold, lineHeight: 1 }}>
-                {reviews.length > 0 ? (reviews.reduce((a, r) => a + r.rating, 0) / reviews.length).toFixed(1) : (Number(product.rating) || 0).toFixed(1)}
+                {totalReviewCount > 0
+                  ? ((reviews.reduce((a, r) => a + r.rating, 0) + (Number(product.rating) || 0) * apiReviewsTotal) / totalReviewCount).toFixed(1)
+                  : (Number(product.rating) || 0).toFixed(1)}
               </div>
               <Stars val={ratingNum} size={20} />
-              <p style={{ fontSize: 13, color: C.gray, marginTop: 4 }}>{reviews.length + (product.total_reviews ?? 0)} đánh giá</p>
+              <p style={{ fontSize: 13, color: C.gray, marginTop: 4 }}>{totalReviewCount} đánh giá</p>
             </div>
             <div style={{ flex: 1, minWidth: 180 }}>
               {starCounts.map(({ star, count }) => {
-                const pct = reviews.length > 0 ? (count / reviews.length) * 100 : 0
+                const pct = totalReviewCount > 0 ? (count / totalReviewCount) * 100 : 0
                 return (
                   <div key={star} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
                     <span style={{ fontSize: 12, color: C.gray, width: 40, flexShrink: 0 }}>{star} sao</span>
@@ -789,10 +829,10 @@ const ProductDetailPage: React.FC = () => {
           {showReviewForm && isAuthenticated && (
             <ReviewForm productId={Number(id)} userEmail={(user as any)?.email || ''} userName={(user as any)?.full_name || (user as any)?.username || 'Bạn'} onSaved={() => { setReviews(getProductReviews(Number(id))); setShowReviewForm(false) }} />
           )}
-          {reviews.length > 0 && (
+          {combinedReviews.length > 0 && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
               {([0,5,4,3,2,1] as const).map(s => {
-                const cnt = s === 0 ? reviews.length : reviews.filter(r => r.rating === s).length
+                const cnt = s === 0 ? combinedReviews.length : combinedReviews.filter(r => r.rating === s).length
                 const active = reviewFilter === s
                 return (
                   <button key={s} onClick={() => setReviewFilter(s)} style={{ fontSize: 13, padding: '5px 14px', borderRadius: 20, cursor: 'pointer', border: active ? `1.5px solid ${C.primary}` : '1.5px solid var(--gray-200)', background: active ? '#DBEAFE' : 'white', color: active ? C.primary : C.gray, fontWeight: active ? 700 : 400 }}>

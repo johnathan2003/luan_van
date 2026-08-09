@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, forbid_employment
 from app.models.user import User
 from app.schemas.user import UserUpdate, PasswordChange, ShopRegistrationCreate, ShipperRegistrationCreate
 from app.services.user_service import (
@@ -100,7 +100,7 @@ async def upload_image(
 @router.post("/register-shop", status_code=201)
 def register_shop(
     data: ShopRegistrationCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(forbid_employment),
     db: Session = Depends(get_db),
 ):
     reg = register_as_shop(db, current_user, data)
@@ -127,7 +127,7 @@ def get_shop_registration(current_user: User = Depends(get_current_user), db: Se
 @router.post("/register-shipper", status_code=201)
 def register_shipper(
     data: ShipperRegistrationCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(forbid_employment),
     db: Session = Depends(get_db),
 ):
     reg = register_as_shipper(db, current_user, data)

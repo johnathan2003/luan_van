@@ -1,7 +1,34 @@
-# So sánh nhánh `main` (luan_van) và nhánh `front` (luan_van2)
+# So sánh & merge nhánh `main` (luan_van) và nhánh `front` (luan_van2)
 
 Ngày kiểm tra: 2026-08-07
 Repo: `github.com/johnathan2003/luan_van`
+
+**Cập nhật: đã merge xong.** Commit merge: `f1e9a5d` ("Merge branch 'front' (fe80f8f) into main"),
+nằm trên `main`, sau checkpoint `66058f0`. Toàn bộ nội dung bên dưới vẫn giữ lại làm hồ sơ đối
+chiếu — phần "Việc cần làm tiếp" ở cuối file đã được cập nhật theo trạng thái mới.
+
+Tóm tắt cách merge: dùng `git merge` thật (không copy tay) để tận dụng 3-way merge của git cho
+phần không chồng lấn, rồi xử lý thủ công từng file có conflict thật. Trong 93 file khác nhau giữa
+2 nhánh, chỉ 27 file thực sự conflict — 66 file còn lại git tự gộp đúng. Với 27 file conflict, đọc
+kỹ cả 2 phía trước khi quyết định (không có file nào bị ghi đè mù quáng):
+
+- 5 file backend Python + `warehouse_accounts.py`: giữ bản `main` vì có thêm tính năng thật
+  (gán tài khoản có sẵn, tìm user, reset mật khẩu) mà front chưa có.
+- `admin.py` (route shipper-registrations): lấy bản `front` vì đầy đủ field hơn.
+- `shipment.py`: gộp — thêm cột `vehicle_photo_url` từ front (chưa có migration, xem mục 4 cũ).
+- `202608020002_add_phone...py`: giữ bản no-op của main (front vẫn add_column trùng, sẽ lỗi khi chạy).
+- `202608030001_add_status_to_shops.py` + `backup.dump`: xoá hẳn (giữ theo quyết định của main).
+- `ApprovalPage.tsx`: gộp thật — sửa 1 bug thật của main (bấm duyệt shipper lại gọi nhầm API duyệt
+  shop) bằng cách của front, đồng thời giữ tính năng xem ảnh sản phẩm/giấy phép của main + thêm
+  doc CCCD từ front.
+- `LoginForm.tsx`: gộp — giữ animation của main + thêm tooltip nút ẩn/hiện mật khẩu từ front.
+- 19 file còn lại (Router, AdminLayout, các trang admin/hub/warehouse, services, utils...): giữ bản
+  `main` — sau khi đọc kỹ, bản front ở các file này hoặc giống hệt (chỉ khác định dạng), hoặc là bản
+  cũ hơn/thiếu tính năng so với main (ví dụ ShopManagementPage của front chỉ có nút `alert()` giả,
+  main đã làm thật đình chỉ/kích hoạt/xoá shop).
+
+Đã verify sau merge: toàn bộ file `.py` thay đổi compile sạch; chuỗi migration Alembic chỉ còn
+đúng 1 head duy nhất (`202608040001`), không còn revision ID trùng.
 
 - `main` (thư mục `luan_van`) — HEAD: `523aa52` ("Merge remote-tracking branch 'origin/front'")
 - `front` (thư mục `luan_van2`) — HEAD: `fe80f8f` ("fix_banner_admin")
@@ -162,22 +189,21 @@ Cả `main` và `front` đều có **2 file migration khác nhau nhưng cùng kh
 2. Thêm migration gộp nhánh `202608030006_merge_heads_shops_status_and_demo_seed.py` (down_revision = `202608030005`, `202608030004`)
 3. Thêm tiếp `202608040001_backfill_approved_products_to_active.py` trên đầu
 
-→ **Đã cố tình KHÔNG khôi phục** file `202608030001_add_status_to_shops.py` cũ ở mục 1, vì khôi phục sẽ tái tạo lỗi trùng ID. Cách sửa hiện tại trong working tree của `main` là đúng hướng nhưng **chưa được `git add`/commit** — cần commit sớm để không bị mất, đồng thời front vẫn còn giữ bug này nếu merge từ front vào sau cần cẩn thận không mang lại 2 file trùng ID.
+→ **Đã cố tình KHÔNG khôi phục** file `202608030001_add_status_to_shops.py` cũ, và trong lúc merge cũng xoá hẳn bản của front (front bị bug y hệt). ĐÃ COMMIT trong checkpoint `66058f0` — không còn là việc tồn đọng.
 
 ---
 
-## 5. Việc chưa commit ở `main` — rủi ro mất việc nếu không xử lý
+## 5. Việc đã commit (trước là rủi ro, giờ đã xử lý)
 
-Các mục sau chỉ tồn tại trong working tree của `main`, **chưa từng được `git add`/commit** (không nằm trong lịch sử git, không nằm ở front, chỉ tồn tại trên máy):
+Các mục sau trước đây chỉ tồn tại trong working tree, chưa từng `git add`/commit — **giờ đã nằm
+trong checkpoint `66058f0`**, không còn rủi ro mất:
 - `chatbot/` — cả thư mục module chatbot
 - `frontend/src/services/chatbotApi.ts`
 - `backend/migrations/versions/202608030005_add_status_to_shops.py`
 - `backend/migrations/versions/202608030006_merge_heads_shops_status_and_demo_seed.py`
 - `backend/migrations/versions/202608040001_backfill_approved_products_to_active.py`
 
-**Khuyến nghị: commit ngay các mục trên** — đây là công sức thật (tính năng chatbot + fix bug migration ở mục 4), hiện chỉ nằm trên working tree nên có thể mất nếu máy gặp sự cố hoặc thao tác git nhầm.
-
-Ngoài ra `main` còn 44 file khác đang ở trạng thái "modified" chưa commit (WIP dở dang, liệt kê ở mục 3) — nên commit theo từng cụm tính năng thay vì để dồn lại, để tránh lặp lại tình huống mất file như mục 1.
+44 file "modified" WIP trước đó (mục 3) cũng đã nằm trong checkpoint này.
 
 ---
 
@@ -193,10 +219,18 @@ Ngoài ra `main` còn 44 file khác đang ở trạng thái "modified" chưa com
 
 ---
 
-## Tóm tắt việc cần làm tiếp (thủ công)
+## Tóm tắt việc cần làm tiếp (sau khi đã merge xong)
 
-1. Xem lại 7 file kế hoạch `.md` có bản khác nhau giữa 2 nhánh (mục 1) — chọn giữ bản nào hoặc gộp tay.
-2. Review từng nhóm trong mục 3 theo độ ưu tiên: routes backend → migrations → trang quản lý kho vận (Hub/District/Ward/Warehouse, lệch nhiều nhất) → các trang admin khác → services/utils.
-3. Commit ngay các phần chưa lưu ở mục 5 (đặc biệt là fix bug migration ở mục 4) trước khi làm gì khác, để không mất việc.
-4. Xoá các file rác ở mục 6.
-5. Sau khi merge xong từng phần, chạy thử `alembic upgrade head` để xác nhận chuỗi migration không còn head trùng.
+1. **Test lại toàn bộ app** — merge đã xử lý xong về mặt code (git log: `f1e9a5d` trên `main`),
+   nhưng chưa chạy thử thực tế. Ưu tiên test: luồng duyệt shop/shipper (vừa sửa bug gọi nhầm API ở
+   `ApprovalPage.tsx`), toàn bộ khu vực quản lý tài khoản kho (Hub/District/Ward/Warehouse — nơi
+   lệch nhiều nhất), và chatbot (vừa tách service riêng, cần `docker-compose` chạy cả 2 service).
+2. **Thêm migration cho cột `vehicle_photo_url`** (mục 3) — model đã có cột này (gộp từ front) nhưng
+   chưa migration nào tạo cột thật trong DB. Cần thêm 1 migration mới nối sau `202608040001`.
+3. Chạy `alembic upgrade head` (hoặc ít nhất `alembic heads`) để xác nhận chuỗi migration hoạt động
+   thật trên DB, không chỉ đúng trên giấy.
+4. Xoá các file rác ở mục 6 (đặc biệt `__test_delete_probe__.py.stale`).
+5. `git push` lên `origin/main` khi đã test ổn — hiện `main` đang vượt `origin/main` 4 commit
+   (mới chỉ nằm ở máy local).
+6. Có thể xoá nhánh `front` trên GitHub sau khi xác nhận merge ổn — front không còn nội dung nào mà
+   main chưa có (đã kiểm chứng ở mục 2).

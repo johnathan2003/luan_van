@@ -51,7 +51,7 @@ const LoginForm: React.FC = () => {
       else if (primary === 'warehouse_hub_manager')       navigate('/hub')
       else if (primary === 'warehouse_district_manager')  navigate('/district')
       else if (primary === 'warehouse_ward_manager')      navigate('/ward')
-      else if (primary === 'warehouse_manager')           navigate('/warehouse')
+      else if (primary === 'Admin_emp')                   navigate('/warehouse')
       else navigate('/')
     } else {
       const errMsg = result.payload as string || 'Đăng nhập thất bại'

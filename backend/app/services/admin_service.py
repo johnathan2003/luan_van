@@ -258,7 +258,9 @@ def get_admin_dashboard(db: Session) -> dict:
 
 
 # Checkbox "Quản lý kho" trong form phân quyền nhân viên = bundle của 3 quyền tạo
-# tài khoản kho + role warehouse_manager (đăng nhập được portal /warehouse).
+# tài khoản kho + role Admin_emp (đăng nhập được portal /warehouse). Role này
+# trước đây tên "warehouse_manager" — đổi tên cho rõ nghĩa nhân viên nội bộ
+# do admin tạo (xem middleware/auth.py::EMPLOYMENT_ROLES).
 WAREHOUSE_MANAGE_PERM = "warehouse_manage"
 WAREHOUSE_CREATE_PERMS = ["warehouse_create_hub", "warehouse_create_district", "warehouse_create_ward"]
 
@@ -266,16 +268,16 @@ WAREHOUSE_CREATE_PERMS = ["warehouse_create_hub", "warehouse_create_district", "
 def _sync_warehouse_manage(db: Session, emp: SystemEmployee, permissions: list, granted_by: int) -> None:
     """
     Đồng bộ quyền 'Tổng quản lý kho' khi checkbox warehouse_manage được bật/tắt:
-    - Bật: gán role warehouse_manager + 3 quyền warehouse_create_hub/district/ward
+    - Bật: gán role Admin_emp + 3 quyền warehouse_create_hub/district/ward
     - Tắt: thu hồi role + 3 quyền đó (giữ nguyên các quyền khác)
     """
     from app.models.user import Role, UserRole
 
     has_flag = WAREHOUSE_MANAGE_PERM in permissions
 
-    role = db.query(Role).filter_by(role_name="warehouse_manager").first()
+    role = db.query(Role).filter_by(role_name="Admin_emp").first()
     if has_flag and not role:
-        role = Role(role_name="warehouse_manager", description="BuyZo — Quản lý tổng kho")
+        role = Role(role_name="Admin_emp", description="BuyZo — Quản lý tổng kho (nhân viên nội bộ)")
         db.add(role)
         db.flush()
 

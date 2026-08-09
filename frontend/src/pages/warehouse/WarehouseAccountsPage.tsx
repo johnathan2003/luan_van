@@ -1,7 +1,7 @@
 /**
  * WarehouseAccountsPage.tsx
  * ─────────────────────────────────────────────────────
- * Trang cho "Quản lý tổng" (role warehouse_manager) tạo tài khoản
+ * Trang cho "Quản lý tổng" (role Admin_emp) tạo tài khoản
  * Kho cấp 1 (Hub) / cấp 2 (District) / cấp 3 (Ward).
  *
  * Mô hình 2 cấp phân quyền, mặc định KHÔNG cascading tiếp:

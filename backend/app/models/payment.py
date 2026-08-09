@@ -11,8 +11,14 @@ class Payment(Base):
     order_id = Column(Integer, ForeignKey("orders.order_id"), nullable=False, unique=True)
     trans_id = Column(String(255))
     amount = Column(Numeric(10, 2), nullable=False)   # Prisma: Decimal(10,2)
-    method = Column(Enum("momo", "cod", "vnpay", "credit_card", native_enum=False))
-    status = Column(Enum("pending", "success", "failed", native_enum=False), default="pending", index=True)
+    method = Column(Enum("momo", "cod", "vnpay", "zalopay", "credit_card", native_enum=False))
+    # ZaloPay fields
+    zalopay_app_trans_id = Column(String(64))
+    zalopay_response = Column(JSON)
+    # "expired" dùng cho luồng demo MoMo giả lập (hết 60s chưa xác nhận) —
+    # cột DB là VARCHAR(50) thuần (không có CHECK constraint, xem migration
+    # 202606010916_initial_schema.py) nên thêm giá trị mới không cần migration.
+    status = Column(Enum("pending", "success", "failed", "expired", native_enum=False), default="pending", index=True)
     # Momo fields
     momo_request_id = Column(String(255))
     momo_response = Column(JSON)

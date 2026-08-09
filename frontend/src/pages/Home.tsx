@@ -5,9 +5,24 @@ import ProductFilter from '../components/product/ProductFilter'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { fetchProducts, fetchCategories, setFilters, resetFilters, appendProducts, resetProducts, setLoadingMore, setLoopLoading } from '../store/slices/productSlice'
 import { formatCurrency } from '../utils/formatters'
-import { getAllSubmissions, resolveImage } from '../utils/bannerAuctionStore'
-import { resolveImageAsync } from '../utils/imageDB'
+import { getImageUrl } from '../utils/helpers'
 import API from '../services/api'
+
+// Banner (home_slider/mall_ads_main/mall_ads_fixed/mall_banner) lấy từ hệ
+// thống đấu giá THẬT (Postgres) qua GET /api/v1/banners/live — banner chỉ
+// lên đây sau khi shop thắng đấu giá, nộp ảnh, và superadmin duyệt (xem
+// /shop/auction-live + trang "Banner" trong /super). Không còn đọc từ
+// localStorage mock nữa.
+async function fetchLiveBanners(position: string): Promise<{ src: string; link?: string; title?: string }[]> {
+  try {
+    const r = await API.get('/api/v1/banners/live', { params: { position } })
+    return (r.data?.banners || []).map((b: any) => ({
+      src: getImageUrl(b.image_url), link: b.link || undefined, title: b.title || undefined,
+    }))
+  } catch {
+    return []
+  }
+}
 
 // ─── Banner ───────────────────────────────────────────────────────────────────
 type BannerItem = { src: string; link?: string; title?: string }
@@ -30,26 +45,20 @@ const BannerSlider: React.FC = () => {
   const progRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const busyRef = useRef(false)
 
-  // Load approved home_slider submissions from store
+  // Load banner "home_slider" đang thật sự active (đã duyệt) từ backend
   const loadApproved = useCallback(() => {
-    const subs = getAllSubmissions().filter(s => s.position === 'home_slider' && s.status === 'approved')
-    // Resolve all image refs (sync for localStorage, async for IDB)
-    Promise.all(subs.map(async s => ({
-      src: await resolveImageAsync(s.image) || resolveImage(s.image),
-      link: s.link,
-      title: s.title,
-    }))).then(approved => {
-      const valid = approved.filter(a => a.src) // bỏ banner có src rỗng (ref bị lỗi)
-      // Nếu đã có banner admin hợp lệ thì chỉ show chúng, không kèm static
+    fetchLiveBanners('home_slider').then(valid => {
+      // Nếu đã có banner thật hợp lệ thì chỉ show chúng, không kèm static
       setBanners(valid.length > 0 ? valid : STATIC_BANNERS)
     })
   }, [])
 
   useEffect(() => {
     loadApproved()
-    // Tự cập nhật khi admin duyệt banner (localStorage thay đổi từ tab khác)
-    window.addEventListener('storage', loadApproved)
-    return () => window.removeEventListener('storage', loadApproved)
+    // Banner chỉ đổi khi superadmin duyệt (hiếm) — refresh định kỳ nhẹ nhàng
+    // thay vì lắng nghe 'storage' (không còn ý nghĩa vì không còn localStorage mock)
+    const id = setInterval(loadApproved, 60_000)
+    return () => clearInterval(id)
   }, [loadApproved])
 
   const go = useCallback((to: number, total: number) => {
@@ -233,29 +242,20 @@ const MallAdBanner: React.FC = () => {
   const [fixedAds, setFixedAds] = useState<MallAdItem[]>([{ src: STATIC_MALL_FIXED }])
 
   const loadMallAds = useCallback(() => {
-    const subs   = getAllSubmissions().filter(s => s.status === 'approved')
-    const mains  = subs.filter(s => s.position === 'mall_ads_main')
-    const fixeds = subs.filter(s => s.position === 'mall_ads_fixed')
-
     // Phần 7 (main)
-    Promise.all(mains.map(async s => ({ src: await resolveImageAsync(s.image) || resolveImage(s.image), link: s.link })))
-      .then(main => {
-        const valid = main.filter(m => m.src)
-        setMainAds(valid.length > 0 ? valid : STATIC_MALL_ADS.map(src => ({ src })))
-      })
-
+    fetchLiveBanners('mall_ads_main').then(valid => {
+      setMainAds(valid.length > 0 ? valid : STATIC_MALL_ADS.map(src => ({ src })))
+    })
     // Phần 3 (fixed) — hỗ trợ nhiều ảnh như phần 7
-    Promise.all(fixeds.map(async s => ({ src: await resolveImageAsync(s.image) || resolveImage(s.image), link: s.link })))
-      .then(fixed => {
-        const valid = fixed.filter(f => f.src)
-        setFixedAds(valid.length > 0 ? valid : [{ src: STATIC_MALL_FIXED }])
-      })
+    fetchLiveBanners('mall_ads_fixed').then(valid => {
+      setFixedAds(valid.length > 0 ? valid : [{ src: STATIC_MALL_FIXED }])
+    })
   }, [])
 
   useEffect(() => {
     loadMallAds()
-    window.addEventListener('storage', loadMallAds)
-    return () => window.removeEventListener('storage', loadMallAds)
+    const id = setInterval(loadMallAds, 60_000)
+    return () => clearInterval(id)
   }, [loadMallAds])
 
   // Auto-slide phần 7
@@ -347,18 +347,15 @@ const BuyZoMallSection: React.FC = () => {
   const [mallBannerCur, setMallBannerCur] = useState(0)
 
   const loadMallBannerAds = useCallback(() => {
-    const subs = getAllSubmissions().filter(s => s.status === 'approved' && s.position === 'mall_banner')
-    Promise.all(subs.map(async s => ({ src: await resolveImageAsync(s.image) || resolveImage(s.image), link: s.link })))
-      .then(ads => {
-        const valid = ads.filter(a => a.src)
-        setMallBannerAds(valid.length > 0 ? valid : STATIC_MALL_BANNER_ADS)
-      })
+    fetchLiveBanners('mall_banner').then(valid => {
+      setMallBannerAds(valid.length > 0 ? valid : STATIC_MALL_BANNER_ADS)
+    })
   }, [])
 
   useEffect(() => {
     loadMallBannerAds()
-    window.addEventListener('storage', loadMallBannerAds)
-    return () => window.removeEventListener('storage', loadMallBannerAds)
+    const id = setInterval(loadMallBannerAds, 60_000)
+    return () => clearInterval(id)
   }, [loadMallBannerAds])
 
   useEffect(() => {

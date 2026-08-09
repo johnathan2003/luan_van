@@ -569,7 +569,7 @@ def list_warehouse_managers(
     """Danh sách quản lý kho (nhân viên hệ thống do admin chỉ định)."""
     from app.models.user import UserRole, Role
     from app.models.shipment import WarehouseManager, Warehouse
-    wm_role = db.query(Role).filter(Role.role_name == "warehouse_manager").first()
+    wm_role = db.query(Role).filter(Role.role_name == "Admin_emp").first()
     if not wm_role:
         return {"managers": []}
     active_wm_ids = [ur.user_id for ur in db.query(UserRole).filter(
@@ -606,7 +606,7 @@ def create_warehouse_manager(
     LƯU Ý: endpoint cũ, không dùng ở UI nữa (đã gộp vào /admin/warehouse-hierarchy +
     /api/v1/warehouse-accounts). Giữ lại để tương thích ngược, nhưng role gán ra
     giờ tier-aware (theo Warehouse.tier) giống assign_warehouse_manager — tránh gán
-    nhầm role "warehouse_manager" (Quản lý tổng) cho kho hub/district/ward.
+    nhầm role "Admin_emp" (Quản lý tổng) cho kho hub/district/ward.
     """
     from app.models.user import UserRole, Role
     from app.models.shipment import WarehouseManager, Warehouse
@@ -639,7 +639,7 @@ def create_warehouse_manager(
     db.flush()
 
     # Role theo đúng tier của kho (1=hub, 2=district, 3=ward) — KHÔNG hardcode
-    # "warehouse_manager" (role đó chỉ dành cho Quản lý tổng, không gắn 1 kho cụ thể).
+    # "Admin_emp" (role đó chỉ dành cho Quản lý tổng, không gắn 1 kho cụ thể).
     TIER_ROLES = {1: "warehouse_hub_manager", 2: "warehouse_district_manager", 3: "warehouse_ward_manager"}
     role_name = TIER_ROLES.get(wh.tier, "warehouse_hub_manager")
     wm_role = db.query(Role).filter(Role.role_name == role_name).first()
@@ -669,7 +669,7 @@ def delete_warehouse_manager(
     if not user:
         raise HTTPException(404, "Không tìm thấy người dùng")
     # Vô hiệu hóa role
-    wm_role = db.query(Role).filter(Role.role_name == "warehouse_manager").first()
+    wm_role = db.query(Role).filter(Role.role_name == "Admin_emp").first()
     if wm_role:
         ur = db.query(UserRole).filter(UserRole.user_id == user_id, UserRole.role_id == wm_role.role_id).first()
         if ur:
@@ -964,7 +964,7 @@ def assign_warehouse_manager(
         2: "warehouse_district_manager",
         3: "warehouse_ward_manager",
     }
-    role_name = TIER_ROLES.get(wh.tier, "warehouse_manager")
+    role_name = TIER_ROLES.get(wh.tier, "Admin_emp")
 
     # Gỡ kho cũ nếu user đang quản lý kho khác
     old_wm = db.query(WarehouseManager).filter(WarehouseManager.manager_id == user_id).first()
@@ -972,7 +972,7 @@ def assign_warehouse_manager(
         db.delete(old_wm)
 
     # Gỡ mọi role kho cũ của user này
-    old_role_names = list(TIER_ROLES.values()) + ["warehouse_manager"]
+    old_role_names = list(TIER_ROLES.values()) + ["Admin_emp"]
     for rn in old_role_names:
         old_role = db.query(Role).filter(Role.role_name == rn).first()
         if old_role:
@@ -1029,7 +1029,7 @@ def unassign_warehouse_manager(
         db.delete(wm)
 
     # Thu hồi mọi role kho
-    TIER_ROLES = ["warehouse_hub_manager", "warehouse_district_manager", "warehouse_ward_manager", "warehouse_manager"]
+    TIER_ROLES = ["warehouse_hub_manager", "warehouse_district_manager", "warehouse_ward_manager", "Admin_emp"]
     for rn in TIER_ROLES:
         r = db.query(Role).filter(Role.role_name == rn).first()
         if r:

@@ -97,14 +97,33 @@ def require_shipper(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+# "Nhân viên nội bộ" (employment) — quản lý kho các cấp, do admin tạo, không
+# phải khách hàng: không được mua/bán hàng, chỉ thấy phần được cấp quyền.
+# "Admin_emp" = cấp "Quản lý tổng" (trước đây gọi "warehouse_manager") — do
+# admin tạo trực tiếp, có quyền CRUD tài khoản kho cấp dưới (hub/district/ward).
+EMPLOYMENT_ROLES = {
+    "Admin_emp", "warehouse_hub_manager",
+    "warehouse_district_manager", "warehouse_ward_manager",
+}
+
+
+def forbid_employment(current_user: User = Depends(get_current_user)) -> User:
+    """Chặn tài khoản nhân viên nội bộ (Admin_emp/quản lý kho các cấp) mua
+    hoặc tự đăng ký bán hàng — các role này chỉ vận hành nghiệp vụ được admin
+    giao, không đóng vai khách hàng của sàn."""
+    user_roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
+    if user_roles & EMPLOYMENT_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản nhân viên nội bộ không có quyền mua/bán hàng trên sàn",
+        )
+    return current_user
+
+
 def require_warehouse_manager(current_user: User = Depends(get_current_user)) -> User:
     """Quản lý kho bất kỳ cấp nào (hoặc admin)."""
     user_roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
-    allowed = {
-        "warehouse_manager", "warehouse_hub_manager",
-        "warehouse_district_manager", "warehouse_ward_manager",
-        "admin",
-    }
+    allowed = EMPLOYMENT_ROLES | {"admin"}
     if not user_roles & allowed:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Warehouse manager access required")
     return current_user

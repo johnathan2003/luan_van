@@ -33,6 +33,12 @@ class VNPayCreateRequest(BaseModel):
     bank_code: Optional[str] = None
 
 
+class ZaloPayCreateRequest(BaseModel):
+    order_id: int
+    amount: int
+    order_info: Optional[str] = None
+
+
 class PaymentResponse(BaseModel):
     payment_id: int
     order_id: int

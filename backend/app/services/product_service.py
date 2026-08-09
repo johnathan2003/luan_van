@@ -2,10 +2,12 @@ import re
 import unicodedata
 from difflib import SequenceMatcher
 from typing import Optional
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
 from app.models.product import Product, ProductCategory, ProductDeletionRequest, ProductDeletionAuditLog
+from app.models.shop import Shop
 from app.models.user import User
 from app.schemas.product import ProductCreate, ProductUpdate, DeletionRequestCreate
 from app.utils.helpers import paginate
@@ -89,7 +91,21 @@ def get_products(
     if shop_id:
         query = query.filter(Product.shop_id == shop_id)
     if search:
-        query = query.filter(Product.product_name.ilike(f"%{search}%"))
+        # Tìm theo nhiều trường thay vì chỉ product_name — vd tìm "kem đánh răng"
+        # (tên category) hoặc "dior" (tên shop) vẫn phải ra đúng sản phẩm liên quan,
+        # không chỉ khi từ khoá xuất hiện nguyên văn trong tên sản phẩm.
+        like = f"%{search}%"
+        query = (
+            query
+            .outerjoin(ProductCategory, Product.category_id == ProductCategory.category_id)
+            .outerjoin(Shop, Product.shop_id == Shop.shop_id)
+            .filter(or_(
+                Product.product_name.ilike(like),
+                Product.description.ilike(like),
+                ProductCategory.category_name.ilike(like),
+                Shop.shop_name.ilike(like),
+            ))
+        )
     if min_price is not None:
         query = query.filter(Product.price >= str(min_price))
     if max_price is not None:

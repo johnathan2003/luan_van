@@ -23,8 +23,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Momo
-    MOMO_ENDPOINT: str = "https://test-payment.momo.vn/v3/gateway/api/create"
+    # Momo — endpoint chuẩn theo tài liệu MoMo hiện tại (developers.momo.vn) LUÔN
+    # là /v2/gateway/api/create, kể cả ở phần docs gắn nhãn "v3" (v3 chỉ là bản
+    # doc site, không phải version API). Trỏ nhầm /v3/gateway/api/create sẽ
+    # khiến request lỗi/hoặc không đúng định dạng MoMo mong đợi.
+    MOMO_ENDPOINT: str = "https://test-payment.momo.vn/v2/gateway/api/create"
     MOMO_PARTNER_CODE: str = ""
     MOMO_ACCESS_KEY: str = ""
     MOMO_SECRET_KEY: str = ""
@@ -33,7 +36,15 @@ class Settings(BaseSettings):
     VNPAY_TMN_CODE: str = ""
     VNPAY_HASH_SECRET: str = ""
     VNPAY_URL: str = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
-    VNPAY_RETURN_URL: str = "http://localhost:3000/payment/vnpay-return"
+    # Trang FE mà VNPay chuyển trình duyệt người dùng về sau khi thanh toán xong
+    VNPAY_RETURN_URL: str = "http://localhost:3000/payment/result"
+
+    # ZaloPay — sandbox v2 (docs.zalopay.vn). app_id/key1/key2 để trống thì hệ
+    # thống tự chuyển sang demo mode (giả lập), giống Momo/VNPay.
+    ZALOPAY_ENDPOINT: str = "https://sb-openapi.zalopay.vn/v2/create"
+    ZALOPAY_APP_ID: str = ""
+    ZALOPAY_KEY1: str = ""
+    ZALOPAY_KEY2: str = ""
 
     # Server
     SERVER_HOST: str = "0.0.0.0"
@@ -41,6 +52,10 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     ENVIRONMENT: str = "development"
     FRONTEND_URL: str = "http://localhost:3000"
+    # URL backend PUBLIC (VNPay/MoMo gọi được từ internet) — dùng để build ipnUrl
+    # gửi cho MoMo lúc tạo giao dịch. Chạy local phải trỏ ra domain ngrok/tunnel,
+    # KHÔNG được để localhost/0.0.0.0 vì MoMo gọi từ server của họ, không phải máy bạn.
+    BACKEND_URL: str = "http://localhost:8000"
 
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173"

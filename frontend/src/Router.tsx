@@ -24,6 +24,8 @@ import ShopProfilePage    from './pages/ShopProfilePage'
 import CartPage           from './pages/user/CartPage'
 import CheckoutPage       from './pages/user/CheckoutPage'
 import PaymentResultPage  from './pages/user/PaymentResultPage'
+import MomoQRPage         from './pages/user/MomoQRPage'
+import MomoSimulatorPage  from './pages/user/MomoSimulatorPage'
 import OrderHistoryPage   from './pages/user/OrderHistoryPage'
 import OrderDetailPage    from './pages/user/OrderDetailPage'
 import EventsPage         from './pages/user/EventsPage'
@@ -118,6 +120,10 @@ import WardDashboardPage from './pages/ward/WardDashboardPage'
 import WardShippersPage  from './pages/ward/WardShippersPage'
 import WardOrdersPage    from './pages/ward/WardOrdersPage'
 
+// Nhân viên nội bộ (quản lý kho các cấp) — không được mua/bán hàng trên sàn,
+// khớp với middleware/auth.py::EMPLOYMENT_ROLES ở backend.
+const EMPLOYMENT_ROLES = 'Admin_emp|warehouse_hub_manager|warehouse_district_manager|warehouse_ward_manager'
+
 // ── Helper: bọc page trong layout ─────────────────────────────────────────────
 const inPublic   = (el: React.ReactNode) => <PublicLayout>{el}</PublicLayout>
 const inUser     = (el: React.ReactNode, sub?: string) => <UserLayout subtitle={sub}>{el}</UserLayout>
@@ -140,12 +146,21 @@ const Router: React.FC = () => (
     <Route path="/products/:id"   element={inPublic(<ProductDetailPage />)} />
     <Route path="/shops/:shopId"  element={inPublic(<ShopProfilePage />)} />
 
-    {/* ── 👤 User (đăng nhập) ─────────────────────────────────────────────── */}
-    <Route element={<ProtectedRoute />}>
+    {/* ── 👤 User (đăng nhập) — chặn nhân viên nội bộ mua/bán hàng ────────── */}
+    <Route element={<ProtectedRoute blockRoles={EMPLOYMENT_ROLES} />}>
       <Route path="/profile"          element={inUser(<ProfilePage />,         'Hồ sơ cá nhân')} />
       <Route path="/cart"             element={inUser(<CartPage />,            'Giỏ hàng')} />
       <Route path="/checkout"         element={inUser(<CheckoutPage />,        'Thanh toán')} />
       <Route path="/payment/result"   element={inUser(<PaymentResultPage />)} />
+      {/* Demo Momo/VNPay/ZaloPay giả lập — không bọc UserLayout để giống 1
+          trang thanh toán/app độc lập (trang sau mở ở tab riêng qua window.open).
+          Cùng 2 component, chỉ đổi theme qua prop provider. */}
+      <Route path="/checkout/momo/:orderId"     element={<MomoQRPage provider="momo" />} />
+      <Route path="/momo-simulator/:orderId"    element={<MomoSimulatorPage provider="momo" />} />
+      <Route path="/checkout/vnpay/:orderId"    element={<MomoQRPage provider="vnpay" />} />
+      <Route path="/vnpay-simulator/:orderId"   element={<MomoSimulatorPage provider="vnpay" />} />
+      <Route path="/checkout/zalopay/:orderId"  element={<MomoQRPage provider="zalopay" />} />
+      <Route path="/zalopay-simulator/:orderId" element={<MomoSimulatorPage provider="zalopay" />} />
       <Route path="/orders"           element={inUser(<OrderHistoryPage />,    'Đơn hàng của tôi')} />
       <Route path="/vouchers"         element={inUser(<VoucherCenterPage />,   'Trung tâm voucher')} />
       <Route path="/orders/:id"       element={inUser(<OrderDetailPage />,     'Chi tiết đơn hàng')} />
@@ -230,8 +245,8 @@ const Router: React.FC = () => (
       <Route path="/shipper/tracking/:shipmentId"  element={inShipper(<TrackingPage />)} />
     </Route>
 
-    {/* ── 🏭 Warehouse Manager (cũ — tổng hợp) ────────────────────────── */}
-    <Route element={<ProtectedRoute requiredRole="warehouse_manager" />}>
+    {/* ── 🏭 Admin_emp — "Quản lý tổng" nhánh kho (trước tên warehouse_manager) ── */}
+    <Route element={<ProtectedRoute requiredRole="Admin_emp" />}>
       <Route path="/warehouse" element={<WarehouseManagerLayout />}>
         <Route index element={<WarehouseOverviewPage />} />
         <Route path="shipments" element={<AllShipmentsPage />} />

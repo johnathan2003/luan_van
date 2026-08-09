@@ -240,9 +240,23 @@ def list_product_reviews(
 ):
     """Xem danh sách review của sản phẩm (public)."""
     from app.models.product import ProductReview
+    from sqlalchemy import func as sqlfunc
+
     q = db.query(ProductReview).filter(ProductReview.product_id == product_id)
     total = q.count()
     items = q.order_by(ProductReview.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+
+    # Phân bố số lượng đánh giá theo từng mức sao (1-5) — tính trên TOÀN BỘ
+    # review của sản phẩm (không theo trang hiện tại) để vẽ đúng thanh tỉ lệ.
+    breakdown_rows = (
+        db.query(ProductReview.rating, sqlfunc.count(ProductReview.review_id))
+        .filter(ProductReview.product_id == product_id)
+        .group_by(ProductReview.rating)
+        .all()
+    )
+    breakdown_map = {int(r): int(c) for r, c in breakdown_rows}
+    rating_breakdown = {str(s): breakdown_map.get(s, 0) for s in (5, 4, 3, 2, 1)}
+
     return {
         "reviews": [
             {
@@ -261,6 +275,7 @@ def list_product_reviews(
         "total": total,
         "page": page,
         "pages": (total + limit - 1) // limit,
+        "rating_breakdown": rating_breakdown,
     }
 
 

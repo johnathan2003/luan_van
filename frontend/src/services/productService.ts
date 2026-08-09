@@ -15,6 +15,8 @@ export const productService = {
   delete: (id: number) => API.delete(`/api/v1/products/${id}`),
   requestDeletion: (id: number, reason: string) => API.post(`/api/v1/products/${id}/deletion-request`, { reason }),
   getCategories: () => API.get('/api/v1/products/categories'),
+  getReviews: (productId: number, page = 1, limit = 50) =>
+    API.get(`/api/v1/products/${productId}/reviews`, { params: { page, limit } }),
   createCategory: (data: any) => API.post('/api/v1/products/categories', data),
   syncVariants: (productId: number, variants: any[]) =>
     API.post(`/api/v1/products/${productId}/variants/sync`, variants),

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, forbid_employment
 from app.models.user import User
 from app.schemas.order import OrderCreate
 from app.services.order_service import (
@@ -18,7 +18,7 @@ router = APIRouter()
 @router.post("", status_code=201)
 def place_order(
     data: OrderCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(forbid_employment),
     db: Session = Depends(get_db),
 ):
     order = create_order(db, current_user.user_id, data)
@@ -34,16 +34,41 @@ def place_order(
 
     result = {"message": "Order created", "order_id": order.order_id, "status": order.order_status, "final_price": order.final_price}
 
-    if data.payment_method == "momo":
+    # QUAN TRỌNG: nếu tạo giao dịch VNPay/MoMo thất bại (vd chưa cấu hình API key
+    # sandbox thật), TUYỆT ĐỐI không được để result["payment_url"] rơi vào trạng
+    # thái falsy-nhưng-vẫn-200-OK rồi lặng im — FE dựa vào payment_url để quyết
+    # định redirect hay coi là lỗi, nên phải trả kèm payment_error rõ ràng.
+    if data.payment_method in ("momo", "momo_paylater"):
         from app.services.payment_service import create_momo_payment
+        # "momo_paylater" (Ví Trả Sau) và "momo" (ví thường) dùng chung 1 API
+        # tạo giao dịch của MoMo, chỉ khác requestType gửi lên.
+        request_type = "payWithVTS" if data.payment_method == "momo_paylater" else "captureWallet"
         try:
-            momo = create_momo_payment(db, order.order_id, int(float(order.final_price)))
-            result["payment_url"] = momo.get("payUrl")
-        except Exception:
-            pass
+            momo = create_momo_payment(db, order.order_id, int(float(order.final_price)), request_type=request_type)
+            pay_url = momo.get("payUrl")
+            if pay_url:
+                result["payment_url"] = pay_url
+            else:
+                result["payment_error"] = momo.get("message") or "Không tạo được giao dịch MoMo (kiểm tra lại MOMO_PARTNER_CODE/ACCESS_KEY/SECRET_KEY trong .env)"
+        except Exception as e:
+            result["payment_error"] = str(e)
     elif data.payment_method == "vnpay":
         from app.services.payment_service import create_vnpay_url
-        result["payment_url"] = create_vnpay_url(order.order_id, int(float(order.final_price)))
+        try:
+            result["payment_url"] = create_vnpay_url(db, order.order_id, int(float(order.final_price)))
+        except Exception as e:
+            result["payment_error"] = str(e)
+    elif data.payment_method == "zalopay":
+        from app.services.payment_service import create_zalopay_payment
+        try:
+            zalo = create_zalopay_payment(db, order.order_id, int(float(order.final_price)))
+            pay_url = zalo.get("order_url")
+            if pay_url:
+                result["payment_url"] = pay_url
+            else:
+                result["payment_error"] = zalo.get("return_message") or "Không tạo được giao dịch ZaloPay (kiểm tra lại ZALOPAY_APP_ID/KEY1/KEY2 trong .env)"
+        except Exception as e:
+            result["payment_error"] = str(e)
 
     return result
 
@@ -423,10 +448,13 @@ def get_delivery_slip(
     if not order:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
 
-    roles = [r.role_name for r in (current_user.roles or [])]
+    # LƯU Ý: trước đây dùng current_user.roles — thuộc tính này không tồn tại
+    # trên model User (chỉ có user_roles quan hệ tới UserRole/Role), gọi vào
+    # sẽ lỗi AttributeError. Sửa lại đúng theo pattern dùng ở middleware/auth.py.
+    roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
     is_admin    = "admin" in roles or "superadmin" in roles
     is_warehouse = any(r in roles for r in [
-        "warehouse_manager", "warehouse_hub_manager",
+        "Admin_emp", "warehouse_hub_manager",
         "warehouse_district_manager", "warehouse_ward_manager",
     ])
     is_shipper  = "shipper" in roles

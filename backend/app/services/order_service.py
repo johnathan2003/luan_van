@@ -62,6 +62,11 @@ def create_order(db: Session, user_id: int, data: OrderCreate) -> Order:
     # COD: payment_status bắt đầu là "unpaid" (thanh toán khi nhận)
     # Online: "unpaid" chờ gateway xác nhận
     is_cod = data.payment_method == "cod"
+    # Cột payment_method trong DB chỉ nhận "momo"/"cod"/"vnpay"/"credit_card"
+    # (enum cố định, đổi sẽ cần migration) — "momo_paylater" (Ví Trả Sau) vẫn
+    # là giao dịch MoMo về bản chất, chỉ khác requestType lúc gọi API tạo giao
+    # dịch (đã xử lý ở routes/orders.py), nên lưu DB chung dưới "momo".
+    db_payment_method = "momo" if data.payment_method == "momo_paylater" else data.payment_method
 
     order = Order(
         user_id=user_id,
@@ -70,7 +75,7 @@ def create_order(db: Session, user_id: int, data: OrderCreate) -> Order:
         discount_amount=discount,
         final_price=final_price,
         shipping_fee=shipping_fee,           # [I-1] lưu riêng để hiển thị
-        payment_method=data.payment_method,
+        payment_method=db_payment_method,
         payment_status="unpaid",
         order_status="pending",
         shipping_address=data.shipping_address,
@@ -101,7 +106,7 @@ def create_order(db: Session, user_id: int, data: OrderCreate) -> Order:
     db.add(Payment(
         order_id=order.order_id,
         amount=str(final_price),
-        method=data.payment_method,
+        method=db_payment_method,
         status="pending",
     ))
 

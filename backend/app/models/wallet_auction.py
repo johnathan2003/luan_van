@@ -93,6 +93,16 @@ class BannerAuction(Base):
     winner_bid_id  = Column(Integer, ForeignKey("banner_bids.bid_id", use_alter=True, name="fk_auction_winner_bid"), nullable=True)
     created_at     = Column(DateTime, server_default=func.now())
 
+    # ── Nội dung banner nộp sau khi thắng (shop tự upload, superadmin duyệt) ──
+    banner_image_url     = Column(String(500))
+    banner_title          = Column(String(255))
+    banner_link            = Column(String(500))
+    # banner_status: pending | approved | rejected — NULL = chưa submit gì
+    banner_status           = Column(String(30))
+    banner_submitted_at     = Column(DateTime)
+    banner_reviewed_at      = Column(DateTime)
+    banner_reject_reason    = Column(Text)
+
     slot         = relationship("BannerSlot", foreign_keys=[slot_id], back_populates="auctions")
     winner_shop  = relationship("Shop", foreign_keys=[winner_shop_id])
     winner_bid   = relationship("BannerBid", foreign_keys=[winner_bid_id], post_update=True)

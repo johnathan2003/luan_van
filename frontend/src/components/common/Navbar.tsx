@@ -335,7 +335,7 @@ const Navbar: React.FC = () => {
     warehouse_hub_manager:      `linear-gradient(to right, #0F766E 0%, #0D9488 100%)`,
     warehouse_district_manager: `linear-gradient(to right, #6D28D9 0%, #7C3AED 100%)`,
     warehouse_ward_manager:     `linear-gradient(to right, #C2410C 0%, #EA580C 100%)`,
-    warehouse_manager:          `linear-gradient(to right, #374151 0%, #4B5563 100%)`,
+    Admin_emp:                  `linear-gradient(to right, #374151 0%, #4B5563 100%)`,
   }
   const navBg = (isAuthenticated && currentRole && roleGradient[currentRole])
     ? roleGradient[currentRole]
@@ -351,7 +351,7 @@ const Navbar: React.FC = () => {
       : rn === 'warehouse_hub_manager' ? '/hub'
       : rn === 'warehouse_district_manager' ? '/district'
       : rn === 'warehouse_ward_manager' ? '/ward'
-      : rn === 'warehouse_manager' ? '/warehouse'
+      : rn === 'Admin_emp' ? '/warehouse'
       : '/'
     setTimeout(() => navigate(dest), 50)
   }
@@ -388,7 +388,7 @@ const Navbar: React.FC = () => {
     if (role === 'warehouse_hub_manager')       return { bg: '#CCFBF1', color: '#0F766E', label: '🏢 Kho Tổng' }
     if (role === 'warehouse_district_manager')  return { bg: '#EDE9FE', color: '#6D28D9', label: '🏬 Kho Quận' }
     if (role === 'warehouse_ward_manager')      return { bg: '#FED7AA', color: '#C2410C', label: '🏠 Kho Phường' }
-    if (role === 'warehouse_manager')           return { bg: '#F3F4F6', color: '#374151', label: '🏭 Kho' }
+    if (role === 'Admin_emp')                   return { bg: '#F3F4F6', color: '#374151', label: '🏭 Admin_emp' }
     return { bg: '#F3F4F6', color: '#6B7280', label: '👤 Khách hàng' }
   }
   const badge = roleBadgeStyle(currentRole)
@@ -645,8 +645,8 @@ const Navbar: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Warehouse Manager (legacy) */}
-                    {currentRole === 'warehouse_manager' && (
+                    {/* Admin_emp — "Quản lý tổng" nhánh kho */}
+                    {currentRole === 'Admin_emp' && (
                       <div>
                         <NavSectionLabel>Tài khoản</NavSectionLabel>
                         <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"     onClick={close} />
@@ -664,7 +664,7 @@ const Navbar: React.FC = () => {
                         <MenuItem icon="💬" label="Tin nhắn"            path="/chat"        onClick={close} />
                         <MenuItem icon="🎁" label="Trung tâm voucher"   path="/vouchers"    onClick={close} />
                         <MenuItem icon="⚠️" label="Khiếu nại của tôi"  path="/complaints"  onClick={close} />
-                        {roleNames.includes('warehouse_manager') && (
+                        {roleNames.includes('Admin_emp') && (
                           <>
                             <NavSectionLabel border>Quản lý Kho</NavSectionLabel>
                             <MenuItem icon="🏭" label="Vào giao diện kho" sub="Quản lý đơn hàng & shipper" path="/warehouse" onClick={close} />

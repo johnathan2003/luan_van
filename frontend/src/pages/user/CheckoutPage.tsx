@@ -56,10 +56,12 @@ interface WardItem    { code: number; name: string }
 const GEO_API = 'https://provinces.open-api.vn/api'
 
 const PAYMENT_METHODS = [
-  { id: 'cod',         icon: '💵', label: 'Thanh toán khi nhận hàng (COD)', sub: 'Trả tiền mặt khi nhận được hàng' },
-  { id: 'vnpay',       icon: '🏦', label: 'Thanh toán VNPay',               sub: 'Chuyển khoản qua ATM / Internet Banking / VNPay' },
-  { id: 'momo',        icon: '🟣', label: 'Ví MoMo',                        sub: 'Thanh toán nhanh qua ví MoMo' },
-  { id: 'credit_card', icon: '💳', label: 'Thẻ tín dụng / Ghi nợ',          sub: 'Visa, Mastercard, JCB' },
+  { id: 'cod',           icon: '💵', label: 'Thanh toán khi nhận hàng (COD)', sub: 'Trả tiền mặt khi nhận được hàng' },
+  { id: 'vnpay',         icon: '🏦', label: 'Thanh toán VNPay',               sub: 'Chuyển khoản qua ATM / Internet Banking / VNPay' },
+  { id: 'momo',          icon: '🟣', label: 'Ví MoMo',                        sub: 'Thanh toán nhanh qua ví MoMo' },
+  { id: 'momo_paylater', icon: '🕒', label: 'MoMo Ví trả sau',                sub: 'Mua trước, thanh toán sau qua Ví trả sau MoMo' },
+  { id: 'zalopay',       icon: '🔷', label: 'Ví ZaloPay',                     sub: 'Thanh toán nhanh qua ví ZaloPay' },
+  { id: 'credit_card',   icon: '💳', label: 'Thẻ tín dụng / Ghi nợ',          sub: 'Visa, Mastercard, JCB' },
 ]
 
 // ─── Form types ───────────────────────────────────────────────────────────────
@@ -422,13 +424,6 @@ const CheckoutPage: React.FC = () => {
         saveExtraAddress(user.email, shippingAddress)
       }
 
-      // Trừ xu nếu dùng
-      if (xuToApply > 0) {
-        spendXu(xuToApply)
-        setXuBalance(getXu())
-      }
-      setAppliedXu(xuToApply)
-
       // Thông báo cho shop: có đơn hàng mới
       const uniqueShops = [...new Map(ORDER_ITEMS.map(i => [i.shopId, i])).values()]
       uniqueShops.forEach(item => {
@@ -450,13 +445,46 @@ const CheckoutPage: React.FC = () => {
         action_url: '/shipper/deliveries',
       })
 
-      // Quà tặng sự kiện
-      const shopNames = [...new Set(ORDER_ITEMS.map(i => i.shopName))]
+      const shopNames  = [...new Set(ORDER_ITEMS.map(i => i.shopName))]
+      const paymentUrl: string | undefined = createdOrder?.payment_url
+
+      // VNPay/MoMo: đơn hàng vừa tạo ở backend đang ở trạng thái "pending",
+      // CHƯA phải thành công — phải chuyển người dùng sang cổng thanh toán.
+      // Trừ xu / tặng quà hậu mãi / xoá giỏ hàng chỉ được thực hiện SAU KHI
+      // backend xác nhận thanh toán thật sự thành công (PaymentResultPage,
+      // sau khi verify chữ ký trả về từ VNPay/MoMo) — không làm ở đây, tránh
+      // trường hợp người dùng huỷ/thanh toán thất bại nhưng vẫn bị trừ xu.
+      if (payment === 'vnpay' || payment === 'momo' || payment === 'momo_paylater' || payment === 'zalopay') {
+        if (paymentUrl) {
+          sessionStorage.setItem(`buyzo_pending_payment_${realOrderId}`, JSON.stringify({
+            orderId: realOrderId,
+            xuToApply,
+            shopNames,
+          }))
+          window.location.href = paymentUrl
+          return
+        }
+        // KHÔNG được rơi xuống nhánh "coi như thành công" bên dưới khi tạo
+        // giao dịch VNPay/MoMo thất bại (vd chưa cấu hình API key sandbox) —
+        // đây từng là bug khiến đơn MoMo/VNPay lỗi vẫn nhảy thẳng tới bước
+        // "Đặt hàng thành công". Đơn hàng #realOrderId vẫn tồn tại ở trạng
+        // thái chờ thanh toán, xem được trong "Đơn hàng của tôi".
+        setOrderError(
+          createdOrder?.payment_error ||
+          'Không tạo được liên kết thanh toán. Vui lòng thử lại hoặc chọn phương thức khác.'
+        )
+        setPlacing(false)
+        return
+      }
+
+      // COD / thẻ tín dụng: chưa có cổng xác thực thật → coi như thành công ngay
+      if (xuToApply > 0) {
+        spendXu(xuToApply)
+        setXuBalance(getXu())
+      }
+      setAppliedXu(xuToApply)
       setPostGifts(grantPostPurchaseGifts(shopNames))
-
-      // Xóa giỏ hàng
       dispatch(clearCart())
-
       setStep(2)
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.response?.data?.message || 'Đặt hàng thất bại, vui lòng thử lại'
