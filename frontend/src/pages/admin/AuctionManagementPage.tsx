@@ -191,7 +191,7 @@ const PoolCard: React.FC<{
             style={inputStyle} />
         </label>
         <label style={{ fontSize: 11, color: C.gray }}>
-          🏁 Giá kết thúc (đ)
+          🏁 Giá kết thúc (đ) <span style={{ color: '#7C3AED', fontWeight: 600, fontSize: 10 }}>— trừ Tiền đấu giá shop</span>
           <input key={`ep-${settings.endPrice}`} type="text" defaultValue={(settings.endPrice ?? 0).toLocaleString('vi-VN')}
             disabled={!isEditing}
             onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
@@ -456,7 +456,7 @@ const AuctionManagementPage: React.FC = () => {
                       style={inputStyle} />
                   </label>
                   <label style={{ fontSize: 11, color: C.gray }}>
-                    🏁 Giá kết thúc (đ)
+                    🏁 Giá kết thúc (đ) <span style={{ color: '#7C3AED', fontWeight: 600, fontSize: 10 }}>— trừ Tiền đấu giá shop</span>
                     <input key={`ep-${s.endPrice}`} type="text" defaultValue={(s.endPrice ?? 0).toLocaleString('vi-VN')}
                       disabled={!isEditing}
                       onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
@@ -639,7 +639,7 @@ const AuctionManagementPage: React.FC = () => {
                       style={inputStyle} />
                   </label>
                   <label style={{ fontSize: 11, color: C.gray }}>
-                    🏁 Giá kết thúc (đ)
+                    🏁 Giá kết thúc (đ) <span style={{ color: '#7C3AED', fontWeight: 600, fontSize: 10 }}>— trừ Tiền đấu giá shop</span>
                     <input key={`ep-${s.endPrice}`} type="text" defaultValue={(s.endPrice ?? 0).toLocaleString('vi-VN')}
                       disabled={!isEditing}
                       onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}

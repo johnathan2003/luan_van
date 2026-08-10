@@ -1,15 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import { toast } from 'react-toastify'
+import type { RootState } from '../../store/store'
 import {
   BANNER_POSITIONS, BannerAuctionSession, BannerBid, BannerPositionKey, BannerSubmission,
   BANNER_IMAGE_SPECS, ImageSpec,
   formatCountdown, getAllActiveSessions, getHistory, getMinNextBid,
   getShopCooldownRemaining, msUntilEnd,
   isAuctionLive, msUntilStart,
-  placeBid, sweepExpiredWins, getPendingWinsForShop, payDeposit, payWin,
-  submitBanner, getSubmissionByHistoryId, getAllSubmissions as getAllBannerSubmissions,
+  placeBid, placeBuyNow, sweepExpiredWins, getPendingWinsForShop, payDeposit, payWin,
+  cancelDeposit as cancelBannerDeposit,
+  submitBanner, getSubmissionByHistoryId, getAllSubmissions as getAllBannerSubmissions, resubmitSubmission,
+  getAdminSettings as getBannerAdminSettings,
+  AuctionAdminSettings as BannerAdminSettings,
 } from '../../utils/bannerAuctionStore'
+import {
+  BuyNowTransaction, BuyNowStatus, MAX_BUYNOW_REVISIONS,
+  createBuyNowTransaction, getBuyNowTransactions, submitBuyNowBanner,
+} from '../../utils/buyNowStore'
 import {
   FLASH_SLOTS, FlashAuctionSession, FlashSlotKey, FlashSubmission,
   FLASH_IMAGE_SPEC,
@@ -20,6 +29,7 @@ import {
   placeBid as placeFlashBid, sweepExpiredWins as sweepFlash,
   getPendingWinsForShop as getFlashPendingWins,
   payDeposit as payFlashDeposit, payWin as payFlashWin,
+  cancelDeposit as cancelFlashDeposit,
   submitFlashProduct, getFlashSubmissionByHistoryId, getAllFlashSubmissions,
 } from '../../utils/flashSaleAuctionStore'
 import {
@@ -99,7 +109,10 @@ function fmtMmSs(ms: number): string {
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type PendingWin = { kind: 'banner'; session: BannerAuctionSession } | { kind: 'flash'; session: FlashAuctionSession }
+type PendingWin =
+  | { kind: 'banner'; session: BannerAuctionSession }
+  | { kind: 'flash'; session: FlashAuctionSession }
+  | { kind: 'banner-buynow'; txId: string; position: BannerPositionKey; label: string }
 
 const SHOP_NAME = 'My Demo Shop' // mock — thực tế lấy từ auth store
 
@@ -136,6 +149,11 @@ const BannerAuctionPage: React.FC = () => {
   const [pendingBannerWins, setPendingBannerWins] = useState<BannerAuctionSession[]>([])
   const [pendingFlashWins, setPendingFlashWins] = useState<FlashAuctionSession[]>([])
 
+  // ── State: banner submissions (auction only) ─────────────────────────────
+  const [bannerSubmissions, setBannerSubmissions] = useState<import('../../utils/bannerAuctionStore').BannerSubmission[]>(() => getAllBannerSubmissions())
+  // ── State: buy-now transactions (hoàn toàn riêng biệt với đấu giá) ───────
+  const [buyNowTxs, setBuyNowTxs] = useState<BuyNowTransaction[]>(() => getBuyNowTransactions(SHOP_NAME))
+
   // ── State: submit modal ───────────────────────────────────────────────────
   const [submitTarget, setSubmitTarget] = useState<PendingWin | null>(null)
   const [bannerForm, setBannerForm] = useState<{ title: string; link: string; image: string }>({ title: '', link: '', image: '' })
@@ -157,6 +175,119 @@ const BannerAuctionPage: React.FC = () => {
   const [topBidAmounts, setTopBidAmounts] = useState<Record<string, string>>({})
 
   const [poolTick, setPoolTick] = useState(0)
+  // Countdown độc lập cho "Thời gian chờ" bên phải mỗi banner card
+  const waitCountdownRef = useRef<Record<string, { initMs: number; initAt: number }>>({})
+  const getWaitMs = (sessionId: string, currentMsUntilStart: number): number => {
+    if (!waitCountdownRef.current[sessionId]) {
+      waitCountdownRef.current[sessionId] = { initMs: Math.floor(currentMsUntilStart / 2), initAt: Date.now() }
+    }
+    const { initMs, initAt } = waitCountdownRef.current[sessionId]
+    return Math.max(0, initMs - (Date.now() - initAt))
+  }
+
+  // ── State: banner admin settings (buyNowPrice, slots, etc.) ──────────────
+  const [bannerAdminSettings, setBannerAdminSettings] = useState<Record<BannerPositionKey, BannerAdminSettings>>({} as any)
+
+  // ── Tiền đấu giá — đọc từ localStorage theo userId ───────────────────────
+  const userId = useSelector((s: RootState) => s.auth.user?.user_id ?? 0)
+  const navigate = useNavigate()
+  const [walletReserved, setWalletReserved] = useState(0)
+  useEffect(() => {
+    if (!userId) return
+    try {
+      const d = JSON.parse(localStorage.getItem(`shop_wallet_v2_${userId}`) || 'null')
+      setWalletReserved(d?.reserved ?? 0)
+    } catch {}
+  }, [userId])
+
+  // ── Trừ Tiền đấu giá sau khi cọc / thanh toán đủ ────────────────────────
+  const deductWallet = (amount: number, note: string) => {
+    if (!amount || !userId) return
+    try {
+      // Cập nhật số dư
+      const wKey = `shop_wallet_v2_${userId}`
+      const d = JSON.parse(localStorage.getItem(wKey) || 'null') ?? { balance: 0, reserved: 0, available: 0 }
+      const next = {
+        ...d,
+        balance:  Math.max(0, (d.balance  ?? 0) - amount),
+        reserved: Math.max(0, (d.reserved ?? 0) - amount),
+        // available không đổi — tiền đó đã bị khóa khi chuyển vào reserved
+      }
+      localStorage.setItem(wKey, JSON.stringify(next))
+      setWalletReserved(next.reserved)
+
+      // Ghi lịch sử giao dịch
+      const tKey = `shop_wallet_txns_v2_${userId}`
+      const txns = JSON.parse(localStorage.getItem(tKey) || '[]')
+      const txn = { txn_id: Date.now(), amount, txn_type: 'charge', ref_type: 'auction', ref_id: null, note, created_at: new Date().toISOString() }
+      localStorage.setItem(tKey, JSON.stringify([txn, ...txns]))
+    } catch {}
+  }
+
+  // ── Toast khi bid chạm endPrice ──────────────────────────────────────────
+  const toastBidResult = (hit: number | undefined, defaultMsg: string) => {
+    if (hit !== undefined) {
+      if (hit >= 3) toast.warning('🏁 Giá đạt ngưỡng kết thúc lần 3 — phiên đấu giá kết thúc!')
+      else toast.info(`⏱ Giá đạt ngưỡng! Đồng hồ reset về 10 giây (${hit}/3 lần)`)
+    } else {
+      toast.success(defaultMsg)
+    }
+  }
+
+  // ── Modal cảnh báo vượt tiền đấu giá ─────────────────────────────────────
+  const [bidWarning, setBidWarning] = useState<{
+    type: 'blocked' | 'over70'
+    pendingBid?: () => void
+  } | null>(null)
+  const over70WarnedRef = useRef(false) // chỉ hiện 1 lần/session
+
+  const checkAndBid = (amount: number, doBid: () => void) => {
+    if (isBanned()) {
+      toast.error('🚫 Tài khoản bị khóa đấu giá do vi phạm hủy cọc quá 2 lần!')
+      return
+    }
+    if (walletReserved > 0 && amount > walletReserved) {
+      setBidWarning({ type: 'blocked' }); return
+    }
+    if (!over70WarnedRef.current && walletReserved > 0 && amount > walletReserved * 0.7) {
+      over70WarnedRef.current = true
+      setBidWarning({ type: 'over70', pendingBid: doBid }); return
+    }
+    doBid()
+  }
+
+  // Helper: màu inline theo mức cảnh báo
+  const bidWarnLevel = (amount: number) => {
+    if (!amount || walletReserved <= 0) return null
+    if (amount > walletReserved) return 'blocked'
+    if (amount > walletReserved * 0.7) return 'over70'
+    return null
+  }
+
+  // ── State: Deposit expired warning modal ─────────────────────────────────
+  const [depositExpiredWarn, setDepositExpiredWarn] = useState<{ n: number; max: number } | null>(null)
+  const prevPendingBannerRef = useRef<string[]>([])
+  const MISSED_DEPOSIT_KEY = `buyzo_missed_deposit_${SHOP_NAME}`
+  const getMissedCount = () => { try { return Number(localStorage.getItem(MISSED_DEPOSIT_KEY) || '0') } catch { return 0 } }
+  const incMissedCount = () => { try { const n = getMissedCount() + 1; localStorage.setItem(MISSED_DEPOSIT_KEY, String(n)); return n } catch { return 1 } }
+
+  // ── Vi phạm hủy cọc ──────────────────────────────────────────────────────
+  const BAN_KEY = `shop_auction_ban_${userId}`
+  const getViolations = () => { try { return Number(localStorage.getItem(BAN_KEY) || '0') } catch { return 0 } }
+  const addViolation  = () => { const n = getViolations() + 1; try { localStorage.setItem(BAN_KEY, String(n)) } catch {}; return n }
+  const isBanned      = () => getViolations() >= 3
+
+  // ── State: Hủy cọc modal ─────────────────────────────────────────────────
+  const [cancelDepositModal, setCancelDepositModal] = useState<{ id: string; kind: 'banner' | 'flash' } | null>(null)
+
+  // ── State: Buy Now confirmation modal ─────────────────────────────────────
+  const [buyNowConfirm, setBuyNowConfirm] = useState<{
+    label: string
+    price: number
+    slots: number
+    unitLabel?: string
+    onConfirm: () => void
+  } | null>(null)
 
   // ── State: tab ────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<'banner' | 'flash' | 'top' | 'mytx' | 'prepare'>('banner')
@@ -168,6 +299,11 @@ const BannerAuctionPage: React.FC = () => {
   // ── State: chuẩn bị mẫu ───────────────────────────────────────────────────
   const [prepTab, setPrepTab] = useState<'banner' | 'flash' | 'top'>('banner')
   const [prepBannerPos, setPrepBannerPos] = useState<BannerPositionKey>('home_slider')
+  const [highlightPrepPos, setHighlightPrepPos] = useState<string | null>(null)
+  // historyId của các submission đã sửa xong, sẵn sàng nộp lại
+  const [resubmitReadyIds, setResubmitReadyIds] = useState<Set<string>>(new Set())
+  // txId của các buy-now đã sửa draft xong, sẵn sàng nộp lại
+  const [bnResubmitReadyIds, setBnResubmitReadyIds] = useState<Set<string>>(new Set())
   const [prepFlashSlot, setPrepFlashSlot] = useState<FlashSlotKey>('flash_slot_1')
   const [prepBannerForms, setPrepBannerForms] = useState<Record<string, { title: string; link: string; image: string }>>({})
   const [prepFlashForms, setPrepFlashForms] = useState<Record<string, { productName: string; price: string; image: string }>>({})
@@ -208,7 +344,10 @@ const BannerAuctionPage: React.FC = () => {
 
   // Preview tạm (objectURL) — chỉ để hiển thị, không lưu localStorage
   const [bannerPreview, setBannerPreview] = useState<Record<string, string>>({})
+  const [prepBannerResolvedImgs, setPrepBannerResolvedImgs] = useState<Record<string, string>>({})
   const [flashPreview, setFlashPreview] = useState<Record<string, string>>({})
+  // Ảnh resolved cho modal submit (khi dùng idb: ref từ draft)
+  const [bannerModalResolvedImg, setBannerModalResolvedImg] = useState('')
 
   // ── State: payment countdown (ms còn lại đến paymentDeadline) ────────────
   const [payCountdowns, setPayCountdowns] = useState<Record<string, number>>({})
@@ -253,6 +392,19 @@ const BannerAuctionPage: React.FC = () => {
   }, [])
 
   // ── Refresh ───────────────────────────────────────────────────────────────
+  // Resolve idb: image refs to data URLs for display whenever drafts change
+  useEffect(() => {
+    ;(async () => {
+      const { resolveImageAsync } = await import('../../utils/imageDB')
+      const resolved: Record<string, string> = {}
+      for (const p of BANNER_POSITIONS) {
+        const d = getBannerDraft(p.key, SHOP_NAME)
+        if (d?.image) resolved[p.key] = await resolveImageAsync(d.image)
+      }
+      setPrepBannerResolvedImgs(resolved)
+    })()
+  }, [bannerDraftsExist])
+
   const checkDrafts = () => {
     const bEx: Record<string, boolean> = {}
     BANNER_POSITIONS.forEach(p => { bEx[p.key] = !!getBannerDraft(p.key, SHOP_NAME) })
@@ -281,8 +433,23 @@ const BannerAuctionPage: React.FC = () => {
   const refresh = () => {
     sweepExpiredWins()
     setBannerSessions({ ...getAllActiveSessions() })
-    setBannerHistory(getHistory())
-    setPendingBannerWins(getPendingWinsForShop(SHOP_NAME))
+    const newHistory = getHistory()
+    setBannerHistory(newHistory)
+    const newPending = getPendingWinsForShop(SHOP_NAME)
+    // Phát hiện win vừa hết hạn cọc
+    const removedIds = prevPendingBannerRef.current.filter(id => !newPending.some(w => w.id === id))
+    if (removedIds.length > 0) {
+      const newlyExpired = removedIds.filter(id => newHistory.find(h => h.id === id)?.confirmation === 'expired')
+      if (newlyExpired.length > 0) {
+        const n = incMissedCount()
+        setDepositExpiredWarn({ n, max: 2 })
+      }
+    }
+    prevPendingBannerRef.current = newPending.map(w => w.id)
+    setPendingBannerWins(newPending)
+    setBannerAdminSettings({ ...getBannerAdminSettings() })
+    setBannerSubmissions([...getAllBannerSubmissions()])
+    setBuyNowTxs([...getBuyNowTransactions(SHOP_NAME)])
   }
   const refreshFlash = () => {
     sweepFlash()
@@ -330,24 +497,76 @@ const BannerAuctionPage: React.FC = () => {
   }, [bannerSessions, flashSessions])
 
   // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /** Chuyển sang tab Chuẩn bị và scroll+highlight vị trí cần sửa */
+  const goToPreparePos = (posKey: string) => {
+    setTab('prepare')
+    setPrepTab('banner')
+    setHighlightPrepPos(posKey)
+    setTimeout(() => {
+      const el = document.getElementById('prep-pos-' + posKey)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 120)
+    // Không auto-clear — chỉ clear khi save hoặc rời tab
+  }
+
   const openSubmitModal = (win: PendingWin) => {
     setSubmitTarget(win)
-    setBannerForm({ title: '', link: '', image: '' })
     setBannerImgError('')
-    if (win.kind === 'flash') {
-      setFlashForm({ productName: win.session.winner?.productName ?? '', price: '', image: '' })
-    } else {
-      setFlashForm({ productName: '', price: '', image: '' })
-    }
     setFlashImgError('')
+    setBannerModalResolvedImg('')
+
+    if (win.kind === 'banner-buynow') {
+      // Prefill từ transaction hiện tại (nếu đang sửa lại)
+      const tx = buyNowTxs.find(t => t.id === win.txId)
+      const draft = getBannerDraft(win.position, SHOP_NAME)
+      const prefillImg = tx?.image || draft?.image || ''
+      const prefillTitle = tx?.title || draft?.title || ''
+      const prefillLink = tx?.link || draft?.link || ''
+      if (prefillTitle || prefillImg) {
+        setBannerForm({ title: prefillTitle, link: prefillLink, image: prefillImg })
+        if (prefillImg) {
+          import('../../utils/imageDB').then(({ resolveImageAsync }) => {
+            resolveImageAsync(prefillImg).then(url => { if (url) setBannerModalResolvedImg(url) })
+          })
+        }
+      } else {
+        setBannerForm({ title: '', link: '', image: '' })
+      }
+      setFlashForm({ productName: '', price: '', image: '' })
+      return
+    }
+
+    if (win.kind === 'banner') {
+      const session = win.session as BannerAuctionSession
+      const draft = getBannerDraft(session.position, SHOP_NAME)
+      if (draft) {
+        setBannerForm({ title: draft.title, link: draft.link ?? '', image: draft.image })
+        // Resolve idb: ref để hiện preview ngay trong modal
+        if (draft.image) {
+          import('../../utils/imageDB').then(({ resolveImageAsync }) => {
+            resolveImageAsync(draft.image).then(url => { if (url) setBannerModalResolvedImg(url) })
+          })
+        }
+      } else {
+        setBannerForm({ title: '', link: '', image: '' })
+      }
+      setFlashForm({ productName: '', price: '', image: '' })
+    } else {
+      setBannerForm({ title: '', link: '', image: '' })
+      setFlashForm({ productName: win.session.winner?.productName ?? '', price: '', image: '' })
+    }
   }
 
   const handleBannerImageFile = async (file: File) => {
-    if (!submitTarget || submitTarget.kind !== 'banner') return
-    const spec = BANNER_IMAGE_SPECS[(submitTarget.session as BannerAuctionSession).position]
+    if (!submitTarget || (submitTarget.kind !== 'banner' && submitTarget.kind !== 'banner-buynow')) return
+    const bannerPos = submitTarget.kind === 'banner-buynow' ? submitTarget.position : (submitTarget.session as BannerAuctionSession).position
+    const spec = BANNER_IMAGE_SPECS[bannerPos]
     const result = await validateImageFile(file, spec)
     if (!result.ok) { setBannerImgError(result.error || 'Ảnh không hợp lệ.'); return }
-    setBannerImgError(''); setBannerForm(f => ({ ...f, image: result.dataUrl! }))
+    setBannerImgError('')
+    setBannerModalResolvedImg('') // clear draft preview — dùng ảnh mới chọn
+    setBannerForm(f => ({ ...f, image: result.dataUrl! }))
   }
 
   const handleFlashImageFile = async (file: File) => {
@@ -357,15 +576,21 @@ const BannerAuctionPage: React.FC = () => {
   }
 
   const handleSubmitBanner = async () => {
-    if (!submitTarget || submitTarget.kind !== 'banner') return
+    if (!submitTarget || (submitTarget.kind !== 'banner' && submitTarget.kind !== 'banner-buynow')) return
     if (!bannerForm.title.trim() || !bannerForm.image) { toast.error('Vui lòng nhập tiêu đề và chọn hình ảnh banner đúng yêu cầu.'); return }
     if (bannerImgError) { toast.error(bannerImgError); return }
     try {
-      // Lưu ảnh vào IndexedDB (không bị giới hạn 5MB như localStorage)
       const { idbSave, isIDBRef } = await import('../../utils/imageDB')
       const imageRef = isIDBRef(bannerForm.image) ? bannerForm.image : await idbSave(bannerForm.image)
-      const result = submitBanner(submitTarget.session.id, { title: bannerForm.title.trim(), link: bannerForm.link.trim() || undefined, image: imageRef })
-      if (!result) { toast.error('Không thể đăng banner — vui lòng thử lại.'); return }
+      if (submitTarget.kind === 'banner-buynow') {
+        const ok = submitBuyNowBanner(submitTarget.txId, { title: bannerForm.title.trim(), link: bannerForm.link.trim() || undefined, image: imageRef })
+        if (!ok) { toast.error('Không thể đăng banner — vui lòng thử lại.'); return }
+        setBuyNowTxs([...getBuyNowTransactions(SHOP_NAME)])
+      } else {
+        const result = submitBanner(submitTarget.session.id, { title: bannerForm.title.trim(), link: bannerForm.link.trim() || undefined, image: imageRef })
+        if (!result) { toast.error('Không thể đăng banner — vui lòng thử lại.'); return }
+      }
+      setBannerSubmissions([...getAllBannerSubmissions()])
       toast.success('📢 Đã gửi banner cho Admin duyệt!'); setSubmitTarget(null); refresh()
     } catch {
       toast.error('Lỗi lưu ảnh — vui lòng thử lại.')
@@ -403,9 +628,11 @@ const BannerAuctionPage: React.FC = () => {
   const handlePlaceBannerBid = () => {
     const amount = parseInt((bidAmounts[selectedBannerPos] || '').replace(/[^\d]/g, ''))
     if (!amount) { toast.error('Vui lòng nhập số tiền đặt giá'); return }
-    const result = placeBid(selectedBannerPos, SHOP_NAME, amount)
-    if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
-    toast.success('✅ Đặt giá thành công!'); setBidAmounts(p => ({ ...p, [selectedBannerPos]: '' })); refresh()
+    checkAndBid(amount, () => {
+      const result = placeBid(selectedBannerPos, SHOP_NAME, amount)
+      if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
+      toastBidResult(result.endPriceHit, '✅ Đặt giá thành công!'); setBidAmounts(p => ({ ...p, [selectedBannerPos]: '' })); refresh()
+    })
   }
 
   // ── Flash tab ─────────────────────────────────────────────────────────────
@@ -419,20 +646,141 @@ const BannerAuctionPage: React.FC = () => {
     const productName = (flashBidProducts[selectedFlashSlot] || '').trim()
     if (!productName) { toast.error('Vui lòng nhập tên sản phẩm'); return }
     if (!amount) { toast.error('Vui lòng nhập số tiền đặt giá'); return }
-    const result = placeFlashBid(selectedFlashSlot, SHOP_NAME, productName, amount)
-    if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
-    toast.success('✅ Đặt giá thành công!'); setFlashBidAmounts(p => ({ ...p, [selectedFlashSlot]: '' })); refreshFlash()
+    checkAndBid(amount, () => {
+      const result = placeFlashBid(selectedFlashSlot, SHOP_NAME, productName, amount)
+      if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
+      toast.success('✅ Đặt giá thành công!'); setFlashBidAmounts(p => ({ ...p, [selectedFlashSlot]: '' })); refreshFlash()
+    })
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
+  // Right sidebar data (computed inline)
+  const rightTab = tab
+  // Banner: dùng selectedBannerPos — người dùng click card nào thì panel theo card đó
+  const rBannerSession = bannerSessions[selectedBannerPos]
+  const rBannerLive = rBannerSession ? isAuctionLive(rBannerSession) : false
+  const rBannerBs = bannerAdminSettings[selectedBannerPos]
+  const rBannerDuration = rBannerSession ? (rBannerSession.scheduledStartAt
+    ? new Date(rBannerSession.endsAt).getTime() - new Date(rBannerSession.scheduledStartAt).getTime()
+    : new Date(rBannerSession.endsAt).getTime() - new Date(rBannerSession.startedAt).getTime()) : 0
+
+  const rFlashLive = flashPoolSession ? isFlashPoolLive(flashPoolSession) : false
+  const rFlashMsEnd = flashPoolSession ? flashPoolMsEnd(flashPoolSession) : 0
+  const rFlashMsStart = flashPoolSession ? flashPoolMsStart(flashPoolSession) : 0
+
+  const rTopSession = topSessions[selectedTopSlot] ?? null
+  const rTopLive = rTopSession ? isTopLive(rTopSession) : false
+  const rTopBs = topAdminSettings[selectedTopSlot]
+  const rTopDuration = rTopSession ? (rTopSession.scheduledStartAt
+    ? new Date(rTopSession.endsAt).getTime() - new Date(rTopSession.scheduledStartAt).getTime()
+    : new Date(rTopSession.endsAt).getTime() - new Date(rTopSession.startedAt).getTime()) : 0
+  const rTopSlotDef = TOP_SLOTS.find(s => s.key === selectedTopSlot) ?? TOP_SLOTS[0]
+
+  const hasRightPanel =
+    (rightTab === 'banner' && !!rBannerSession) ||
+    (rightTab === 'flash' && !!flashPoolSession) ||
+    (rightTab === 'top' && !!rTopSession)
+
+  // ── Modal cảnh báo tiền đấu giá ───────────────────────────────────────────
+  const walletWarningModal = bidWarning && (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 28, maxWidth: 380, width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+        {bidWarning.type === 'blocked' ? (
+          <>
+            <div style={{ fontSize: 32, marginBottom: 10, textAlign: 'center' }}>⛔</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#DC2626', marginBottom: 8, textAlign: 'center' }}>Không thể đặt cược</div>
+            <div style={{ fontSize: 13, color: '#444', marginBottom: 20, textAlign: 'center', lineHeight: 1.6 }}>
+              Số tiền đặt cược vượt quá <b>Tiền đấu giá</b> trong ví
+              <br /><span style={{ color: '#7C3AED', fontWeight: 700 }}>({walletReserved.toLocaleString('vi-VN')}đ)</span>.
+              <br />Vui lòng nạp thêm để tiếp tục.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setBidWarning(null)}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #DC2626', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                Đóng
+              </button>
+              <button onClick={() => { setBidWarning(null); navigate('/shop/wallet?tab=auction_fund') }}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#7C3AED', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                🔒 Nạp tiền
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 32, marginBottom: 10, textAlign: 'center' }}>⚠️</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#D97706', marginBottom: 8, textAlign: 'center' }}>Số tiền đã vượt 70%</div>
+            <div style={{ fontSize: 13, color: '#444', marginBottom: 20, textAlign: 'center', lineHeight: 1.6 }}>
+              Số tiền đặt cược đã vượt <b>70%</b> Tiền đấu giá trong ví
+              <br /><span style={{ color: '#7C3AED', fontWeight: 700 }}>({walletReserved.toLocaleString('vi-VN')}đ)</span>.
+              <br />Bạn có muốn tiếp tục?
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { bidWarning.pendingBid?.(); setBidWarning(null) }}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #D97706', background: '#FFF7ED', color: '#D97706', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                Đã rõ
+              </button>
+              <button onClick={() => { setBidWarning(null); navigate('/shop/wallet?tab=auction_fund') }}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#7C3AED', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                🔒 Nạp tiền
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+
+  // ── Modal hủy cọc ─────────────────────────────────────────────────────────
+  const cancelDepositModalJSX = cancelDepositModal && (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.48)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 28, maxWidth: 400, width: '92%', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+        <div style={{ fontSize: 36, textAlign: 'center', marginBottom: 8 }}>🚫</div>
+        <div style={{ fontWeight: 800, fontSize: 17, color: '#DC2626', textAlign: 'center', marginBottom: 12 }}>Hủy cọc đấu giá</div>
+        <div style={{ fontSize: 13, color: '#444', lineHeight: 1.7, marginBottom: 14, textAlign: 'center' }}>
+          Tiền cọc sẽ <b style={{ color: '#DC2626' }}>KHÔNG được hoàn trả</b> khi hủy cọc.
+        </div>
+        <div style={{ background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.25)', borderRadius: 10, padding: '12px 16px', fontSize: 13, lineHeight: 1.7, marginBottom: 20 }}>
+          ⚠️ <b>Cảnh báo:</b> Vi phạm hủy cọc <b>trên 2 lần</b> sẽ bị <b>khóa vĩnh viễn</b> — không được tham gia đấu giá và không thể nạp <b>Tiền đấu giá</b>.<br />
+          <span style={{ color: '#7C3AED', fontWeight: 700 }}>Vi phạm hiện tại: {getViolations()}/2</span>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={() => setCancelDepositModal(null)}
+            style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #16A34A', background: '#F0FDF4', color: '#16A34A', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+            Giữ lại cọc
+          </button>
+          <button
+            onClick={() => {
+              const { id, kind } = cancelDepositModal
+              const ok = kind === 'banner' ? cancelBannerDeposit(id) : cancelFlashDeposit(id)
+              if (ok) {
+                const newCount = addViolation()
+                setCancelDepositModal(null)
+                refresh(); refreshFlash()
+                if (newCount >= 3) toast.error('🚫 Tài khoản bị khóa đấu giá do vi phạm hủy cọc quá 2 lần!')
+                else toast.warning(`⚠️ Đã hủy cọc. Vi phạm ${newCount}/2 — còn ${2 - newCount} lần trước khi bị khóa.`)
+              }
+            }}
+            style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #DC2626', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+            Xác nhận hủy
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div style={{ paddingBottom: 80 }}>
+      {walletWarningModal}
+      {cancelDepositModalJSX}
+      {/* ── Main content ──────────────────────────────────────────────────── */}
+      <div>
       <h2 style={{ marginBottom: 4 }}>🏆 Đấu giá vị trí quảng cáo</h2>
       <p style={{ color: C.gray, fontSize: 13, marginBottom: 20 }}>Đặt giá để banner / sản phẩm của shop xuất hiện ở vị trí hot trên Trang chủ BuyZo.</p>
 
-      {/* ── Thông báo thắng đấu giá / đặt cọc ──────────────────────────── */}
-      {(pendingBannerWins.length > 0 || pendingFlashWins.length > 0) && (
-        <div style={{ marginBottom: 24 }}>
+      {/* ── Thông báo thắng đấu giá / đặt cọc / buy-now vi phạm ─────────── */}
+      {(pendingBannerWins.length > 0 || pendingFlashWins.length > 0 || buyNowTxs.some(t => t.status === 'awaiting_edit')) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
           {[...pendingBannerWins.map(w => ({ kind: 'banner' as const, w })), ...pendingFlashWins.map(w => ({ kind: 'flash' as const, w }))].map(({ kind, w }) => {
             const sub = kind === 'banner' ? getSubmissionByHistoryId(w.id) : getFlashSubmissionByHistoryId(w.id)
             const posLabel = kind === 'banner'
@@ -440,32 +788,38 @@ const BannerAuctionPage: React.FC = () => {
               : FLASH_SLOTS.find(s => s.key === (w as FlashAuctionSession).slot)?.label
             const depositAmt = w.depositAmount ?? 0
             const depositDeadline = w.depositDeadline ? new Date(w.depositDeadline) : null
-            const msLeft = depositDeadline ? depositDeadline.getTime() - Date.now() : 0
-            const minLeft = Math.max(0, Math.ceil(msLeft / 60000))
+            const msLeft = Math.max(0, depositDeadline ? depositDeadline.getTime() - Date.now() : 0)
+            const depositMmSs = (() => {
+              const totalSec = Math.floor(msLeft / 1000)
+              const mm = Math.floor(totalSec / 60).toString().padStart(2, '0')
+              const ss = (totalSec % 60).toString().padStart(2, '0')
+              return `${mm}:${ss}`
+            })()
+            const isDepositUrgent = msLeft > 0 && msLeft <= 5 * 60 * 1000 // đỏ khi còn < 5 phút
 
             if (w.confirmation === 'pending') {
               return (
-                <div key={w.id} style={{ borderRadius: 14, padding: 20, marginBottom: 12, background: 'linear-gradient(135deg,#FFF7ED,#FEF3C7)', border: `2px solid ${C.orange}` }}>
+                <div key={w.id} style={{ borderRadius: 14, padding: 20, background: isDepositUrgent ? 'linear-gradient(135deg,#FFF1F2,#FEE2E2)' : 'linear-gradient(135deg,#FFF7ED,#FEF3C7)', border: `2px solid ${isDepositUrgent ? '#DC2626' : C.orange}` }}>
                   {/* Header */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                    <span style={{ fontSize: 28 }}>🏆</span>
+                    <span style={{ fontSize: 28 }}>{isDepositUrgent ? '🚨' : '🏆'}</span>
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: 16, color: C.orange }}>Chúc mừng! Bạn đã thắng đấu giá</div>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: isDepositUrgent ? '#DC2626' : C.orange }}>Chúc mừng! Bạn đã thắng đấu giá</div>
                       <div style={{ fontSize: 13, color: C.gray }}>{kind === 'banner' ? '🖼️' : '⚡'} {posLabel} — Giá thắng: <b>{w.winner?.amount.toLocaleString('vi-VN')}đ</b></div>
                     </div>
                     <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: '#DC2626' }}>⏰ {minLeft} phút</div>
-                      <div style={{ fontSize: 11, color: C.gray }}>còn lại để đặt cọc</div>
+                      <div style={{ fontSize: 26, fontWeight: 800, color: '#DC2626', fontVariantNumeric: 'tabular-nums', letterSpacing: 1 }}>⏰ {depositMmSs}</div>
+                      <div style={{ fontSize: 11, color: isDepositUrgent ? '#DC2626' : C.gray, fontWeight: isDepositUrgent ? 700 : 400 }}>{isDepositUrgent ? '⚠️ Sắp hết giờ!' : 'còn lại để đặt cọc'}</div>
                     </div>
                   </div>
 
                   {/* Điều kiện */}
                   <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: 10, padding: '12px 16px', marginBottom: 14, fontSize: 13 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 8, color: '#92400E' }}>📋 Điều kiện đặt cọc</div>
+                    <div style={{ fontWeight: 700, marginBottom: 8, color: isDepositUrgent ? '#DC2626' : '#92400E' }}>📋 Điều kiện đặt cọc</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <span>💰 Số tiền cọc: <b style={{ color: C.orange }}>{depositAmt.toLocaleString('vi-VN')}đ</b> <span style={{ color: C.gray, fontSize: 12 }}>(20% giá thắng)</span></span>
-                      <span>⏱ Hạn đặt cọc: <b>{depositDeadline?.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</b> hôm nay</span>
-                      <span style={{ color: '#DC2626' }}>⚠️ Không đặt cọc trong {minLeft} phút → <b>kết quả thắng bị huỷ tự động</b></span>
+                      <span>⏱ Hạn đặt cọc: <b>{depositDeadline?.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</b> hôm nay</span>
+                      <span style={{ color: '#DC2626' }}>⚠️ Hết giờ → <b>mất quyền thắng vĩnh viễn, không hoàn tiền cọc</b></span>
                       <span>✅ Sau khi đặt cọc: mẫu banner sẽ tự gửi Admin duyệt. Thanh toán đủ 100% để banner đi vào hoạt động.</span>
                     </div>
                   </div>
@@ -481,6 +835,7 @@ const BannerAuctionPage: React.FC = () => {
                           ok = payFlashDeposit(w.id)
                         }
                         if (ok) {
+                          deductWallet(depositAmt, `Đặt cọc đấu giá — ${kind === 'banner' ? 'Banner' : 'Flash Sale'}`)
                           refresh(); refreshFlash()
                           toast.success(`💰 Đặt cọc ${depositAmt.toLocaleString('vi-VN')}đ thành công! Vào tab Giao dịch để thanh toán phần còn lại.`)
                           setTab('mytx')
@@ -503,8 +858,8 @@ const BannerAuctionPage: React.FC = () => {
                 ? Math.max(0, Math.min(100, (payRemMs / totalPayMs) * 100)) : null
 
               return (
-                <div key={w.id} style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 12, border: `2px solid ${isUrgent ? '#DC2626' : C.primary}` }}>
-                  <div style={{ padding: 20, background: isUrgent ? 'rgba(220,38,38,0.06)' : C.primaryLight }}>
+                <div key={w.id} style={{ borderRadius: 14, overflow: 'hidden', border: `2px solid ${isUrgent ? '#DC2626' : C.primary}`, display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ padding: 20, background: isUrgent ? 'rgba(220,38,38,0.06)' : C.primaryLight, flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                     <span style={{ fontSize: 24 }}>✅</span>
                     <div style={{ flex: 1 }}>
@@ -524,28 +879,52 @@ const BannerAuctionPage: React.FC = () => {
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    <button style={btnStyle(C.blue)}
-                      onClick={() => {
-                        const ok = kind === 'banner' ? payWin(w.id) : payFlashWin(w.id)
-                        if (ok) { refresh(); refreshFlash(); toast.success('💳 Thanh toán đủ thành công!') }
-                      }}>
-                      💳 Thanh toán đủ ({((w.winner?.amount ?? 0) - depositAmt).toLocaleString('vi-VN')}đ)
-                    </button>
+                    {sub?.status === 'approved' && (
+                      <button style={btnStyle(C.blue)}
+                        onClick={() => {
+                          const remaining = (w.winner?.amount ?? 0) - depositAmt
+                          const ok = kind === 'banner' ? payWin(w.id) : payFlashWin(w.id)
+                          if (ok) { deductWallet(remaining, `Thanh toán đủ đấu giá — ${kind === 'banner' ? 'Banner' : 'Flash Sale'}`); refresh(); refreshFlash(); toast.success('💳 Thanh toán đủ thành công!') }
+                        }}>
+                        💳 Thanh toán đủ ({((w.winner?.amount ?? 0) - depositAmt).toLocaleString('vi-VN')}đ)
+                      </button>
+                    )}
                     {!sub && (
                       <button style={btnStyle(C.purple)} onClick={() => openSubmitModal(kind === 'banner' ? { kind: 'banner', session: w as BannerAuctionSession } : { kind: 'flash', session: w as FlashAuctionSession })}>
                         {kind === 'banner' ? '📢 Đăng banner' : '📦 Đăng sản phẩm'}
                       </button>
                     )}
-                    {sub && sub.status !== 'rejected' && (
-                      <span style={badgeStyle(sub.status === 'approved' ? C.primary : C.orange, sub.status === 'approved' ? C.primaryLight : C.orangeLight)}>
-                        {sub.status === 'approved' ? '✅ Đã duyệt' : '⏳ Chờ duyệt'}
-                      </span>
+                    {sub && sub.status === 'approved' && (
+                      <span style={badgeStyle(C.primary, C.primaryLight)}>✅ Đã duyệt</span>
+                    )}
+                    {sub && sub.status === 'pending' && (
+                      <span style={badgeStyle(C.orange, C.orangeLight)}>⏳ Chờ duyệt</span>
+                    )}
+                    {sub && sub.status === 'awaiting_edit' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#DC2626', background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, padding: '3px 10px', display: 'inline-block', alignSelf: 'flex-start' }}>
+                          ⚠️ Cảnh báo vi phạm — lần {(sub as any).rejectCount ?? 0}/3
+                        </div>
+                        {(sub as any).rejectReason && (
+                          <div style={{ fontSize: 12, color: '#5B21B6', background: 'rgba(124,58,237,0.07)', border: '1px solid rgba(124,58,237,0.2)', borderRadius: 8, padding: '6px 10px' }}>
+                            ❌ {(sub as any).rejectReason}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => {
+                            const posKey = (sub as any).position as string | undefined
+                            if (posKey) goToPreparePos(posKey)
+                          }}
+                          style={{ background: 'rgba(124,58,237,0.1)', color: '#7C3AED', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 8, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-start' }}>
+                          ✏️ Đợi sửa ({(sub as any).rejectCount ?? 0}/3) — Sửa ngay
+                        </button>
+                      </div>
                     )}
                     {sub && sub.status === 'rejected' && (
                       <button
                         onClick={() => setRejectedModal({ kind: kind as 'banner' | 'flash', sub })}
                         style={{ background: 'rgba(220,38,38,0.1)', color: '#DC2626', border: '1px solid rgba(220,38,38,0.25)', borderRadius: 8, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                        ❌ Bị từ chối — Xem chi tiết
+                        ❌ Bị từ chối vĩnh viễn — Xem chi tiết
                       </button>
                     )}
                   </div>
@@ -562,13 +941,36 @@ const BannerAuctionPage: React.FC = () => {
 
             return null
           })}
+          {buyNowTxs.filter(t => t.status === 'awaiting_edit').map(tx => (
+            <div key={tx.id} style={{ borderRadius: 14, overflow: 'hidden', border: '2px solid #7C3AED', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ padding: 20, background: 'rgba(124,58,237,0.06)', flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <span style={{ fontSize: 22 }}>⚠️</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: '#7C3AED' }}>Banner bị từ chối — cần chỉnh sửa</div>
+                    <div style={{ fontSize: 13, color: C.gray }}>{tx.positionLabel} — lần {tx.rejectCount}/{MAX_BUYNOW_REVISIONS}</div>
+                  </div>
+                </div>
+                {tx.rejectReason && (
+                  <div style={{ fontSize: 13, color: '#5B21B6', background: 'rgba(124,58,237,0.07)', borderRadius: 8, padding: '8px 12px', marginBottom: 12 }}>
+                    ❌ Lý do: {tx.rejectReason}
+                  </div>
+                )}
+                <button
+                  onClick={() => { if (!bnResubmitReadyIds.has(tx.id)) goToPreparePos(tx.position) }}
+                  style={{ background: 'rgba(124,58,237,0.1)', color: '#7C3AED', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 8, padding: '4px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  {bnResubmitReadyIds.has(tx.id) ? '📤 Sẵn sàng nộp lại — vào Giao dịch' : `✏️ Đợi sửa (${tx.rejectCount}/${MAX_BUYNOW_REVISIONS}) — Sửa ngay`}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
       {/* ── Tabs ─────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {([['banner', '🖼️ Banner'], ['flash', '⚡ Flash Sale'], ['top', '🏆 Vị trí Top'], ['mytx', '📒 Giao dịch của tôi'], ['prepare', '⚙️ Chuẩn bị']] as const).map(([t, label]) => (
-          <button key={t} onClick={() => setTab(t)} style={{ ...btnStyle(tab === t ? (t === 'top' ? C.purple : C.primary) : 'transparent', tab === t ? 'white' : C.gray), border: `1px solid ${tab === t ? (t === 'top' ? C.purple : C.primary) : C.border}`, position: 'relative' }}>
+          <button key={t} onClick={() => { setTab(t); if (t !== 'prepare') setHighlightPrepPos(null) }} style={{ ...btnStyle(tab === t ? (t === 'top' ? C.purple : C.primary) : 'transparent', tab === t ? 'white' : C.gray), border: `1px solid ${tab === t ? (t === 'top' ? C.purple : C.primary) : C.border}`, position: 'relative' }}>
             {t === 'prepare' && (Object.values(bannerDraftsExist).some(Boolean) || Object.values(flashDraftsExist).some(Boolean)) && (
               <span style={{ position: 'absolute', top: -4, right: -4, width: 8, height: 8, borderRadius: '50%', background: C.primary, border: '2px solid var(--bg-card)' }} />
             )}
@@ -576,6 +978,10 @@ const BannerAuctionPage: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {/* ── Flex row: tab content + right panel ─────────────────────────── */}
+      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
 
       {/* ── Banner tab — hiển thị cả 3 vị trí ──────────────────────────── */}
       {tab === 'banner' && (
@@ -586,102 +992,204 @@ const BannerAuctionPage: React.FC = () => {
             const cooldown = getShopCooldownRemaining(pos.key, SHOP_NAME)
             const preview  = getPreview(pos.key, pos.previewImage)
 
+            const isSelected = selectedBannerPos === pos.key
+            const bs           = bannerAdminSettings[pos.key]
+            const buyPrice     = bs?.buyNowPrice
+            const buySlots     = bs?.slots ?? 1
+            const live         = !!session && isAuctionLive(session)
+            const purchases    = session?.buyNowPurchases ?? []
+            const hasBoughtNow = purchases.some(p => p.shopName === SHOP_NAME)
+            const slotsFull    = purchases.length >= buySlots
             return (
-              <div key={pos.key} style={cardStyle}>
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <div>
-                    <h3 style={{ margin: 0 }}>{pos.label}</h3>
-                    <p style={{ color: C.gray, fontSize: 12, margin: '4px 0 0' }}>{pos.description}</p>
-                  </div>
-                  {session && (
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      {isAuctionLive(session) ? (
-                        <>
-                          <div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {countdown[pos.key] || '–'}</div>
-                          <div style={{ fontSize: 11, color: C.gray }}>còn lại</div>
-                        </>
-                      ) : (
-                        <>
-                          <div style={{ fontSize: 18, fontWeight: 700, color: '#D97706' }}>⏳ {formatCountdown(msUntilStart(session))}</div>
-                          <div style={{ fontSize: 11, color: C.gray }}>đến khi bắt đầu</div>
-                        </>
+              <div key={pos.key}
+                onClick={() => setSelectedBannerPos(pos.key)}
+                style={{ ...cardStyle, cursor: 'pointer', border: isSelected ? `2px solid ${C.primary}` : `1px solid ${C.border}`, transition: 'border 0.15s', padding: 0, overflow: 'hidden', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'stretch' }}>
+
+                  {/* ── Trái 7/10 ── */}
+                  <div style={{ flex: 7, minWidth: 0, padding: 20 }}>
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                      <div>
+                        <h3 style={{ margin: 0 }}>{pos.label}{isSelected && <span style={{ marginLeft: 8, fontSize: 11, color: C.primary, fontWeight: 600 }}>● đang xem</span>}</h3>
+                        <p style={{ color: C.gray, fontSize: 12, margin: '4px 0 0' }}>{pos.description}</p>
+                      </div>
+                      {session && (
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          {live ? (
+                            <>
+                              <div style={{ fontSize: 20, fontWeight: 700, color: '#DC2626' }}>⏱ {countdown[pos.key] || '–'}</div>
+                              <div style={{ fontSize: 11, color: C.gray }}>còn lại</div>
+                            </>
+                          ) : (
+                            <>
+                              <div style={{ fontSize: 16, fontWeight: 700, color: '#D97706' }}>⏳ {formatCountdown(msUntilStart(session))}</div>
+                              <div style={{ fontSize: 11, color: C.gray }}>đến khi bắt đầu</div>
+                            </>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
 
-                {session ? (
-                  <>
-                    {!isAuctionLive(session) && (
-                      <div style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid #FCD34D', borderRadius: 10, padding: '16px 18px', marginBottom: 16 }}>
-                        <p style={{ margin: '0 0 6px', fontWeight: 700, color: '#92400E' }}>⏰ Phiên đấu giá sắp khai mạc!</p>
-                        {session.description && <p style={{ margin: '0 0 6px', fontSize: 13, color: '#78350F', whiteSpace: 'pre-line' }}>📋 {session.description}</p>}
-                        <p style={{ margin: 0, fontSize: 12, color: '#92400E' }}>Khai mạc lúc: <b>{session.scheduledStartAt ? new Date(session.scheduledStartAt).toLocaleString('vi-VN') : '–'}</b></p>
-                        <p style={{ margin: '6px 0 0', fontSize: 12, color: '#B45309' }}>Bạn có thể xem thông tin phiên nhưng chưa thể đặt giá.</p>
-                      </div>
-                    )}
-
-                    {preview && (
-                      <div style={{ marginBottom: 16, borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}` }}>
-                        <img src={preview} alt={pos.label} style={{ width: '100%', maxHeight: pos.key === 'home_slider' ? 200 : pos.key === 'mall_ads_main' ? 420 : 300, objectFit: 'contain', display: 'block', background: '#f3f4f6' }} />
-                      </div>
-                    )}
-
-                    <div style={{ marginBottom: 16 }}>
-                      <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Bảng đấu giá ({session.bids.length} lượt)</p>
-                      <div style={{ maxHeight: 200, overflowY: 'auto', borderRadius: 8, border: `1px solid ${C.border}` }}>
-                        {session.bids.slice(0, 20).map((bid, i) => (
-                          <div key={bid.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 14px', borderBottom: `1px solid ${C.border}`, background: i === 0 ? C.primaryLight : 'transparent' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              {bid.bannerImage && <img src={bid.bannerImage} alt="" style={{ width: 36, height: 24, objectFit: 'cover', borderRadius: 4, border: `1px solid ${C.border}` }} />}
-                              <span style={{ fontSize: 13, fontWeight: i === 0 ? 700 : 400 }}>
-                                {i === 0 && '👑 '}{bid.shopName}
-                                {bid.shopName === SHOP_NAME && <span style={{ ...badgeStyle(C.primary, C.primaryLight), marginLeft: 6 }}>Bạn</span>}
-                              </span>
-                            </div>
-                            <span style={{ fontWeight: 700, color: i === 0 ? C.primary : 'inherit' }}>{bid.amount.toLocaleString('vi-VN')}đ</span>
+                    {session ? (
+                      <>
+                        {!live && (
+                          <div style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid #FCD34D', borderRadius: 10, padding: '16px 18px', marginBottom: 16 }}>
+                            <p style={{ margin: '0 0 6px', fontWeight: 700, color: '#92400E' }}>⏰ Phiên đấu giá sắp khai mạc!</p>
+                            {session.description && <p style={{ margin: '0 0 6px', fontSize: 13, color: '#78350F', whiteSpace: 'pre-line' }}>📋 {session.description}</p>}
+                            <p style={{ margin: 0, fontSize: 12, color: '#92400E' }}>Khai mạc lúc: <b>{session.scheduledStartAt ? new Date(session.scheduledStartAt).toLocaleString('vi-VN') : '–'}</b></p>
+                            <p style={{ margin: '6px 0 0', fontSize: 12, color: '#B45309' }}>Bạn có thể xem thông tin phiên nhưng chưa thể đặt giá.</p>
                           </div>
-                        ))}
-                        {session.bids.length === 0 && <p style={{ padding: 14, color: C.gray, fontSize: 13 }}>Chưa có ai đặt giá — hãy là người đầu tiên!</p>}
-                      </div>
-                    </div>
+                        )}
 
-                    <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {[0, 50_000, 100_000, 200_000, 500_000].map(extra => {
-                        const val = minBid + extra
-                        return (
-                          <button key={extra} onClick={() => setBidAmounts(p => ({ ...p, [pos.key]: String(val) }))}
-                            style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${C.border}`, background: bidAmounts[pos.key] === String(val) ? C.primary : 'transparent', color: bidAmounts[pos.key] === String(val) ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
-                            {extra === 0 ? 'Tối thiểu' : `+${(extra / 1000).toFixed(0)}k`} ({val.toLocaleString('vi-VN')}đ)
-                          </button>
-                        )
-                      })}
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <input type="text"
-                        placeholder={`Tối thiểu ${minBid.toLocaleString('vi-VN')}đ`}
-                        value={bidAmounts[pos.key] || ''}
-                        onChange={e => { const raw = e.target.value.replace(/[^\d]/g, ''); setBidAmounts(p => ({ ...p, [pos.key]: raw ? Number(raw).toLocaleString('vi-VN') : '' })) }}
-                        style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }}
-                      />
+                        {preview && (
+                          <div style={{ marginBottom: 16, borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}` }}>
+                            <img src={preview} alt={pos.label} style={{ width: '100%', maxHeight: pos.key === 'home_slider' ? 200 : pos.key === 'mall_ads_main' ? 420 : 300, objectFit: 'contain', display: 'block', background: '#f3f4f6' }} />
+                          </div>
+                        )}
+
+                        <div style={{ marginBottom: 16 }}>
+                          <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Bảng đấu giá ({session.bids.length} lượt)</p>
+                          <div style={{ maxHeight: 200, overflowY: 'auto', borderRadius: 8, border: `1px solid ${C.border}` }}>
+                            {session.bids.slice(0, 20).map((bid, i) => (
+                              <div key={bid.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 14px', borderBottom: `1px solid ${C.border}`, background: i === 0 ? C.primaryLight : 'transparent' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  {bid.bannerImage && <img src={bid.bannerImage} alt="" style={{ width: 36, height: 24, objectFit: 'cover', borderRadius: 4, border: `1px solid ${C.border}` }} />}
+                                  <span style={{ fontSize: 13, fontWeight: i === 0 ? 700 : 400 }}>
+                                    {i === 0 && '👑 '}{bid.shopName}
+                                    {bid.shopName === SHOP_NAME && <span style={{ ...badgeStyle(C.primary, C.primaryLight), marginLeft: 6 }}>Bạn</span>}
+                                  </span>
+                                </div>
+                                <span style={{ fontWeight: 700, color: i === 0 ? C.primary : 'inherit' }}>{bid.amount.toLocaleString('vi-VN')}đ</span>
+                              </div>
+                            ))}
+                            {session.bids.length === 0 && <p style={{ padding: 14, color: C.gray, fontSize: 13 }}>Chưa có ai đặt giá — hãy là người đầu tiên!</p>}
+                          </div>
+                        </div>
+
+                        {hasBoughtNow ? (
+                          <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(22,163,74,0.08)', border: `1px solid ${C.primary}44`, fontSize: 13, color: C.primary, fontWeight: 600 }}>
+                            ✅ Bạn đã mua hết vị trí này — không thể đặt giá thêm.
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              {(() => {
+                                const raw = minBid / 10
+                                const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))))
+                                const niceStep = Math.round(raw / mag) * mag || mag
+                                const firstVal = Math.ceil((minBid + 1) / niceStep) * niceStep
+                                const presets = [minBid, firstVal, firstVal + niceStep, firstVal + 2 * niceStep, firstVal + 3 * niceStep, firstVal + 4 * niceStep]
+                                return presets.map((val, i) => (
+                                  <button key={i} onClick={e => { e.stopPropagation(); setBidAmounts(p => ({ ...p, [pos.key]: val.toLocaleString('vi-VN') })) }}
+                                    style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${C.border}`, background: bidAmounts[pos.key] === val.toLocaleString('vi-VN') ? C.primary : 'transparent', color: bidAmounts[pos.key] === val.toLocaleString('vi-VN') ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
+                                    {i === 0 ? 'Tối thiểu' : val.toLocaleString('vi-VN')}đ
+                                  </button>
+                                ))
+                              })()}
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <div style={{ flex: 1, minWidth: 200 }}>
+                                <input type="text"
+                                  placeholder={`Tối thiểu ${minBid.toLocaleString('vi-VN')}đ`}
+                                  value={bidAmounts[pos.key] || ''}
+                                  onChange={e => {
+                                    const raw = e.target.value.replace(/[^\d]/g, '')
+                                    const num = Number(raw)
+                                    setBidAmounts(p => ({ ...p, [pos.key]: raw ? num.toLocaleString('vi-VN') : '' }))
+                                  }}
+                                  onClick={e => e.stopPropagation()}
+                                  style={{ width: '100%', padding: '8px 12px', border: `1px solid ${bidWarnLevel(parseInt((bidAmounts[pos.key]||'').replace(/[^\d]/g,''))) === 'blocked' ? '#DC2626' : bidWarnLevel(parseInt((bidAmounts[pos.key]||'').replace(/[^\d]/g,''))) === 'over70' ? '#D97706' : C.border}`, borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                                />
+                                {(() => { const w = bidWarnLevel(parseInt((bidAmounts[pos.key]||'').replace(/[^\d]/g,''))); return w ? (
+                                  <div style={{ fontSize: 11, marginTop: 3, fontWeight: 600, color: w === 'blocked' ? '#DC2626' : '#D97706' }}>
+                                    {w === 'blocked' ? '⛔ Vượt Tiền đấu giá!' : '⚠️ Vượt 70% Tiền đấu giá'}
+                                  </div>
+                                ) : null })()}
+                              </div>
+                              <button
+                                style={btnStyle(!live || cooldown > 0 ? '#9CA3AF' : C.primary)}
+                                disabled={!live || cooldown > 0}
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  const amount = parseInt((bidAmounts[pos.key] || '').replace(/[^\d]/g, ''))
+                                  if (!amount) { toast.error('Vui lòng nhập số tiền đặt giá'); return }
+                                  checkAndBid(amount, () => {
+                                    const result = placeBid(pos.key, SHOP_NAME, amount)
+                                    if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
+                                    toastBidResult(result.endPriceHit, '✅ Đặt giá thành công!'); setBidAmounts(p => ({ ...p, [pos.key]: '' })); refresh()
+                                  })
+                                }}>
+                                {!live ? '⏳ Chưa bắt đầu' : cooldown > 0 ? `Chờ ${Math.ceil(cooldown / 1000)}s` : '🏹 Đặt giá'}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <p style={{ color: C.gray }}>🔒 Vị trí này đang bị Admin tạm khoá hoặc chưa mở phiên đấu giá.</p>
+                    )}
+                  </div>
+
+                  {/* ── Phải 3/10 — Mua hết ── */}
+                  {session && bs?.advancedEnabled && (
+                    <div style={{ flex: 3, flexShrink: 0, borderLeft: '2px solid #FCA5A5', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 10, background: 'linear-gradient(160deg, #fff5f5 0%, #fff 100%)' }}>
+                      <h3 style={{ margin: 0, textAlign: 'center', color: '#DC2626' }}>{pos.label}</h3>
+                      <div style={{ textAlign: 'center', fontSize: 10 }}>
+                        <span style={{ color: live ? '#DC2626' : '#D97706', fontWeight: 600 }}>{live ? '🔥 Đang mở' : '⏳ Chờ bắt đầu'}</span>
+                      </div>
+
+                      <div style={{ borderTop: '1px solid #FCA5A5' }} />
+
+                      {/* Thời gian chờ ÷ 2 */}
+                      <div>
+                        <div style={{ fontSize: 10, color: '#EF4444', marginBottom: 2 }}>⏳ Thời gian chờ</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 1, color: live ? '#9CA3AF' : '#D97706' }}>
+                          {live ? '--:--' : formatCountdown(getWaitMs(session.id, msUntilStart(session)))}
+                        </div>
+                      </div>
+
+                      <div style={{ borderTop: '1px solid #FCA5A5' }} />
+
+                      {/* Giá + slot */}
+                      <div>
+                        <div style={{ fontSize: 10, color: '#EF4444', marginBottom: 4 }}>🛒 Giá mua hết</div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: buyPrice ? '#DC2626' : C.gray, lineHeight: 1.2 }}>
+                          {buyPrice ? buyPrice.toLocaleString('vi-VN') + 'đ' : '–'}
+                        </div>
+                      </div>
+
+                      <div style={{ borderTop: '1px solid #FCA5A5' }} />
+
+                      {/* Slot + Danh sách buyers */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: slotsFull ? '#DC2626' : '#F97316', textAlign: 'center' }}>
+                          {purchases.length}/{buySlots} slot
+                        </div>
+                        {purchases.length === 0
+                          ? <div style={{ fontSize: 12, color: '#FCA5A5' }}>Chưa có ai mua</div>
+                          : purchases.map((p, i) => (
+                            <div key={i} style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5, color: p.shopName === SHOP_NAME ? '#DC2626' : '#D97706' }}>
+                              <span>🛒</span>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.shopName}</span>
+                            </div>
+                          ))
+                        }
+                      </div>
                       <button
-                        style={btnStyle(!isAuctionLive(session) || cooldown > 0 ? '#9CA3AF' : C.primary)}
-                        disabled={!isAuctionLive(session) || cooldown > 0}
-                        onClick={() => {
-                          const amount = parseInt((bidAmounts[pos.key] || '').replace(/[^\d]/g, ''))
-                          if (!amount) { toast.error('Vui lòng nhập số tiền đặt giá'); return }
-                          const result = placeBid(pos.key, SHOP_NAME, amount)
-                          if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
-                          toast.success('✅ Đặt giá thành công!'); setBidAmounts(p => ({ ...p, [pos.key]: '' })); refresh()
-                        }}>
-                        {!isAuctionLive(session) ? '⏳ Chưa bắt đầu' : cooldown > 0 ? `Chờ ${Math.ceil(cooldown / 1000)}s` : '🏹 Đặt giá'}
+                        disabled={!live || !buyPrice || hasBoughtNow || slotsFull}
+                        onClick={e => {
+                          e.stopPropagation()
+                          if (!buyPrice) return
+                          setBuyNowConfirm({ label: pos.label, price: buyPrice, slots: buySlots, onConfirm: () => { const r = placeBuyNow(pos.key, SHOP_NAME, buyPrice, buySlots); if (!r.ok) { toast.error(r.error || ''); return }; const draft = getBannerDraft(pos.key, SHOP_NAME); createBuyNowTransaction(pos.key, pos.label, SHOP_NAME, buyPrice, draft ? { title: draft.title, link: draft.link, image: draft.image } : undefined); refresh(); refreshFlash(); setBuyNowTxs([...getBuyNowTransactions(SHOP_NAME)]); toast.success('✅ Mua thành công! Banner đang chờ admin duyệt.'); setTab('mytx') } })
+                        }}
+                        style={{ width: '100%', padding: '8px 0', borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 13, cursor: (live && buyPrice && !hasBoughtNow && !slotsFull) ? 'pointer' : 'not-allowed', background: hasBoughtNow ? '#FEE2E2' : slotsFull ? '#FEE2E2' : (live && buyPrice) ? 'linear-gradient(90deg,#EF4444,#F97316)' : '#D1D5DB', color: hasBoughtNow ? '#DC2626' : slotsFull ? '#DC2626' : (live && buyPrice) ? 'white' : '#9CA3AF', marginTop: 'auto' }}>
+                        {hasBoughtNow ? '✅ Đã mua' : slotsFull ? '🚫 Hết slot' : '🔥 Mua ngay'}
                       </button>
                     </div>
-                  </>
-                ) : (
-                  <p style={{ color: C.gray }}>🔒 Vị trí này đang bị Admin tạm khoá hoặc chưa mở phiên đấu giá.</p>
-                )}
+                  )}
+
+                </div>
               </div>
             )
           })}
@@ -705,10 +1213,13 @@ const BannerAuctionPage: React.FC = () => {
         const handleBid = () => {
           const amount = parseInt(flashPoolBidAmount.replace(/[^\d]/g, ''))
           if (!amount) { toast.error('Vui lòng nhập giá/slot'); return }
-          const r = placeFlashPoolBid(SHOP_NAME, amount, flashPoolSlots)
-          if (!r.ok) { toast.error(r.error || 'Không thể đặt giá'); return }
-          toast.success(`✅ Đặt giá thành công! ${flashPoolSlots} slot × ${amount.toLocaleString('vi-VN')}đ/slot`)
-          setFlashPoolBidAmount(''); refreshPools()
+          const total = amount * flashPoolSlots
+          checkAndBid(total, () => {
+            const r = placeFlashPoolBid(SHOP_NAME, amount, flashPoolSlots)
+            if (!r.ok) { toast.error(r.error || 'Không thể đặt giá'); return }
+            toast.success(`✅ Đặt giá thành công! ${flashPoolSlots} slot × ${amount.toLocaleString('vi-VN')}đ/slot`)
+            setFlashPoolBidAmount(''); refreshPools()
+          })
         }
 
         return (
@@ -735,8 +1246,8 @@ const BannerAuctionPage: React.FC = () => {
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     {live
-                      ? <><div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {fmtMmSs(msEnd)}</div><div style={{ fontSize: 11, color: C.gray }}>còn lại</div></>
-                      : <><div style={{ fontSize: 18, fontWeight: 700, color: '#D97706' }}>⏳ {fmtMmSs(msStart)}</div><div style={{ fontSize: 11, color: C.gray }}>đến khi bắt đầu</div></>
+                      ? <><div style={{ fontSize: 20, fontWeight: 700, color: '#DC2626' }}>⏱ {fmtMmSs(msEnd)}</div><div style={{ fontSize: 11, color: C.gray }}>còn lại</div></>
+                      : <><div style={{ fontSize: 16, fontWeight: 700, color: '#D97706' }}>⏳ {fmtMmSs(msStart)}</div><div style={{ fontSize: 11, color: C.gray }}>đến khi bắt đầu</div></>
                     }
                   </div>
                 </div>
@@ -794,11 +1305,22 @@ const BannerAuctionPage: React.FC = () => {
                         ⚡ {myExistingBid ? 'Cập nhật giá' : 'Đặt giá'}
                       </button>
                     </div>
-                    {flashPoolBidAmount && (
-                      <div style={{ marginTop: 8, fontSize: 12, color: C.orange }}>
-                        Tổng ước tính: <b>{((parseInt(flashPoolBidAmount) || 0) * flashPoolSlots).toLocaleString('vi-VN')}đ</b> cho {flashPoolSlots} slot
-                      </div>
-                    )}
+                    {flashPoolBidAmount && (() => {
+                      const total = (parseInt(flashPoolBidAmount.replace(/[^\d]/g,'')) || 0) * flashPoolSlots
+                      const w = bidWarnLevel(total)
+                      return (
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{ fontSize: 12, color: C.orange }}>
+                            Tổng ước tính: <b>{total.toLocaleString('vi-VN')}đ</b> cho {flashPoolSlots} slot
+                          </div>
+                          {w && (
+                            <div style={{ fontSize: 11, marginTop: 3, fontWeight: 600, color: w === 'blocked' ? '#DC2626' : '#D97706' }}>
+                              {w === 'blocked' ? '⛔ Vượt Tiền đấu giá!' : '⚠️ Vượt 70% Tiền đấu giá'}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )}
 
@@ -857,11 +1379,13 @@ const BannerAuctionPage: React.FC = () => {
         const handleBid = () => {
           const amount = parseInt(bidVal.replace(/[^\d]/g, ''))
           if (!amount) { toast.error('Vui lòng nhập giá đấu'); return }
-          const r = placeTopBid(selectedTopSlot, SHOP_NAME, '(sản phẩm sẽ xác nhận sau)', amount)
-          if (!r.ok) { toast.error(r.error || 'Không thể đặt giá'); return }
-          toast.success(`✅ Đặt giá thành công! ${amount.toLocaleString('vi-VN')}đ cho ${slotDef.label}`)
-          setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: '' }))
-          refreshPools()
+          checkAndBid(amount, () => {
+            const r = placeTopBid(selectedTopSlot, SHOP_NAME, '(sản phẩm sẽ xác nhận sau)', amount)
+            if (!r.ok) { toast.error(r.error || 'Không thể đặt giá'); return }
+            toastBidResult(r.endPriceHit, `✅ Đặt giá thành công! ${amount.toLocaleString('vi-VN')}đ cho ${slotDef.label}`)
+            setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: '' }))
+            refreshPools()
+          })
         }
 
         return (
@@ -896,8 +1420,8 @@ const BannerAuctionPage: React.FC = () => {
                 {session && (
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     {live
-                      ? <><div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>⏱ {fmtMmSs(msEnd)}</div><div style={{ fontSize: 11, color: C.gray }}>còn lại</div></>
-                      : <><div style={{ fontSize: 18, fontWeight: 700, color: '#D97706' }}>⏳ {fmtMmSs(msStart)}</div><div style={{ fontSize: 11, color: C.gray }}>đến khi bắt đầu</div></>
+                      ? <><div style={{ fontSize: 20, fontWeight: 700, color: '#DC2626' }}>⏱ {fmtMmSs(msEnd)}</div><div style={{ fontSize: 11, color: C.gray }}>còn lại</div></>
+                      : <><div style={{ fontSize: 16, fontWeight: 700, color: '#D97706' }}>⏳ {fmtMmSs(msStart)}</div><div style={{ fontSize: 11, color: C.gray }}>đến khi bắt đầu</div></>
                     }
                   </div>
                 )}
@@ -933,22 +1457,33 @@ const BannerAuctionPage: React.FC = () => {
                       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                         <label style={{ fontSize: 12, color: C.gray, flex: 1, minWidth: 180 }}>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, width: '100%' }}>
-                          {[0, 50_000, 100_000, 200_000, 500_000].map(extra => {
-                            const val = minNext + extra
-                            const formatted = val.toLocaleString('vi-VN')
-                            return (
-                              <button key={extra} onClick={() => setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: formatted }))}
-                                style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${bidVal === formatted ? C.purple : C.border}`, background: bidVal === formatted ? C.purple : 'transparent', color: bidVal === formatted ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
-                                {extra === 0 ? 'Tối thiểu' : `+${(extra/1000).toFixed(0)}k`} ({val.toLocaleString('vi-VN')}đ)
-                              </button>
-                            )
-                          })}
+                          {(() => {
+                            const raw = minNext / 10
+                            const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))))
+                            const niceStep = Math.round(raw / mag) * mag || mag
+                            const firstVal = Math.ceil((minNext + 1) / niceStep) * niceStep
+                            const presets = [minNext, firstVal, firstVal + niceStep, firstVal + 2 * niceStep, firstVal + 3 * niceStep, firstVal + 4 * niceStep]
+                            return presets.map((val, i) => {
+                              const formatted = val.toLocaleString('vi-VN')
+                              return (
+                                <button key={i} onClick={() => setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: formatted }))}
+                                  style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${bidVal === formatted ? C.purple : C.border}`, background: bidVal === formatted ? C.purple : 'transparent', color: bidVal === formatted ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
+                                  {i === 0 ? 'Tối thiểu' : val.toLocaleString('vi-VN')}đ
+                                </button>
+                              )
+                            })
+                          })()}
                         </div>
                           Giá đặt (đ) — tối thiểu {minNext.toLocaleString('vi-VN')}đ
                           <input type="text" value={bidVal}
                             onChange={e => { const raw = e.target.value.replace(/[^\d]/g, ''); setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: raw ? Number(raw).toLocaleString('vi-VN') : '' })) }}
                             placeholder={minNext.toLocaleString('vi-VN')}
-                            style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }} />
+                            style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', border: `1px solid ${bidWarnLevel(parseInt(bidVal.replace(/[^\d]/g,''))) === 'blocked' ? '#DC2626' : bidWarnLevel(parseInt(bidVal.replace(/[^\d]/g,''))) === 'over70' ? '#D97706' : C.border}`, borderRadius: 8, fontSize: 14 }} />
+                          {(() => { const w = bidWarnLevel(parseInt(bidVal.replace(/[^\d]/g,''))); return w ? (
+                            <div style={{ fontSize: 11, marginTop: 3, fontWeight: 600, color: w === 'blocked' ? '#DC2626' : '#D97706' }}>
+                              {w === 'blocked' ? '⛔ Vượt Tiền đấu giá!' : '⚠️ Vượt 70% Tiền đấu giá'}
+                            </div>
+                          ) : null })()}
                         </label>
                         <button style={{ ...btnStyle(C.purple), padding: '9px 20px' }} onClick={handleBid}>
                           🏆 {myBid ? 'Cập nhật giá' : 'Đặt giá'}
@@ -986,16 +1521,37 @@ const BannerAuctionPage: React.FC = () => {
       })()}
 
       {tab === 'mytx' && (() => {
-        // Gom tất cả phiên banner + flash mà shop có tham gia đặt giá
+        // Một bảng duy nhất: gộp đấu giá + mua ngay
         type TxRow = {
-          id: string; kind: 'banner' | 'flash'; label: string
+          id: string; kind: 'banner' | 'flash' | 'buynow'; label: string
           startedAt: string; myBids: number; myTopBid: number
           isWinner: boolean; confirmation?: string; amount?: number
-          depositAmount?: number; subStatus?: string
+          depositAmount?: number; subStatus?: string; rejectCount?: number; subId?: string
+          // Buy-now fields
+          isBuyNow?: boolean; bnTxId?: string; bnPosition?: BannerPositionKey
         }
         const rows: TxRow[] = []
 
-        // Banner history
+        // ── Buy-now transactions (từ store mới) ──────────────────────────────
+        buyNowTxs.forEach(tx => {
+          rows.push({
+            id: 'bn-' + tx.id,
+            kind: 'buynow',
+            label: tx.positionLabel,
+            startedAt: tx.purchasedAt,
+            myBids: 0, myTopBid: 0,
+            isWinner: true,
+            confirmation: 'paid',
+            amount: tx.price,
+            isBuyNow: true,
+            bnTxId: tx.id,
+            bnPosition: tx.position,
+            subStatus: tx.status,
+            rejectCount: tx.rejectCount,
+          })
+        })
+
+        // ── Banner bid-based rows ─────────────────────────────────────────────
         bannerHistory.forEach(h => {
           const myBids = h.bids.filter(b => b.shopName === SHOP_NAME)
           if (myBids.length === 0) return
@@ -1008,6 +1564,7 @@ const BannerAuctionPage: React.FC = () => {
             startedAt: h.startedAt, myBids: myBids.length, myTopBid,
             isWinner, confirmation: h.confirmation, amount: h.winner?.amount,
             depositAmount: h.depositAmount, subStatus: sub?.status,
+            rejectCount: (sub as any)?.rejectCount, subId: sub?.id,
           })
         })
 
@@ -1024,16 +1581,21 @@ const BannerAuctionPage: React.FC = () => {
             startedAt: h.startedAt, myBids: myBids.length, myTopBid,
             isWinner, confirmation: h.confirmation, amount: h.winner?.amount,
             depositAmount: h.depositAmount, subStatus: sub?.status,
+            rejectCount: (sub as any)?.rejectCount, subId: sub?.id,
           })
         })
+
+        // (Buy-now không còn trong bảng đấu giá — xem bảng riêng bên dưới)
 
         rows.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
 
         const statusColor = (r: TxRow) => {
+          if (r.isBuyNow) return { color: C.primary, bg: C.primaryLight, label: '✅ Đã thanh toán đủ' }
           if (!r.isWinner) return { color: C.gray, bg: 'rgba(156,163,175,0.12)', label: '❌ Thua' }
           if (r.confirmation === 'paid') return { color: C.primary, bg: C.primaryLight, label: '✅ Đã thanh toán đủ' }
           if (r.confirmation === 'expired' || r.confirmation === 'declined') return { color: '#DC2626', bg: 'rgba(220,38,38,0.1)', label: '⚠️ Hết hạn/Từ chối' }
           if (r.confirmation === 'deposit_paid') return { color: C.blue, bg: C.blueLight, label: '💰 Đã cọc — chờ TT đủ' }
+          if ((r.confirmation as string) === 'deposit_cancelled') return { color: '#DC2626', bg: 'rgba(220,38,38,0.08)', label: '🚫 Đã hủy cọc' }
           return { color: C.orange, bg: C.orangeLight, label: '⏳ Chờ xác nhận' }
         }
 
@@ -1059,30 +1621,54 @@ const BannerAuctionPage: React.FC = () => {
 
                   {/* Table */}
                   <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 85px 120px 80px 160px 160px', padding: '10px 14px', background: C.primaryLight, fontSize: 12, fontWeight: 700, color: C.primary }}>
-                      <span>Vị trí / Loại</span><span>Ngày</span><span>Giá thắng</span><span>Lượt bid</span><span>Trạng thái</span><span>Hành động</span>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', padding: '10px 14px', background: C.primaryLight, fontSize: 12, fontWeight: 700, color: C.primary, textAlign: 'center' }}>
+                      <span>Vị trí / Loại</span><span>Ngày</span><span>Giá thắng</span><span>Lần sửa</span><span>Trạng thái</span><span>Hành động</span>
                     </div>
                     {rows.map((r, i) => {
                       const st = statusColor(r)
                       const remaining = (r.amount ?? 0) - (r.depositAmount ?? 0)
+                      // Buy-now: badge theo trạng thái duyệt banner
+                      const tx = r.isBuyNow ? buyNowTxs.find(t => t.id === r.bnTxId) : null
                       return (
-                        <div key={r.id} style={{ display: 'grid', gridTemplateColumns: '1fr 85px 120px 80px 160px 160px', padding: '10px 14px', borderTop: `1px solid ${C.border}`, background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.015)', alignItems: 'center', gap: 4 }}>
-                          <span style={{ fontSize: 13 }}>
-                            <span style={badgeStyle(r.kind === 'banner' ? C.blue : C.orange, r.kind === 'banner' ? C.blueLight : C.orangeLight)}>{r.kind === 'banner' ? '🖼️' : '⚡'}</span>
-                            {' '}{r.label}
-                          </span>
+                        <div key={r.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', padding: '10px 14px', borderTop: `1px solid ${C.border}`, background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.015)', alignItems: 'center', justifyItems: 'center', gap: 4, textAlign: 'center' }}>
+                          <div style={{ fontSize: 13 }}>
+                            {r.label}
+                            {r.isBuyNow
+                              ? <div style={{ fontSize: 10, color: '#DC2626', fontWeight: 600 }}>🛒 Mua ngay</div>
+                              : <div style={{ fontSize: 10, color: C.blue, fontWeight: 600 }}>Đấu giá</div>
+                            }
+                          </div>
                           <span style={{ fontSize: 12, color: C.gray }}>{new Date(r.startedAt).toLocaleDateString('vi-VN')}</span>
                           <div style={{ fontSize: 12 }}>
-                            <div style={{ fontWeight: 600 }}>{r.isWinner ? (r.amount ?? 0).toLocaleString('vi-VN') + 'đ' : r.myTopBid.toLocaleString('vi-VN') + 'đ'}</div>
-                            {r.depositAmount && r.confirmation === 'deposit_paid' && (
-                              <div style={{ color: C.gray, fontSize: 11 }}>Cọc: {r.depositAmount.toLocaleString('vi-VN')}đ · Còn: {remaining.toLocaleString('vi-VN')}đ</div>
+                            {r.isBuyNow ? (
+                              <span style={{ color: C.primary, fontWeight: 700 }}>✅ Đã thanh toán đủ</span>
+                            ) : r.isWinner && r.confirmation === 'deposit_paid' ? (
+                              <>
+                                <div style={{ fontWeight: 600, color: C.blue }}>Cọc: {(r.depositAmount ?? 0).toLocaleString('vi-VN')}đ</div>
+                                <div style={{ color: C.orange, fontSize: 11, fontWeight: 600 }}>Còn lại: {remaining.toLocaleString('vi-VN')}đ</div>
+                              </>
+                            ) : (
+                              <div style={{ fontWeight: 600 }}>
+                                {r.isWinner
+                                  ? (r.amount ?? 0).toLocaleString('vi-VN') + 'đ'
+                                  : r.myTopBid.toLocaleString('vi-VN') + 'đ'
+                                }
+                              </div>
                             )}
                           </div>
-                          <span style={{ fontSize: 13 }}>{r.myBids} lượt</span>
+                          <span style={{ fontSize: 13 }}>
+                            {r.isBuyNow
+                              ? `${r.rejectCount ?? 0}/${MAX_BUYNOW_REVISIONS} lần`
+                              : r.isWinner ? `${r.rejectCount ?? 0}/3 lần` : '—'
+                            }
+                          </span>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={badgeStyle(st.color, st.bg)}>{st.label}</span>
-                            {/* Countdown thanh toán — hiện khi có paymentDeadline */}
-                            {r.confirmation === 'deposit_paid' && (() => {
+                            {r.isBuyNow
+                              ? <span style={badgeStyle(C.primary, C.primaryLight)}>✅ Đã thanh toán đủ</span>
+                              : <span style={badgeStyle(st.color, st.bg)}>{st.label}</span>
+                            }
+                            {/* Countdown thanh toán đấu giá (không phải mua ngay) */}
+                            {!r.isBuyNow && r.confirmation === 'deposit_paid' && (() => {
                               const sub = r.kind === 'banner'
                                 ? getAllBannerSubmissions().find(s => s.historyId === r.id)
                                 : getAllFlashSubmissions().find(s => s.historyId === r.id)
@@ -1116,16 +1702,58 @@ const BannerAuctionPage: React.FC = () => {
                             })()}
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            {r.confirmation === 'deposit_paid' && (
+                            {/* ── Buy-now actions (từ store mới) ── */}
+                            {r.isBuyNow && r.subStatus === 'pending_review' && (
+                              <span style={{ fontSize: 12, color: C.blue, fontStyle: 'italic' }}>⏳ Chờ duyệt...</span>
+                            )}
+                            {r.isBuyNow && r.subStatus === 'approved' && (
+                              <span style={{ fontSize: 12, color: C.primary }}>✅ Banner đang chạy</span>
+                            )}
+                            {r.isBuyNow && r.subStatus === 'awaiting_edit' && tx && !bnResubmitReadyIds.has(tx.id) && (
+                              <button
+                                onClick={() => goToPreparePos(tx.position)}
+                                style={{ background: 'rgba(124,58,237,0.1)', color: '#7C3AED', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 8, padding: '3px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                                ✏️ Đợi sửa ({r.rejectCount}/{MAX_BUYNOW_REVISIONS}) — Sửa ngay
+                              </button>
+                            )}
+                            {r.isBuyNow && r.subStatus === 'awaiting_edit' && tx && bnResubmitReadyIds.has(tx.id) && (
+                              <button
+                                onClick={async () => {
+                                  const draft = getBannerDraft(tx.position, SHOP_NAME)
+                                  if (!draft?.image) { toast.error('Vui lòng lưu mẫu có ảnh trước.'); return }
+                                  const { idbSave, isIDBRef } = await import('../../utils/imageDB')
+                                  const imgRef = isIDBRef(draft.image) ? draft.image : await idbSave(draft.image)
+                                  const ok = submitBuyNowBanner(tx.id, { title: draft.title, link: draft.link ?? undefined, image: imgRef })
+                                  if (!ok) { toast.error('Không thể nộp lại — vui lòng thử lại.'); return }
+                                  setBnResubmitReadyIds(prev => { const n = new Set(prev); n.delete(tx.id); return n })
+                                  setBuyNowTxs([...getBuyNowTransactions(SHOP_NAME)])
+                                  toast.success('📤 Đã nộp lại cho Admin duyệt!')
+                                }}
+                                style={{ background: 'rgba(22,163,74,0.1)', color: '#16A34A', border: '1px solid rgba(22,163,74,0.3)', borderRadius: 8, padding: '3px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                                📤 Nộp lại
+                              </button>
+                            )}
+                            {r.isBuyNow && r.subStatus === 'rejected' && (
+                              <span style={badgeStyle('#DC2626', 'rgba(220,38,38,0.1)')}>❌ Từ chối vĩnh viễn</span>
+                            )}
+                            {/* ── Auction bid-win actions ── */}
+                            {!r.isBuyNow && r.confirmation === 'deposit_paid' && (
+                              <button
+                                onClick={() => setCancelDepositModal({ id: r.id, kind: r.kind as 'banner' | 'flash' })}
+                                style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 8, padding: '3px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                                🚫 Hủy cọc
+                              </button>
+                            )}
+                            {!r.isBuyNow && r.confirmation === 'deposit_paid' && r.subStatus === 'approved' && (
                               <button style={{ ...btnStyle(C.blue), fontSize: 11, padding: '5px 10px' }}
                                 onClick={() => {
                                   const ok = r.kind === 'banner' ? payWin(r.id) : payFlashWin(r.id)
-                                  if (ok) { refresh(); refreshFlash(); toast.success('💳 Thanh toán đủ thành công!') }
+                                  if (ok) { deductWallet(remaining, `Thanh toán đủ đấu giá — ${r.kind === 'banner' ? 'Banner' : 'Flash Sale'}`); refresh(); refreshFlash(); toast.success('💳 Thanh toán đủ thành công!') }
                                 }}>
                                 💳 TT đủ ({remaining.toLocaleString('vi-VN')}đ)
                               </button>
                             )}
-                            {r.confirmation === 'deposit_paid' && !r.subStatus && (
+                            {!r.isBuyNow && r.confirmation === 'deposit_paid' && !r.subStatus && (
                               <button style={{ ...btnStyle(C.purple), fontSize: 11, padding: '5px 10px' }}
                                 onClick={() => {
                                   const session = [...bannerHistory, ...flashHistory].find(h => h.id === r.id)
@@ -1137,10 +1765,38 @@ const BannerAuctionPage: React.FC = () => {
                                 {r.kind === 'banner' ? '📢 Đăng banner' : '📦 Đăng SP'}
                               </button>
                             )}
-                            {r.subStatus === 'approved' && <span style={badgeStyle(C.primary, C.primaryLight)}>✅ Đã duyệt</span>}
-                            {r.subStatus === 'pending' && <span style={badgeStyle(C.orange, C.orangeLight)}>⏳ Chờ duyệt</span>}
-                            {r.subStatus === 'rejected' && <span style={badgeStyle('#DC2626', 'rgba(220,38,38,0.1)')}>❌ Từ chối</span>}
-                            {!r.confirmation || (!['deposit_paid'].includes(r.confirmation) && !r.subStatus) ? <span style={{ color: C.gray, fontSize: 12 }}>–</span> : null}
+                            {!r.isBuyNow && r.subStatus === 'approved' && <span style={badgeStyle(C.primary, C.primaryLight)}>✅ Đã duyệt</span>}
+                            {!r.isBuyNow && r.subStatus === 'pending' && <span style={badgeStyle(C.orange, C.orangeLight)}>⏳ Chờ duyệt</span>}
+                            {!r.isBuyNow && r.subStatus === 'awaiting_edit' && !resubmitReadyIds.has(r.id) && (
+                              <button
+                                onClick={() => {
+                                  const sub = r.kind === 'banner' ? getSubmissionByHistoryId(r.id) : undefined
+                                  const posKey = (sub as any)?.position as string | undefined
+                                  if (posKey) goToPreparePos(posKey)
+                                }}
+                                style={{ background: 'rgba(124,58,237,0.1)', color: '#7C3AED', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 8, padding: '3px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                                ✏️ Đợi sửa ({r.rejectCount ?? 0}/3) — Sửa ngay
+                              </button>
+                            )}
+                            {!r.isBuyNow && r.subStatus === 'awaiting_edit' && resubmitReadyIds.has(r.id) && (
+                              <button
+                                onClick={() => {
+                                  const sub = r.kind === 'banner' ? getSubmissionByHistoryId(r.id) : undefined
+                                  if (!sub) return
+                                  resubmitSubmission(sub.id)
+                                  setResubmitReadyIds(prev => { const n = new Set(prev); n.delete(r.id); return n })
+                                  refresh()
+                                  toast.success('📢 Đã nộp lại banner cho Admin duyệt!')
+                                }}
+                                style={{ background: 'rgba(22,163,74,0.1)', color: '#16A34A', border: '1px solid rgba(22,163,74,0.3)', borderRadius: 8, padding: '3px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                                📤 Nộp lại
+                              </button>
+                            )}
+                            {!r.isBuyNow && r.subStatus === 'rejected' && <span style={badgeStyle('#DC2626', 'rgba(220,38,38,0.1)')}>❌ Từ chối vĩnh viễn</span>}
+                            {!r.isBuyNow && (r.confirmation as string) === 'deposit_cancelled' && (
+                              <span style={badgeStyle('#DC2626', 'rgba(220,38,38,0.08)')}>🚫 Đã hủy cọc</span>
+                            )}
+                            {!r.isBuyNow && (!r.confirmation || (!['deposit_paid', 'deposit_cancelled'].includes(r.confirmation) && !r.subStatus)) ? <span style={{ color: C.gray, fontSize: 12 }}>–</span> : null}
                           </div>
                         </div>
                       )
@@ -1180,8 +1836,9 @@ const BannerAuctionPage: React.FC = () => {
             const form = prepBannerForms[posKey] ?? { title: '', link: '', image: '' }
             const imgErr = prepBannerImgErr[posKey] ?? ''
             const draft = getBannerDraft(posKey, SHOP_NAME)
+            const isHighlighted = highlightPrepPos === posKey
             return (
-              <div key={posKey} style={cardStyle}>
+              <div key={posKey} id={'prep-pos-' + posKey} style={{ ...cardStyle, transition: 'box-shadow 0.3s, outline 0.3s', outline: isHighlighted ? '2.5px solid #7C3AED' : '2.5px solid transparent', boxShadow: isHighlighted ? '0 0 0 4px rgba(124,58,237,0.18)' : (cardStyle as any).boxShadow }}>
                 <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>
                   🖼️ {p.label}
                   {bannerDraftsExist[posKey] && <span style={{ marginLeft: 8, fontSize: 12, color: C.primary, fontWeight: 400 }}>✅ Đã có mẫu</span>}
@@ -1192,13 +1849,21 @@ const BannerAuctionPage: React.FC = () => {
                 {draft && (
                   <div style={{ background: C.primaryLight, border: `1px solid ${C.primary}`, borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 12 }}>
                     ✅ Mẫu hiện tại: <b>{draft.title}</b> — cập nhật {new Date(draft.updatedAt).toLocaleString('vi-VN')}
-                    {draft.image && <img src={draft.image} alt="draft" style={{ display: 'block', marginTop: 8, maxWidth: '100%', maxHeight: 100, objectFit: 'cover', borderRadius: 6 }} />}
+                    {(prepBannerResolvedImgs[posKey] || draft.image) && <img src={prepBannerResolvedImgs[posKey] || draft.image} alt="draft" style={{ display: 'block', marginTop: 8, maxWidth: '100%', maxHeight: 100, objectFit: 'cover', borderRadius: 6 }} />}
                   </div>
                 )}
                 {prepBannerSaved[posKey] ? (
                   /* ── Đã lưu: ẩn form, chỉ hiện nút Chỉnh sửa ── */
                   <button style={{ ...btnStyle('transparent', C.primary), border: `1px solid ${C.primary}` }}
-                    onClick={() => setPrepBannerSaved(prev => ({ ...prev, [posKey]: false }))}>
+                    onClick={() => {
+                      if (draft) {
+                        setPrepBannerForms(f => ({ ...f, [posKey]: { title: draft.title, link: draft.link ?? '', image: draft.image } }))
+                        if (prepBannerResolvedImgs[posKey]) {
+                          setBannerPreview(prev => ({ ...prev, [posKey]: prepBannerResolvedImgs[posKey] }))
+                        }
+                      }
+                      setPrepBannerSaved(prev => ({ ...prev, [posKey]: false }))
+                    }}>
                     ✏️ Chỉnh sửa
                   </button>
                 ) : (
@@ -1261,12 +1926,12 @@ const BannerAuctionPage: React.FC = () => {
                           📂 Chọn ảnh banner
                         </button>
                         {form.image && !form.image.startsWith('idb:') && <span style={{ fontSize: 12, color: C.gray }}>{form.image}</span>}
-                        {form.image && form.image.startsWith('idb:') && <span style={{ fontSize: 12, color: C.success }}>✅ Đã lưu ảnh</span>}
+                        {form.image && form.image.startsWith('idb:') && <span style={{ fontSize: 12, color: C.primary }}>✅ Đã lưu ảnh</span>}
                       </div>
                       {imgErr && <p style={{ color: '#DC2626', fontSize: 12, marginTop: 4 }}>{imgErr}</p>}
-                      {(bannerPreview[posKey] || form.image || draft?.image) && (
+                      {(bannerPreview[posKey] || prepBannerResolvedImgs[posKey] || form.image || draft?.image) && (
                         <img
-                          src={bannerPreview[posKey] || form.image || draft?.image}
+                          src={bannerPreview[posKey] || prepBannerResolvedImgs[posKey] || form.image || draft?.image}
                           alt="preview"
                           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; setPrepBannerImgErr(prev => ({ ...prev, [posKey]: '⚠️ Không tìm thấy file trong public/img/banner/ — kiểm tra lại tên.' })) }}
                           style={{ marginTop: 8, maxWidth: '100%', maxHeight: 140, borderRadius: 8, border: `1px solid ${C.border}`, display: 'block' }} />
@@ -1281,6 +1946,31 @@ const BannerAuctionPage: React.FC = () => {
                         saveBannerDraft({ position: posKey, shopName: SHOP_NAME, title: form.title.trim(), link: form.link.trim() || undefined, image: form.image || draft!.image, updatedAt: new Date().toISOString() })
                         setPrepBannerSaved(prev => ({ ...prev, [posKey]: true }))
                         checkDrafts()
+                        // Nếu đến từ flow "Đợi sửa" → đánh dấu sẵn sàng nộp lại + về Giao dịch
+                        if (highlightPrepPos === posKey) {
+                          // Kiểm tra buy-now awaiting_edit trước
+                          const bnAwaiting = buyNowTxs.find(
+                            t => t.position === posKey && t.status === 'awaiting_edit' && t.shopName === SHOP_NAME
+                          )
+                          if (bnAwaiting) {
+                            setBnResubmitReadyIds(prev => new Set([...prev, bnAwaiting.id]))
+                            setHighlightPrepPos(null)
+                            setTab('mytx')
+                            toast.success(`✅ Đã lưu! Bấm "Nộp lại" trong Giao dịch để gửi admin duyệt.`)
+                            return
+                          }
+                          // Kiểm tra auction awaiting_edit
+                          const awaitingSub = getAllBannerSubmissions().find(
+                            s => s.position === posKey && s.status === 'awaiting_edit' && s.shopName === SHOP_NAME
+                          )
+                          if (awaitingSub) {
+                            setResubmitReadyIds(prev => new Set([...prev, awaitingSub.historyId]))
+                            setHighlightPrepPos(null)
+                            setTab('mytx')
+                            toast.success(`✅ Đã lưu! Bấm "Nộp lại" trong Giao dịch để gửi admin duyệt.`)
+                            return
+                          }
+                        }
                         toast.success(`✅ Đã lưu mẫu ${p.label}!`)
                       }}
                       style={btnStyle(C.primary)}>
@@ -1487,12 +2177,46 @@ const BannerAuctionPage: React.FC = () => {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) setSubmitTarget(null) }}>
           <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 28, maxWidth: 500, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-            {submitTarget.kind === 'banner' ? (
+            {(submitTarget.kind === 'banner' || submitTarget.kind === 'banner-buynow') ? (
               <>
-                <h3 style={{ margin: '0 0 4px' }}>Đăng banner quảng cáo</h3>
-                <p style={{ fontSize: 13, color: C.gray, marginBottom: 16 }}>
-                  {BANNER_POSITIONS.find(p => p.key === (submitTarget.session as BannerAuctionSession).position)?.label}
-                </p>
+                {/* Header — buy-now edit mode shows rejection context */}
+                {submitTarget.kind === 'banner-buynow' && (() => {
+                  const bnTx = buyNowTxs.find(t => t.id === submitTarget.txId)
+                  const isEdit = bnTx?.status === 'awaiting_edit'
+                  return (
+                    <>
+                      <h3 style={{ margin: '0 0 4px', color: isEdit ? '#7C3AED' : undefined }}>
+                        {isEdit ? '✏️ Sửa lại banner' : '📢 Đăng banner quảng cáo'}
+                      </h3>
+                      <p style={{ fontSize: 13, color: C.gray, marginBottom: isEdit ? 8 : 16 }}>{submitTarget.label}</p>
+                      {isEdit && (
+                        <>
+                          <div style={{ background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.25)', borderRadius: 8, padding: '8px 14px', marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#DC2626' }}>
+                            ⚠️ Cảnh báo vi phạm — lần {bnTx?.rejectCount}/{MAX_BUYNOW_REVISIONS}
+                          </div>
+                          {bnTx?.rejectReason ? (
+                            <div style={{ background: 'rgba(124,58,237,0.07)', border: '1px solid rgba(124,58,237,0.25)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
+                              <div style={{ fontWeight: 700, color: '#7C3AED', marginBottom: 4 }}>❌ Nội dung vi phạm</div>
+                              <div style={{ color: '#5B21B6' }}>{bnTx.rejectReason}</div>
+                            </div>
+                          ) : (
+                            <div style={{ background: 'rgba(124,58,237,0.07)', border: '1px solid rgba(124,58,237,0.25)', borderRadius: 8, padding: '8px 14px', marginBottom: 14, fontSize: 12, color: '#7C3AED' }}>
+                              ✏️ Admin yêu cầu chỉnh sửa — vui lòng cập nhật nội dung banner
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )
+                })()}
+                {submitTarget.kind === 'banner' && (
+                  <>
+                    <h3 style={{ margin: '0 0 4px' }}>Đăng banner quảng cáo</h3>
+                    <p style={{ fontSize: 13, color: C.gray, marginBottom: 16 }}>
+                      {BANNER_POSITIONS.find(p => p.key === (submitTarget.session as BannerAuctionSession).position)?.label}
+                    </p>
+                  </>
+                )}
                 <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 10 }}>
                   Tiêu đề banner *
                   <input value={bannerForm.title} onChange={e => setBannerForm(f => ({ ...f, title: e.target.value }))}
@@ -1508,7 +2232,12 @@ const BannerAuctionPage: React.FC = () => {
                   <input type="file" accept="image/*" style={{ display: 'block', marginTop: 4 }}
                     onChange={async e => { const f = e.target.files?.[0]; if (f) await handleBannerImageFile(f) }} />
                   {bannerImgError && <p style={{ color: '#DC2626', fontSize: 12, margin: '4px 0 0' }}>{bannerImgError}</p>}
-                  {bannerForm.image && !bannerImgError && <img src={bannerForm.image} alt="preview" style={{ marginTop: 8, maxWidth: '100%', maxHeight: 120, objectFit: 'cover', borderRadius: 8 }} />}
+                  {(bannerModalResolvedImg || (bannerForm.image && !bannerForm.image.startsWith('idb:'))) && !bannerImgError && (
+                    <img src={bannerModalResolvedImg || bannerForm.image} alt="preview" style={{ marginTop: 8, maxWidth: '100%', maxHeight: 120, objectFit: 'cover', borderRadius: 8 }} />
+                  )}
+                  {bannerForm.image && !bannerModalResolvedImg && bannerForm.image.startsWith('idb:') && !bannerImgError && (
+                    <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(22,163,74,0.1)', borderRadius: 8, fontSize: 12, color: '#16A34A' }}>✅ Đang dùng ảnh từ mẫu đã chuẩn bị</div>
+                  )}
                 </label>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
                   <button style={btnStyle('transparent', C.gray)} onClick={() => setSubmitTarget(null)}>Huỷ</button>
@@ -1563,10 +2292,19 @@ const BannerAuctionPage: React.FC = () => {
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
             <div style={{ background: C.cardBg, borderRadius: 14, width: 540, maxWidth: '95vw', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-              <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(220,38,38,0.06)' }}>
+              <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: sub.status === 'awaiting_edit' ? 'rgba(124,58,237,0.06)' : 'rgba(220,38,38,0.06)' }}>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 16, color: '#DC2626' }}>❌ Nội dung bị từ chối</div>
-                  <div style={{ fontSize: 12, color: C.gray, marginTop: 2 }}>{posLabel} · {new Date(sub.createdAt).toLocaleString('vi-VN')}</div>
+                  <div style={{ fontWeight: 800, fontSize: 16, color: sub.status === 'awaiting_edit' ? '#7C3AED' : '#DC2626' }}>
+                    {sub.status === 'awaiting_edit' ? '✏️ Cần chỉnh sửa lại' : '❌ Bị từ chối vĩnh viễn'}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.gray, marginTop: 2 }}>
+                    {posLabel} · {new Date(sub.createdAt).toLocaleString('vi-VN')}
+                    {(sub as BannerSubmission).rejectCount != null && (
+                      <span style={{ marginLeft: 8, fontWeight: 700, color: sub.status === 'rejected' ? '#DC2626' : '#7C3AED' }}>
+                        · Từ chối {(sub as BannerSubmission).rejectCount}/3 lần
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button onClick={() => setRejectedModal(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: C.gray, lineHeight: 1 }}>✕</button>
               </div>
@@ -1617,16 +2355,129 @@ const BannerAuctionPage: React.FC = () => {
               </div>
 
               <div style={{ padding: '14px 20px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: C.gray }} onClick={() => setRejectedModal(null)}>Dong</button>
+                <button style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: C.gray }} onClick={() => setRejectedModal(null)}>Đóng</button>
+                {sub.status === 'awaiting_edit' && (
+                  <button
+                    style={{ background: '#7C3AED', color: 'white', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                    onClick={() => {
+                      resubmitSubmission(sub.id)
+                      setRejectedModal(null)
+                      refresh()
+                      toast.success('📢 Đã gửi lại banner cho Admin duyệt!')
+                    }}>
+                    📤 Gửi lại ngay
+                  </button>
+                )}
                 <button style={{ background: C.primary, color: 'white', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
                   onClick={() => { setRejectedModal(null); setTab('prepare') }}>
-         Cập nhật mẫu
+                  ✏️ Vào sửa mẫu
                 </button>
               </div>
             </div>
           </div>
         )
-      })()} 
+      })()}
+
+      </div>{/* end tab content */}
+
+      </div>{/* end flex-row */}
+      </div>{/* end main content */}
+
+      {/* ── Cảnh cáo hết hạn đặt cọc ─────────────────────────────────────── */}
+      {depositExpiredWarn && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          {depositExpiredWarn.n < depositExpiredWarn.max ? (
+            /* ── Cảnh cáo lần 1 ── */
+            <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: '28px 28px 22px', maxWidth: 420, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', border: '2px solid #DC2626' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                <span style={{ fontSize: 36 }}>⚠️</span>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 17, color: '#DC2626' }}>Cảnh cáo vi phạm</div>
+                  <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Bỏ lỡ thời hạn đặt cọc</div>
+                </div>
+                <div style={{ marginLeft: 'auto', textAlign: 'center', background: '#FEE2E2', borderRadius: 10, padding: '6px 14px' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#DC2626' }}>{depositExpiredWarn.n}/{depositExpiredWarn.max}</div>
+                  <div style={{ fontSize: 10, color: '#EF4444', fontWeight: 600 }}>lần cảnh cáo</div>
+                </div>
+              </div>
+              <div style={{ background: '#FEF2F2', borderRadius: 10, padding: '12px 16px', marginBottom: 18, fontSize: 13, color: '#7F1D1D', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span>🚫 Bạn đã không hoàn thành đặt cọc trong thời hạn quy định.</span>
+                <span>📌 Kết quả thắng đấu giá đã bị <b>huỷ tự động</b>.</span>
+                <span>⚠️ Nếu còn tái diễn, shop của bạn sẽ bị <b>ĐÌNH CHỈ</b>.</span>
+              </div>
+              <button onClick={() => setDepositExpiredWarn(null)}
+                style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer', background: '#DC2626', color: 'white' }}>
+                Đã hiểu
+              </button>
+            </div>
+          ) : (
+            /* ── Đình chỉ lần 2 ── */
+            <div style={{ background: '#1a0000', borderRadius: 16, padding: '32px 28px 24px', maxWidth: 420, width: '100%', boxShadow: '0 20px 80px rgba(220,38,38,0.5)', border: '2px solid #991B1B' }}>
+              {/* Badge đình chỉ */}
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <div style={{ fontSize: 52 }}>🔴</div>
+                <div style={{ fontWeight: 900, fontSize: 22, color: '#EF4444', letterSpacing: 1, marginTop: 8 }}>SHOP BỊ ĐÌNH CHỈ</div>
+                <div style={{ fontSize: 13, color: '#FCA5A5', marginTop: 4 }}>Vi phạm lần {depositExpiredWarn.n}/{depositExpiredWarn.max}</div>
+              </div>
+
+              <div style={{ background: 'rgba(220,38,38,0.15)', border: '1px solid #7F1D1D', borderRadius: 10, padding: '14px 16px', marginBottom: 20, fontSize: 13, color: '#FCA5A5', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <span>🚫 Bạn đã <b style={{ color: '#EF4444' }}>2 lần</b> bỏ lỡ thời hạn đặt cọc sau khi thắng đấu giá.</span>
+                <span>📌 Kết quả thắng đấu giá đã bị huỷ tự động.</span>
+                <span style={{ color: '#EF4444', fontWeight: 700 }}>⛔ Shop của bạn đã bị <b>ĐÌNH CHỈ</b> khỏi hệ thống đấu giá quảng cáo.</span>
+                <span>📞 Vui lòng liên hệ Admin để được hỗ trợ mở lại quyền đấu giá.</span>
+              </div>
+
+              <button onClick={() => setDepositExpiredWarn(null)}
+                style={{ width: '100%', padding: '12px 0', borderRadius: 8, border: '1px solid #7F1D1D', fontWeight: 800, fontSize: 15, cursor: 'pointer', background: '#7F1D1D', color: '#FCA5A5', letterSpacing: 0.5 }}>
+                Đã hiểu — Liên hệ Admin
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Mua ngay — confirmation modal ──────────────────────────────────── */}
+      {buyNowConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.48)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) setBuyNowConfirm(null) }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: '28px 28px 22px', maxWidth: 400, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 17 }}>🛒 Xác nhận mua ngay</h3>
+            <p style={{ margin: '0 0 18px', fontSize: 13, color: C.gray }}>Bạn sẽ mua vị trí với mức giá cố định mà không cần chờ kết thúc phiên đấu giá.</p>
+            <div style={{ background: 'var(--bg-secondary, #f8fafc)', borderRadius: 10, padding: '14px 16px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span style={{ color: C.gray }}>Vị trí</span>
+                <span style={{ fontWeight: 600 }}>{buyNowConfirm.label}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span style={{ color: C.gray }}>Số slot</span>
+                <span style={{ fontWeight: 600 }}>{buyNowConfirm.slots}</span>
+              </div>
+              {buyNowConfirm.unitLabel && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ color: C.gray }}>Chi tiết</span>
+                  <span style={{ color: C.gray }}>{buyNowConfirm.unitLabel}</span>
+                </div>
+              )}
+              <div style={{ borderTop: '1px solid var(--border-subtle, #e5e7eb)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, color: C.gray }}>Tổng thanh toán</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: C.primary }}>{buyNowConfirm.price.toLocaleString('vi-VN')}đ</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setBuyNowConfirm(null)}
+                style={{ padding: '9px 20px', borderRadius: 8, border: '1px solid var(--border-subtle, #e5e7eb)', background: 'transparent', fontSize: 14, cursor: 'pointer', color: C.gray, fontWeight: 600 }}>
+                Huỷ
+              </button>
+              <button
+                onClick={() => { buyNowConfirm.onConfirm(); setBuyNowConfirm(null) }}
+                style={{ padding: '9px 22px', borderRadius: 8, border: 'none', background: C.primary, color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                ✅ Xác nhận mua
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

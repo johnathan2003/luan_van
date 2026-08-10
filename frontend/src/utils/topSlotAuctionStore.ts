@@ -40,7 +40,7 @@ export const TOP_SLOTS: TopSlotDef[] = [
 ]
 
 export const AUCTION_DURATION_MS = 5 * 60 * 1000
-export const MIN_STEP = 50_000
+export const MIN_STEP = 2  // bội số của 2
 export const TURN_COOLDOWN_MS = 10 * 1000
 export const PAYMENT_WINDOW_MS = 60 * 60 * 1000
 export const DEPOSIT_WINDOW_MS = 30 * 60 * 1000
@@ -59,6 +59,7 @@ export interface TopAuctionSession {
   confirmation?: 'pending' | 'deposit_paid' | 'declined' | 'expired' | 'paid'
   depositDeadline?: string; depositAmount?: number
   paymentDeadline?: string; displayDurationMs?: number
+  endPriceHits?: number      // số lần bid chạm endPrice (max 3 → kết thúc phiên)
 }
 
 export function isAuctionLive(session: TopAuctionSession): boolean {
@@ -81,7 +82,7 @@ export interface AuctionAdminSettings {
   locked: boolean
 }
 
-export interface PlaceBidResult { ok: boolean; error?: string; session?: TopAuctionSession }
+export interface PlaceBidResult { ok: boolean; error?: string; session?: TopAuctionSession; endPriceHit?: number }
 
 export interface ImageSpec {
   ratioLabel: string; ratio: number; tolerance: number; recommendedW: number; recommendedH: number; maxKB: number
@@ -198,7 +199,7 @@ export function getMinNextBid(slot: TopSlotKey): number {
   const basePrice = data.settings[slot]?.basePrice ?? TOP_SLOTS.find(d => d.key === slot)!.basePrice
   const session = getActiveSession(slot)
   const highest = session?.bids.reduce((a, b) => (b.amount > a.amount ? b : a), session.bids[0])
-  return (highest ? highest.amount : basePrice - MIN_STEP) + MIN_STEP
+  return (highest ? highest.amount : basePrice) + 2
 }
 
 export function getShopCooldownRemaining(slot: TopSlotKey, shopName: string): number {
@@ -213,7 +214,8 @@ export function placeBid(slot: TopSlotKey, shopName: string, productName: string
   if (!session) return { ok: false, error: 'Vị trí này đang bị Admin tạm khoá, chưa thể đặt giá.' }
   if (session.paused) return { ok: false, error: 'Phiên đấu giá đang bị tạm dừng bởi Admin.' }
   const basePrice = data.settings[slot]?.basePrice ?? TOP_SLOTS.find(d => d.key === slot)!.basePrice
-  const minNext = (session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice - MIN_STEP) + MIN_STEP
+  const highestAmt = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice
+  const minNext = highestAmt + 2
   if (new Date(session.endsAt).getTime() <= Date.now()) return { ok: false, error: 'Phiên đấu giá đã kết thúc, vui lòng đặt giá ở phiên mới.' }
   const lastByShop = session.bids.find(b => b.shopName === shopName)
   if (lastByShop) {
@@ -223,13 +225,28 @@ export function placeBid(slot: TopSlotKey, shopName: string, productName: string
       return { ok: false, error: `Vui lòng chờ ${remainingSec}s nữa để đặt giá lượt tiếp theo.` }
     }
   }
-  if (amount < minNext) return { ok: false, error: `Giá đặt phải tối thiểu ${minNext.toLocaleString('vi-VN')}đ` }
+  if (amount < minNext) return { ok: false, error: `Giá đặt tối thiểu ${minNext.toLocaleString('vi-VN')}đ.` }
+  if ((amount - highestAmt) % 2 !== 0) return { ok: false, error: 'Giá đặt phải là bội số của 2đ.' }
   const bid: TopBid = {
     id: 'bid-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
     shopName, productName, productImage, amount, time: new Date().toISOString(),
   }
-  session.bids.unshift(bid); data.sessions[slot] = session; saveStore(data)
-  return { ok: true, session }
+  session.bids.unshift(bid)
+
+  // ── endPrice: restart về 10s, tối đa 3 lần rồi kết thúc ─────────────────
+  const endPrice = data.settings[slot]?.endPrice
+  if (endPrice && amount >= endPrice) {
+    const hits = (session.endPriceHits ?? 0) + 1
+    session.endPriceHits = hits
+    if (hits >= 3) {
+      session.endsAt = new Date(Date.now() - 1).toISOString() // kết thúc ngay
+    } else {
+      session.endsAt = new Date(Date.now() + 10_000).toISOString() // restart 10s
+    }
+  }
+
+  data.sessions[slot] = session; saveStore(data)
+  return { ok: true, session, endPriceHit: endPrice && amount >= endPrice ? session.endPriceHits : undefined }
 }
 
 export function sweepExpiredWins(): TopAuctionSession[] {

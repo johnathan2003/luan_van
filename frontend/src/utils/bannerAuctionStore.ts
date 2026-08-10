@@ -75,7 +75,7 @@ export const BANNER_POSITIONS: BannerPositionDef[] = [
 ]
 
 export const AUCTION_DURATION_MS = 5 * 60 * 1000
-export const MIN_STEP = 50_000
+export const MIN_STEP = 2  // bội số của 2
 export const TURN_COOLDOWN_MS = 10 * 1000
 export const PAYMENT_WINDOW_MS = 60 * 60 * 1000
 export const DEPOSIT_WINDOW_MS = 30 * 60 * 1000   // 30 phút đặt cọc
@@ -100,11 +100,13 @@ export interface BannerAuctionSession {
   paused?: boolean
   status: 'active' | 'ended'
   winner?: BannerBid
-  confirmation?: 'pending' | 'deposit_paid' | 'declined' | 'expired' | 'paid'
+  confirmation?: 'pending' | 'deposit_paid' | 'declined' | 'expired' | 'paid' | 'deposit_cancelled'
   depositDeadline?: string   // hạn 30p đặt cọc
   depositAmount?: number     // 20% số tiền thắng
   paymentDeadline?: string   // hạn thanh toán đủ (sau khi cọc)
   displayDurationMs?: number
+  buyNowPurchases?: Array<{ shopName: string; time: string }> // danh sách shop đã mua slot
+  endPriceHits?: number      // số lần bid chạm endPrice (max 3 → kết thúc phiên)
 }
 
 /** True khi phiên đã qua thời gian chờ và đang nhận đặt giá */
@@ -129,7 +131,7 @@ export interface AuctionAdminSettings {
   locked: boolean
 }
 
-export interface PlaceBidResult { ok: boolean; error?: string; session?: BannerAuctionSession }
+export interface PlaceBidResult { ok: boolean; error?: string; session?: BannerAuctionSession; endPriceHit?: number }
 
 // ── Yêu cầu kích thước/định dạng ảnh banner cho từng vị trí ──────────────────
 export interface ImageSpec {
@@ -157,8 +159,9 @@ export interface BannerSubmission {
   title: string
   link?: string
   image: string
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'awaiting_edit'
   rejectReason?: string
+  rejectCount?: number      // số lần bị từ chối (tối đa 3 lần, lần 3 mới xoá hẳn)
   createdAt: string
   approvedAt?: string       // ISO — thời điểm admin duyệt
   paymentDeadline?: string  // approvedAt + 30 phút — hạn thanh toán phần còn lại
@@ -215,7 +218,33 @@ function getStore(): StoreData {
   return data
 }
 
-function saveStore(data: StoreData) { writeJSON(KEY, data) }
+const MAX_BIDS_PER_SESSION = 50
+
+/** Trước khi save: strip bannerImage khỏi bids (ảnh lớn không cần lưu ở đây)
+ *  và giới hạn bids ≤ MAX_BIDS_PER_SESSION để tránh vượt quota localStorage */
+function trimForStorage(data: StoreData): StoreData {
+  const sessions = { ...data.sessions }
+  for (const key of Object.keys(sessions) as BannerPositionKey[]) {
+    const s = sessions[key]
+    if (s) {
+      sessions[key] = {
+        ...s,
+        bids: s.bids
+          .slice(0, MAX_BIDS_PER_SESSION)
+          .map(({ bannerImage: _img, ...rest }) => rest as BannerBid),
+      }
+    }
+  }
+  const history = data.history.map(s => ({
+    ...s,
+    bids: s.bids
+      .slice(0, MAX_BIDS_PER_SESSION)
+      .map(({ bannerImage: _img, ...rest }) => rest as BannerBid),
+  }))
+  return { ...data, sessions, history }
+}
+
+function saveStore(data: StoreData) { writeJSON(KEY, trimForStorage(data)) }
 
 function rollIfExpired(data: StoreData, position: BannerPositionKey): BannerAuctionSession | undefined {
   const session = data.sessions[position]
@@ -271,7 +300,7 @@ export function getMinNextBid(position: BannerPositionKey): number {
   const data = getStore()
   const basePrice = data.settings[position]?.basePrice ?? BANNER_POSITIONS.find(d => d.key === position)!.basePrice
   const highest = getHighestBid(position)
-  return (highest ? highest.amount : basePrice - MIN_STEP) + MIN_STEP
+  return (highest ? highest.amount : basePrice) + 2
 }
 
 export function getShopCooldownRemaining(position: BannerPositionKey, shopName: string): number {
@@ -286,7 +315,8 @@ export function placeBid(position: BannerPositionKey, shopName: string, amount: 
   if (!session) return { ok: false, error: 'Vị trí này đang bị Admin tạm khoá, chưa thể đặt giá.' }
   if (session.paused) return { ok: false, error: 'Phiên đấu giá đang bị tạm dừng bởi Admin.' }
   const basePrice = data.settings[position]?.basePrice ?? BANNER_POSITIONS.find(d => d.key === position)!.basePrice
-  const minNext = (session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice - MIN_STEP) + MIN_STEP
+  const highest = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice
+  const minNext = highest + 2
   if (!isAuctionLive(session)) return { ok: false, error: `⏳ Phiên chưa bắt đầu. Vui lòng chờ đến ${session.scheduledStartAt ? new Date(session.scheduledStartAt).toLocaleTimeString('vi-VN') : ''}` }
   if (new Date(session.endsAt).getTime() <= Date.now()) return { ok: false, error: 'Phiên đấu giá đã kết thúc, vui lòng đặt giá ở phiên mới.' }
   const lastByShop = session.bids.find(b => b.shopName === shopName)
@@ -297,9 +327,38 @@ export function placeBid(position: BannerPositionKey, shopName: string, amount: 
       return { ok: false, error: `Vui lòng chờ ${remainingSec}s nữa để đặt giá lượt tiếp theo.` }
     }
   }
-  if (amount < minNext) return { ok: false, error: `Giá đặt phải tối thiểu ${minNext.toLocaleString('vi-VN')}đ` }
+  if (amount < minNext) return { ok: false, error: `Giá đặt tối thiểu ${minNext.toLocaleString('vi-VN')}đ.` }
+  if ((amount - highest) % 2 !== 0) return { ok: false, error: 'Giá đặt phải là bội số của 2đ.' }
   const bid: BannerBid = { id: 'bid-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), shopName, amount, bannerImage, time: new Date().toISOString() }
-  session.bids.unshift(bid); data.sessions[position] = session; saveStore(data)
+  session.bids.unshift(bid)
+
+  // ── endPrice: restart về 10s, tối đa 3 lần rồi kết thúc ─────────────────
+  const endPrice = data.settings[position]?.endPrice
+  if (endPrice && amount >= endPrice) {
+    const hits = (session.endPriceHits ?? 0) + 1
+    session.endPriceHits = hits
+    if (hits >= 3) {
+      session.endsAt = new Date(Date.now() - 1).toISOString() // kết thúc ngay
+    } else {
+      session.endsAt = new Date(Date.now() + 10_000).toISOString() // restart 10s
+    }
+  }
+
+  data.sessions[position] = session; saveStore(data)
+  return { ok: true, session, endPriceHit: endPrice && amount >= endPrice ? session.endPriceHits : undefined }
+}
+
+/** Shop dùng "Mua ngay" — mua 1 slot, tối đa buySlots shop */
+export function placeBuyNow(position: BannerPositionKey, shopName: string, price: number, totalSlots: number): PlaceBidResult {
+  const data = getStore(); const session = rollIfExpired(data, position)
+  if (!session) return { ok: false, error: 'Vị trí này chưa mở phiên.' }
+  if (!isAuctionLive(session)) return { ok: false, error: '⏳ Phiên chưa bắt đầu.' }
+  const purchases = session.buyNowPurchases ?? []
+  if (purchases.some(p => p.shopName === shopName)) return { ok: false, error: 'Bạn đã mua slot này rồi.' }
+  if (purchases.length >= totalSlots) return { ok: false, error: 'Đã hết slot mua ngay.' }
+  session.buyNowPurchases = [...purchases, { shopName, time: new Date().toISOString() }]
+  data.sessions[position] = session
+  saveStore(data)
   return { ok: true, session }
 }
 
@@ -308,8 +367,9 @@ export function injectFakeBid(position: BannerPositionKey): BannerBid | null {
   if (!session || new Date(session.endsAt).getTime() <= Date.now()) return null
   const basePrice = data.settings[position]?.basePrice ?? BANNER_POSITIONS.find(d => d.key === position)!.basePrice
   const highest = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)) : undefined
-  const base = highest ? highest.amount : basePrice - MIN_STEP
-  const bump = MIN_STEP + Math.floor(Math.random() * 4) * 25_000
+  const base = highest ? highest.amount : basePrice
+  // Bot đặt thêm một số chẵn ngẫu nhiên (2,000 – 100,000đ)
+  const bump = (Math.floor(Math.random() * 50) + 1) * 2_000
   const amount = base + bump
   const bid: BannerBid = {
     id: 'fake-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
@@ -341,7 +401,8 @@ export function sweepExpiredWins(): BannerAuctionSession[] {
 export function getPendingWinsForShop(shopName: string): BannerAuctionSession[] {
   sweepExpiredWins(); const data = getStore()
   return data.history.filter(h =>
-    h.winner?.shopName === shopName && h.confirmation === 'pending'
+    h.winner?.shopName === shopName &&
+    (h.confirmation === 'pending' || h.confirmation === 'deposit_paid')
   )
 }
 
@@ -380,6 +441,24 @@ export function payDeposit(historyId: string, draft?: { title: string; link?: st
   return true
 }
 
+/** Shop hủy cọc — mất tiền cọc, đơn nộp admin bị hủy luôn */
+export function cancelDeposit(historyId: string): boolean {
+  const data = getStore()
+  const idx = data.history.findIndex(h => h.id === historyId)
+  if (idx === -1) return false
+  if (data.history[idx].confirmation !== 'deposit_paid') return false
+  // Hủy session
+  data.history[idx] = { ...data.history[idx], confirmation: 'deposit_cancelled' }
+  // Hủy submission liên quan (nếu có) — admin không duyệt nữa
+  data.submissions = data.submissions.map(s =>
+    s.historyId === historyId && s.status !== 'approved'
+      ? { ...s, status: 'cancelled' as const }
+      : s
+  )
+  saveStore(data)
+  return true
+}
+
 /** Thanh toán phần còn lại (80%) */
 export function payWin(historyId: string): boolean {
   const data = getStore(); const idx = data.history.findIndex(h => h.id === historyId); if (idx === -1) return false
@@ -407,6 +486,37 @@ export function getSubmissionByHistoryId(historyId: string): BannerSubmission | 
   return getStore().submissions.find(s => s.historyId === historyId)
 }
 export function getAllSubmissions(): BannerSubmission[] { return getStore().submissions }
+
+/** Tạo historyId ảo cho buy-now (không phải từ đấu giá) */
+export function buyNowHistoryId(position: BannerPositionKey, shopName: string): string {
+  return `bn:${position}:${shopName}`
+}
+
+/** Lấy submission của giao dịch mua ngay */
+export function getBuyNowSubmission(position: BannerPositionKey, shopName: string): BannerSubmission | undefined {
+  return getStore().submissions.find(s => s.historyId === buyNowHistoryId(position, shopName))
+}
+
+/** Đăng banner cho giao dịch mua ngay */
+export function submitBannerBuyNow(
+  position: BannerPositionKey, shopName: string,
+  payload: { title: string; link?: string; image: string }
+): BannerSubmission | null {
+  const data = getStore()
+  const historyId = buyNowHistoryId(position, shopName)
+  const existingIdx = data.submissions.findIndex(s => s.historyId === historyId)
+  if (existingIdx !== -1 && !['rejected', 'awaiting_edit'].includes(data.submissions[existingIdx].status)) return null
+  const rejectCount = existingIdx !== -1 ? (data.submissions[existingIdx].rejectCount ?? 0) : 0
+  const submission: BannerSubmission = {
+    id: existingIdx !== -1 ? data.submissions[existingIdx].id : 'sub-bn-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    historyId, position, shopName,
+    title: payload.title, link: payload.link, image: payload.image,
+    status: 'pending', rejectCount, createdAt: new Date().toISOString(),
+  }
+  if (existingIdx !== -1) data.submissions[existingIdx] = submission
+  else data.submissions.unshift(submission)
+  saveStore(data); return submission
+}
 
 /** Seed 3 pending submissions (1 per position) — dùng để test admin UI */
 export function seedTestPendingSubmissions(): void {
@@ -437,13 +547,47 @@ const PAYMENT_WINDOW_FINAL_MS = 30 * 60 * 1000 // 30 phút thanh toán phần c�
 export function approveSubmission(id: string): boolean {
   const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false
   const approvedAt = new Date().toISOString()
-  const paymentDeadline = new Date(Date.now() + PAYMENT_WINDOW_FINAL_MS).toISOString()
+  const isBuyNow = data.submissions[idx].historyId.startsWith('bn:')
+  // Buy-now: đã thanh toán đủ rồi, không cần paymentDeadline
+  const paymentDeadline = isBuyNow ? undefined : new Date(Date.now() + PAYMENT_WINDOW_FINAL_MS).toISOString()
   data.submissions[idx] = { ...data.submissions[idx], status: 'approved', rejectReason: undefined, approvedAt, paymentDeadline }
   saveStore(data); return true
 }
+export const MAX_REJECT_COUNT = 3
+export const MAX_REJECT_COUNT_BUYNOW = 10
+
 export function rejectSubmission(id: string, reason?: string): boolean {
-  const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false
-  data.submissions[idx] = { ...data.submissions[idx], status: 'rejected', rejectReason: reason }; saveStore(data); return true
+  const data = getStore()
+  const idx = data.submissions.findIndex(s => s.id === id)
+  if (idx === -1) return false
+  const cur = data.submissions[idx]
+  const isBuyNow = cur.historyId.startsWith('bn:')
+  const maxCount = isBuyNow ? MAX_REJECT_COUNT_BUYNOW : MAX_REJECT_COUNT
+  const newCount = (cur.rejectCount ?? 0) + 1
+  if (newCount >= maxCount) {
+    data.submissions[idx] = { ...cur, status: 'rejected', rejectReason: reason, rejectCount: newCount }
+  } else {
+    data.submissions[idx] = { ...cur, status: 'awaiting_edit', rejectReason: reason, rejectCount: newCount }
+  }
+  saveStore(data)
+  return true
+}
+
+/** Shop gửi lại sau khi sửa — chuyển awaiting_edit → pending */
+export function resubmitSubmission(id: string, patch?: { title?: string; link?: string; image?: string }): boolean {
+  const data = getStore()
+  const idx = data.submissions.findIndex(s => s.id === id)
+  if (idx === -1) return false
+  if (data.submissions[idx].status !== 'awaiting_edit') return false
+  data.submissions[idx] = {
+    ...data.submissions[idx],
+    ...(patch ?? {}),
+    status: 'pending',
+    rejectReason: undefined,
+    createdAt: new Date().toISOString(),
+  }
+  saveStore(data)
+  return true
 }
 export function cancelSubmissionExpired(id: string): boolean {
   const data = getStore(); const idx = data.submissions.findIndex(s => s.id === id); if (idx === -1) return false

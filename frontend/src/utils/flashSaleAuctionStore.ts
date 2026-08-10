@@ -37,7 +37,7 @@ export const FLASH_SLOTS: FlashSlotDef[] = [
 ]
 
 export const AUCTION_DURATION_MS = 5 * 60 * 1000
-export const MIN_STEP = 50_000
+export const MIN_STEP = 2  // bội số của 2
 export const TURN_COOLDOWN_MS = 10 * 1000
 export const PAYMENT_WINDOW_MS = 60 * 60 * 1000
 export const DEPOSIT_WINDOW_MS = 30 * 60 * 1000
@@ -52,7 +52,7 @@ export interface FlashAuctionSession {
   status: 'active' | 'ended'; winner?: FlashBid
   scheduledStartAt?: string  // chờ đến thời điểm này mới mở đặt giá
   description?: string       // mô tả admin
-  confirmation?: 'pending' | 'deposit_paid' | 'declined' | 'expired' | 'paid'
+  confirmation?: 'pending' | 'deposit_paid' | 'declined' | 'expired' | 'paid' | 'deposit_cancelled'
   depositDeadline?: string; depositAmount?: number
   paymentDeadline?: string; displayDurationMs?: number
 }
@@ -195,7 +195,7 @@ export function getMinNextBid(slot: FlashSlotKey): number {
   const data = getStore()
   const basePrice = data.settings[slot]?.basePrice ?? FLASH_SLOTS.find(d => d.key === slot)!.basePrice
   const highest = getHighestBid(slot)
-  return (highest ? highest.amount : basePrice - MIN_STEP) + MIN_STEP
+  return (highest ? highest.amount : basePrice) + 2
 }
 
 export function getShopCooldownRemaining(slot: FlashSlotKey, shopName: string): number {
@@ -209,7 +209,8 @@ export function placeBid(slot: FlashSlotKey, shopName: string, productName: stri
   const data = getStore(); const session = rollIfExpired(data, slot)
   if (!session) return { ok: false, error: 'Vị trí này đang bị Admin tạm khoá, chưa thể đặt giá.' }
   const basePrice = data.settings[slot]?.basePrice ?? FLASH_SLOTS.find(d => d.key === slot)!.basePrice
-  const minNext = (session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice - MIN_STEP) + MIN_STEP
+  const highestAmt = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice
+  const minNext = highestAmt + 2
   if (new Date(session.endsAt).getTime() <= Date.now()) return { ok: false, error: 'Phiên đấu giá đã kết thúc, vui lòng đặt giá ở phiên mới.' }
   const lastByShop = session.bids.find(b => b.shopName === shopName)
   if (lastByShop) {
@@ -219,7 +220,8 @@ export function placeBid(slot: FlashSlotKey, shopName: string, productName: stri
       return { ok: false, error: `Vui lòng chờ ${remainingSec}s nữa để đặt giá lượt tiếp theo.` }
     }
   }
-  if (amount < minNext) return { ok: false, error: `Giá đặt phải tối thiểu ${minNext.toLocaleString('vi-VN')}đ` }
+  if (amount < minNext) return { ok: false, error: `Giá đặt tối thiểu ${minNext.toLocaleString('vi-VN')}đ.` }
+  if ((amount - highestAmt) % 2 !== 0) return { ok: false, error: 'Giá đặt phải là bội số của 2đ.' }
   const bid: FlashBid = {
     id: 'bid-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
     shopName, productName, productImage, amount, time: new Date().toISOString(),
@@ -233,8 +235,8 @@ export function injectFakeBid(slot: FlashSlotKey): FlashBid | null {
   if (!session || new Date(session.endsAt).getTime() <= Date.now()) return null
   const basePrice = data.settings[slot]?.basePrice ?? FLASH_SLOTS.find(d => d.key === slot)!.basePrice
   const highest = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)) : undefined
-  const base = highest ? highest.amount : basePrice - MIN_STEP
-  const bump = MIN_STEP + Math.floor(Math.random() * 4) * 25_000
+  const base = highest ? highest.amount : basePrice
+  const bump = (Math.floor(Math.random() * 50) + 1) * 2_000
   const amount = base + bump
   const bid: FlashBid = {
     id: 'fake-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
@@ -281,6 +283,24 @@ export function payDeposit(historyId: string): boolean {
       action_url: '/shop/auction',
     })
   }
+  return true
+}
+
+/** Shop hủy cọc — mất tiền cọc, đơn nộp admin bị hủy luôn */
+export function cancelDeposit(historyId: string): boolean {
+  const data = getStore()
+  const idx = data.history.findIndex(h => h.id === historyId)
+  if (idx === -1) return false
+  if (data.history[idx].confirmation !== 'deposit_paid') return false
+  // Hủy session
+  data.history[idx] = { ...data.history[idx], confirmation: 'deposit_cancelled' }
+  // Hủy submission liên quan (nếu có) — admin không duyệt nữa
+  data.submissions = data.submissions.map(s =>
+    s.historyId === historyId && s.status !== 'approved'
+      ? { ...s, status: 'cancelled' as const }
+      : s
+  )
+  saveStore(data)
   return true
 }
 
