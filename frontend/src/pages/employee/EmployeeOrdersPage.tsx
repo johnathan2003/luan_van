@@ -1,11 +1,6 @@
 /**
- * EmployeeOrdersPage — trang xử lý đơn hàng dành cho nhân viên kho/đóng gói.
- *
- * Luồng đơn hàng shop-side (2 bước):
- *   pending → confirmed   (xác nhận nhận đơn)
- *   confirmed → ready_to_ship  (đóng hàng xong → hệ thống TỰ ĐỘNG gán shipper)
- *
- * Bước 3 (ready_to_ship → shipped) do SHIPPER tự xác nhận khi lấy hàng.
+ * EmployeeOrdersPage — nhân viên shop CHỈ XEM đơn hàng (không thao tác).
+ * Việc xác nhận/đóng hàng do chủ shop hoặc Admin_emp/nhân viên kho thực hiện.
  */
 import React, { useCallback, useEffect, useState } from 'react'
 import EmployeeLayout from './EmployeeLayout'
@@ -25,13 +20,6 @@ interface Order {
 interface Summary { pending: number; confirmed: number; ready_to_ship: number }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-// Chỉ còn 2 bước nhân viên thao tác
-const STATUS_NEXT: Record<string, { label: string; nextStatus: string; color: string; bg: string }> = {
-  pending:   { label: '✅ Xác nhận nhận đơn', nextStatus: 'confirmed',     color: '#065F46', bg: '#D1FAE5' },
-  confirmed: { label: '📦 Đóng hàng xong',   nextStatus: 'ready_to_ship', color: '#1D4ED8', bg: '#DBEAFE' },
-  // ready_to_ship: không còn nút — hiển thị thông tin chờ shipper
-}
-
 const STATUS_VI: Record<string, string> = {
   pending:       'Chờ xác nhận',
   confirmed:     'Đang đóng hàng',
@@ -62,7 +50,6 @@ const EmployeeOrdersPage: React.FC = () => {
   const [summary, setSummary]   = useState<Summary>({ pending: 0, confirmed: 0, ready_to_ship: 0 })
   const [shopName, setShopName] = useState('')
   const [loading, setLoading]   = useState(true)
-  const [acting, setActing]     = useState<number | null>(null)
   const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null)
   const [detail, setDetail]     = useState<any | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -98,33 +85,6 @@ const EmployeeOrdersPage: React.FC = () => {
   }, [])
 
   useEffect(() => { loadOrders(tab) }, [tab])
-
-  const handleAction = async (orderId: number, nextStatus: string) => {
-    if (!confirm(`Xác nhận chuyển đơn #${orderId}?`)) return
-    setActing(orderId)
-    try {
-      const res = await API.patch(`/api/v1/employee/orders/${orderId}/status`, { order_status: nextStatus })
-      const data = res.data
-
-      // Tạo toast phù hợp
-      if (nextStatus === 'ready_to_ship') {
-        if (data.shipper_assigned) {
-          showToast(`✅ Đã đóng hàng! Shipper #${data.shipper_id} được gán — đang tới lấy`, true)
-        } else {
-          showToast('✅ Đã đóng hàng! Hiện chưa có shipper nào sẵn sàng — admin sẽ gán thủ công', false)
-        }
-      } else {
-        showToast('✅ Đã cập nhật đơn hàng', true)
-      }
-
-      setOrders(prev => prev.filter(o => o.order_id !== orderId))
-      loadSummary()
-    } catch (err: any) {
-      showToast('❌ ' + (err.response?.data?.detail || 'Lỗi'), false)
-    } finally {
-      setActing(null)
-    }
-  }
 
   const showToast = (msg: string, ok: boolean) => {
     setToast({ msg, ok })
@@ -193,7 +153,6 @@ const EmployeeOrdersPage: React.FC = () => {
               Không có đơn hàng nào ở trạng thái này
             </div>
           ) : orders.map(o => {
-            const nextAction = STATUS_NEXT[o.order_status]
             const isReadyToShip = o.order_status === 'ready_to_ship'
             return (
               <div key={o.order_id} style={{
@@ -222,21 +181,6 @@ const EmployeeOrdersPage: React.FC = () => {
                     TT: <strong>{o.payment_status === 'paid' ? '✅ Đã TT' : '⏳ Chưa TT'}</strong>
                   </div>
                 </div>
-
-                {/* Action — chỉ cho pending và confirmed */}
-                {nextAction && (
-                  <button
-                    disabled={acting === o.order_id}
-                    onClick={() => handleAction(o.order_id, nextAction.nextStatus)}
-                    style={{
-                      padding: '9px 18px', border: 'none', borderRadius: 9, cursor: 'pointer',
-                      background: nextAction.bg, color: nextAction.color,
-                      fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
-                      opacity: acting === o.order_id ? 0.6 : 1, transition: 'opacity 0.15s',
-                    }}>
-                    {acting === o.order_id ? '⏳ ...' : nextAction.label}
-                  </button>
-                )}
 
                 {/* ready_to_ship: hiển thị info chờ shipper */}
                 {isReadyToShip && (

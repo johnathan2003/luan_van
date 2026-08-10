@@ -51,6 +51,24 @@ interface LiveBanner {
   reviewed_at: string | null
 }
 
+interface ManagedBanner {
+  banner_id: number
+  slot_id: number
+  slot_name: string | null
+  position: string
+  image_url: string
+  title: string | null
+  link: string | null
+  shop_id: number | null
+  shop_name: string | null
+  source_auction_id: number | null
+  status: 'active' | 'inactive'
+  created_at: string | null
+  updated_at: string | null
+}
+
+interface Slot { slot_id: number; name: string; position: string }
+
 const POSITION_LABEL: Record<string, string> = {
   home_slider:    'Banner đầu Trang chủ',
   mall_ads_main:  'Quảng cáo BuyZo Mall (7 phần)',
@@ -58,31 +76,44 @@ const POSITION_LABEL: Record<string, string> = {
   mall_banner:    'Banner Mall (Hình 4)',
 }
 
-type Tab = 'pending' | 'live' | 'history'
+type Tab = 'pending' | 'live' | 'manage' | 'history'
+
+const EMPTY_MANAGE_FORM = { slot_id: '', image_url: '', title: '', link: '', shop_name: '', status: 'active' }
 
 const SuperBanners: React.FC = () => {
   const [tab, setTab] = useState<Tab>('pending')
   const [pending, setPending] = useState<BannerAuction[]>([])
   const [live, setLive]       = useState<LiveBanner[]>([])
   const [history, setHistory] = useState<BannerAuction[]>([])
+  const [managed, setManaged] = useState<ManagedBanner[]>([])
+  const [slots, setSlots]     = useState<Slot[]>([])
   const [loading, setLoading] = useState(true)
   const [rejectTarget, setRejectTarget] = useState<BannerAuction | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [busy, setBusy] = useState<number | null>(null)
 
+  // Quản lý (full CRUD) modal
+  const [manageModal, setManageModal] = useState(false)
+  const [editingBanner, setEditingBanner] = useState<ManagedBanner | null>(null)
+  const [manageForm, setManageForm] = useState<any>(EMPTY_MANAGE_FORM)
+  const [manageSaving, setManageSaving] = useState(false)
+
   const load = useCallback((t: Tab) => {
     setLoading(true)
     const req = t === 'pending' ? superApi.get('/banners/pending')
               : t === 'live'    ? superApi.get('/banners/live')
+              : t === 'manage'  ? superApi.get('/banners/manage')
               :                   superApi.get('/banners/history')
     req.then(r => {
       if (t === 'pending') setPending(r.data.banners || [])
       else if (t === 'live') setLive(r.data.banners || [])
+      else if (t === 'manage') setManaged(r.data.banners || [])
       else setHistory(r.data.banners || [])
     }).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { load(tab) }, [tab, load])
+  useEffect(() => { superApi.get('/banners/manage/slots').then(r => setSlots(r.data.slots || [])).catch(() => {}) }, [])
 
   const handleApprove = async (a: BannerAuction) => {
     setBusy(a.auction_id)
@@ -110,8 +141,57 @@ const SuperBanners: React.FC = () => {
   const TABS: { key: Tab; label: string; count?: number }[] = [
     { key: 'pending', label: '⏳ Chờ duyệt', count: pending.length },
     { key: 'live',    label: '✅ Đang hoạt động trên site', count: live.length },
+    { key: 'manage',  label: '🛠️ Quản lý (CRUD)', count: managed.length },
     { key: 'history', label: '📋 Lịch sử' },
   ]
+
+  // ── Quản lý (full CRUD) ──────────────────────────────────────────────────
+  const openCreateBanner = () => {
+    setEditingBanner(null)
+    setManageForm(EMPTY_MANAGE_FORM)
+    setManageModal(true)
+  }
+  const openEditBanner = (b: ManagedBanner) => {
+    setEditingBanner(b)
+    setManageForm({
+      slot_id: String(b.slot_id), image_url: b.image_url, title: b.title || '',
+      link: b.link || '', shop_name: b.shop_name || '', status: b.status,
+    })
+    setManageModal(true)
+  }
+  const handleSaveBanner = async () => {
+    setManageSaving(true)
+    try {
+      const payload: any = {
+        slot_id: Number(manageForm.slot_id), image_url: manageForm.image_url,
+        title: manageForm.title || null, link: manageForm.link || null,
+        shop_name: manageForm.shop_name || null, status: manageForm.status,
+      }
+      if (editingBanner) await superApi.patch(`/banners/manage/${editingBanner.banner_id}`, payload)
+      else await superApi.post('/banners/manage', payload)
+      setManageModal(false)
+      load('manage')
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Lỗi khi lưu')
+    } finally { setManageSaving(false) }
+  }
+  const handleToggleStatus = async (b: ManagedBanner) => {
+    try {
+      await superApi.patch(`/banners/manage/${b.banner_id}`, { status: b.status === 'active' ? 'inactive' : 'active' })
+      setManaged(ms => ms.map(x => x.banner_id === b.banner_id ? { ...x, status: x.status === 'active' ? 'inactive' : 'active' } : x))
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Lỗi')
+    }
+  }
+  const handleDeleteBanner = async (b: ManagedBanner) => {
+    if (!confirm(`Xoá banner "${b.title || b.image_url}"? Không thể phục hồi.`)) return
+    try {
+      await superApi.delete(`/banners/manage/${b.banner_id}`)
+      setManaged(ms => ms.filter(x => x.banner_id !== b.banner_id))
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Lỗi xoá')
+    }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -207,6 +287,61 @@ const SuperBanners: React.FC = () => {
             ))}
           </div>
         )
+      ) : tab === 'manage' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <button onClick={openCreateBanner} style={{ padding: '9px 18px', background: S.red, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              + Thêm banner thủ công
+            </button>
+          </div>
+          {managed.length === 0 ? (
+            <div style={{ color: S.muted, textAlign: 'center', padding: 40, background: S.card, borderRadius: 12, border: `1px solid ${S.border}` }}>
+              Chưa có banner nào trong bảng chính thức.
+            </div>
+          ) : (
+            <div style={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 12, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#0a0a0f' }}>
+                    {['Ảnh', 'Tiêu đề', 'Vị trí', 'Shop', 'Trạng thái', 'Nguồn', ''].map(h => (
+                      <th key={h} style={{ textAlign: 'left', padding: '10px 14px', color: S.muted, fontSize: 11, fontWeight: 700, borderBottom: `1px solid ${S.border}` }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {managed.map(b => (
+                    <tr key={b.banner_id} style={{ borderBottom: `1px solid ${S.border}` }}>
+                      <td style={{ padding: '8px 14px' }}>
+                        <img src={getImageUrl(b.image_url)} alt="" style={{ width: 60, height: 34, objectFit: 'cover', borderRadius: 4, background: '#0a0a0f' }} />
+                      </td>
+                      <td style={{ padding: '8px 14px', color: S.text, fontWeight: 600 }}>{b.title || '(không có tiêu đề)'}</td>
+                      <td style={{ padding: '8px 14px', color: S.muted }}>{POSITION_LABEL[b.position] || b.position}</td>
+                      <td style={{ padding: '8px 14px', color: S.muted }}>{b.shop_name || '—'}</td>
+                      <td style={{ padding: '8px 14px' }}>
+                        <button onClick={() => handleToggleStatus(b)} style={{
+                          padding: '3px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                          background: b.status === 'active' ? '#052e16' : '#1e1e2e',
+                          color: b.status === 'active' ? S.green : S.muted,
+                        }}>
+                          {b.status === 'active' ? '● Đang hiện' : '○ Đã ẩn'}
+                        </button>
+                      </td>
+                      <td style={{ padding: '8px 14px', color: S.muted, fontSize: 11 }}>
+                        {b.source_auction_id ? `Đấu giá #${b.source_auction_id}` : 'Thủ công'}
+                      </td>
+                      <td style={{ padding: '8px 14px' }}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button onClick={() => openEditBanner(b)} style={{ padding: '5px 9px', background: '#1e1e2e', color: '#94a3b8', border: `1px solid ${S.border}`, borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>✏️</button>
+                          <button onClick={() => handleDeleteBanner(b)} style={{ padding: '5px 9px', background: '#2d1010', color: '#ef4444', border: `1px solid ${S.redDark}`, borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       ) : (
         history.length === 0 ? (
           <div style={{ color: S.muted, textAlign: 'center', padding: 40, background: S.card, borderRadius: 12, border: `1px solid ${S.border}` }}>
@@ -252,6 +387,75 @@ const SuperBanners: React.FC = () => {
               <button onClick={handleReject} disabled={busy === rejectTarget.auction_id}
                 style={{ padding: '8px 18px', background: S.red, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                 Từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit banner modal (bảng quản lý CRUD) */}
+      {manageModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={() => !manageSaving && setManageModal(false)}>
+          <div style={{ width: 420, background: S.card, border: `1px solid ${S.border}`, borderRadius: 14, padding: 28, display: 'flex', flexDirection: 'column', gap: 14, maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ color: S.text, fontSize: 15, fontWeight: 800, margin: 0 }}>
+                {editingBanner ? `✏️ Sửa banner #${editingBanner.banner_id}` : '+ Thêm banner thủ công'}
+              </h2>
+              <button onClick={() => setManageModal(false)} style={{ background: 'none', border: 'none', color: S.muted, fontSize: 20, cursor: 'pointer' }}>✕</button>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: 11, fontWeight: 600, marginBottom: 5 }}>SLOT</label>
+              <select value={manageForm.slot_id} onChange={e => setManageForm((f: any) => ({ ...f, slot_id: e.target.value }))}
+                style={{ width: '100%', padding: '9px 12px', boxSizing: 'border-box', background: S.input, border: `1px solid ${S.border}`, borderRadius: 7, color: S.text, fontSize: 13, outline: 'none' }}>
+                <option value="">-- Chọn slot --</option>
+                {slots.map(s => <option key={s.slot_id} value={s.slot_id}>{s.name} ({POSITION_LABEL[s.position] || s.position})</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: 11, fontWeight: 600, marginBottom: 5 }}>ĐƯỜNG DẪN ẢNH</label>
+              <input value={manageForm.image_url} onChange={e => setManageForm((f: any) => ({ ...f, image_url: e.target.value }))} placeholder="/uploads/banners/... hoặc URL đầy đủ"
+                style={{ width: '100%', padding: '9px 12px', boxSizing: 'border-box', background: S.input, border: `1px solid ${S.border}`, borderRadius: 7, color: S.text, fontSize: 13, outline: 'none' }} />
+              {manageForm.image_url && (
+                <img src={getImageUrl(manageForm.image_url)} alt="preview" style={{ marginTop: 8, width: '100%', height: 100, objectFit: 'cover', borderRadius: 8, background: '#0a0a0f' }} />
+              )}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: 11, fontWeight: 600, marginBottom: 5 }}>TIÊU ĐỀ</label>
+              <input value={manageForm.title} onChange={e => setManageForm((f: any) => ({ ...f, title: e.target.value }))}
+                style={{ width: '100%', padding: '9px 12px', boxSizing: 'border-box', background: S.input, border: `1px solid ${S.border}`, borderRadius: 7, color: S.text, fontSize: 13, outline: 'none' }} />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: 11, fontWeight: 600, marginBottom: 5 }}>LINK KHI CLICK</label>
+              <input value={manageForm.link} onChange={e => setManageForm((f: any) => ({ ...f, link: e.target.value }))}
+                style={{ width: '100%', padding: '9px 12px', boxSizing: 'border-box', background: S.input, border: `1px solid ${S.border}`, borderRadius: 7, color: S.text, fontSize: 13, outline: 'none' }} />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: 11, fontWeight: 600, marginBottom: 5 }}>TÊN SHOP (hiển thị, tùy chọn)</label>
+              <input value={manageForm.shop_name} onChange={e => setManageForm((f: any) => ({ ...f, shop_name: e.target.value }))}
+                style={{ width: '100%', padding: '9px 12px', boxSizing: 'border-box', background: S.input, border: `1px solid ${S.border}`, borderRadius: 7, color: S.text, fontSize: 13, outline: 'none' }} />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: 11, fontWeight: 600, marginBottom: 5 }}>TRẠNG THÁI</label>
+              <select value={manageForm.status} onChange={e => setManageForm((f: any) => ({ ...f, status: e.target.value }))}
+                style={{ width: '100%', padding: '9px 12px', boxSizing: 'border-box', background: S.input, border: `1px solid ${S.border}`, borderRadius: 7, color: S.text, fontSize: 13, outline: 'none' }}>
+                <option value="active">Đang hiện trên site</option>
+                <option value="inactive">Đã ẩn</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+              <button onClick={() => setManageModal(false)} disabled={manageSaving} style={{ padding: '9px 18px', background: 'none', border: `1px solid ${S.border}`, borderRadius: 8, color: S.muted, fontSize: 13, cursor: 'pointer' }}>Hủy</button>
+              <button onClick={handleSaveBanner} disabled={manageSaving || !manageForm.slot_id || !manageForm.image_url}
+                style={{ padding: '9px 20px', background: manageSaving ? S.redDark : S.red, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: manageSaving ? 'not-allowed' : 'pointer' }}>
+                {manageSaving ? 'Đang lưu...' : '💾 Lưu'}
               </button>
             </div>
           </div>

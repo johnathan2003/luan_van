@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAppSelector } from './store/hooks'
+import { getEmployeeTier } from './utils/warehouseRole'
 
 interface ProtectedRouteProps {
   requiredRole?: string
@@ -9,11 +10,29 @@ interface ProtectedRouteProps {
    * "khách hàng" (giỏ hàng/thanh toán/đăng ký shop-shipper...) để nhân viên
    * nội bộ (Admin_emp/quản lý kho các cấp) không mua/bán được trên sàn. */
   blockRoles?: string
+  /** Chỉ dùng cho route /hub, /district, /ward. Role "employee" giờ dùng
+   * CHUNG cho nhân viên shop lẫn nhân viên kho — requiredRole="employee"
+   * không đủ để phân biệt tier, cần gọi thêm API xác nhận tier thật.
+   * Admin luôn được qua không cần check. */
+  requireEmployeeTier?: 'hub' | 'district' | 'ward'
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole, blockRoles }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole, blockRoles, requireEmployeeTier }) => {
   const { isAuthenticated, user } = useAppSelector((state) => state.auth)
   const location = useLocation()
+  const isAdmin = !!user?.roles?.some((r: any) => r.role_name === 'admin')
+  const [tierChecked, setTierChecked] = useState(!requireEmployeeTier)
+  const [tierOk, setTierOk]           = useState(false)
+
+  useEffect(() => {
+    if (!requireEmployeeTier || !isAuthenticated) return
+    if (isAdmin) { setTierOk(true); setTierChecked(true); return }
+    let cancelled = false
+    getEmployeeTier().then(t => {
+      if (!cancelled) { setTierOk(t === requireEmployeeTier); setTierChecked(true) }
+    })
+    return () => { cancelled = true }
+  }, [requireEmployeeTier, isAuthenticated, isAdmin])
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />
@@ -34,6 +53,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole, blockRole
     if (hasBlockedRole) {
       return <Navigate to="/" replace />
     }
+  }
+
+  if (requireEmployeeTier) {
+    if (!tierChecked) return null
+    if (!tierOk) return <Navigate to="/" replace />
   }
 
   return <Outlet />

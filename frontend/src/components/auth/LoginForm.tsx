@@ -3,6 +3,7 @@ import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { login } from '../../store/slices/authSlice'
 import { useNavigate, Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
+import { resolveEmployeeDestination } from '../../utils/warehouseRole'
 
 const DANGEROUS = /[<>?/:;"'|\\]/
 
@@ -47,10 +48,7 @@ const LoginForm: React.FC = () => {
       if (primary === 'superadmin' || primary === 'admin') navigate('/admin')
       else if (primary === 'shop')                        navigate('/shop')
       else if (primary === 'shipper')                     navigate('/shipper')
-      else if (primary === 'employee')                    navigate('/employee')
-      else if (primary === 'warehouse_hub_manager')       navigate('/hub')
-      else if (primary === 'warehouse_district_manager')  navigate('/district')
-      else if (primary === 'warehouse_ward_manager')      navigate('/ward')
+      else if (primary === 'employee')                    navigate(await resolveEmployeeDestination())
       else if (primary === 'Admin_emp')                   navigate('/warehouse')
       else navigate('/')
     } else {

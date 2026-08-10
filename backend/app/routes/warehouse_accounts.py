@@ -79,13 +79,15 @@ TIER_GRANTS = {
 # Role kho gán theo tier — "dept" (Quản lý tổng) dùng role "Admin_emp" (trước
 # đây tên "warehouse_manager", đổi tên cho rõ nghĩa: đây là nhân viên nội bộ
 # do admin tạo, không phải khách hàng — xem middleware/auth.py::EMPLOYMENT_ROLES).
+# hub/district/ward dùng CHUNG role "employee" (giống nhân viên shop) — 3 cấp
+# này KHÔNG còn phân biệt qua role string riêng, mà qua WarehouseManager→
+# Warehouse.tier (xem _infer_tier bên dưới).
 TIER_ROLE = {
     "dept":     "Admin_emp",
-    "hub":      "warehouse_hub_manager",
-    "district": "warehouse_district_manager",
-    "ward":     "warehouse_ward_manager",
+    "hub":      "employee",
+    "district": "employee",
+    "ward":     "employee",
 }
-REVERSE_TIER_ROLE = {v: k for k, v in TIER_ROLE.items()}
 
 TIER_LABEL = {
     "dept": "Quản lý tổng",
@@ -119,11 +121,14 @@ def _collect_subtree(root_id: int, all_emps: list) -> set:
     return result
 
 
-WAREHOUSE_ROLE_NAMES = set(TIER_ROLE.values())
+WAREHOUSE_ROLE_NAMES = set(TIER_ROLE.values())   # {"Admin_emp", "employee"}
 
 
 def _warehouse_role_name(user_id: int, db: Session) -> str | None:
-    """Role kho (dept/hub/district/ward) hiện đang active của user, nếu có."""
+    """Role kho (Admin_emp/employee) hiện đang active của user, nếu có.
+    Với role "employee" — CHỈ tính là tài khoản kho nếu có SystemEmployee
+    active gắn với user_id (phân biệt với nhân viên shop — ShopEmployee —
+    cũng dùng role "employee" nhưng khác bảng phụ)."""
     ur = (
         db.query(UserRole)
         .join(Role, Role.role_id == UserRole.role_id)
@@ -134,14 +139,30 @@ def _warehouse_role_name(user_id: int, db: Session) -> str | None:
         )
         .first()
     )
-    return ur.role.role_name if ur else None
+    if not ur:
+        return None
+    role_name = ur.role.role_name
+    if role_name == "employee":
+        emp = db.query(SystemEmployee).filter_by(user_id=user_id, status="active").first()
+        if not emp:
+            return None
+    return role_name
 
 
 def _infer_tier(user_id: int, db: Session, perms: list) -> str:
-    """Suy ra tier — ưu tiên role thật gán cho user, fallback theo permission (legacy)."""
+    """Suy ra tier:
+    - "Admin_emp" (không gắn 1 kho cụ thể) → "dept"
+    - "employee" + có kho thật qua WarehouseManager→Warehouse.tier → hub/district/ward
+    - Fallback theo permission (dữ liệu cũ, chưa gắn kho)."""
     role_name = _warehouse_role_name(user_id, db)
-    if role_name and role_name in REVERSE_TIER_ROLE:
-        return REVERSE_TIER_ROLE[role_name]
+    if role_name == "Admin_emp":
+        return "dept"
+    if role_name == "employee":
+        wm = db.query(WarehouseManager).filter_by(manager_id=user_id).first()
+        if wm:
+            wh = db.query(Warehouse).filter_by(warehouse_id=wm.warehouse_id).first()
+            if wh:
+                return {1: "hub", 2: "district", 3: "ward"}.get(wh.tier, "ward")
     # Fallback cho dữ liệu cũ (tạo trước khi đổi sang mô hình 2 cấp)
     if "warehouse_create_hub" in perms:
         return "dept"
@@ -512,11 +533,21 @@ def my_warehouse_account_info(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Dùng ở FE (vd: trang /hub/accounts) để biết mình có được tạo District/Ward hay không."""
-    emp = db.query(SystemEmployee).filter_by(user_id=current_user.user_id).first()
+    """
+    Dùng ở FE để biết mình có phải tài khoản kho không, và nếu có thì tier
+    nào (dept/hub/district/ward) — vd trang /hub/accounts, hoặc Navbar/
+    LoginForm quyết định điều hướng cho role "employee" (role này dùng
+    chung cho cả nhân viên shop lẫn nhân viên kho — is_warehouse=False nghĩa
+    là đây KHÔNG phải tài khoản kho, FE nên xử lý như nhân viên shop bình
+    thường thay vì đưa vào portal kho).
+    """
+    emp = db.query(SystemEmployee).filter_by(user_id=current_user.user_id, status="active").first()
+    roles = _user_roles(current_user)
+    if not emp and "Admin_emp" not in roles:
+        return {"is_warehouse": False, "tier": None, "permissions": [], "can_create": []}
     perms = [p.permission_code for p in emp.permissions] if emp else []
     tier = _infer_tier(current_user.user_id, db, perms)
-    return {"tier": tier, "permissions": perms, "can_create": [
+    return {"is_warehouse": True, "tier": tier, "permissions": perms, "can_create": [
         t for t, code in TIER_PERM.items() if code in perms
     ]}
 

@@ -451,12 +451,16 @@ def get_delivery_slip(
     # LƯU Ý: trước đây dùng current_user.roles — thuộc tính này không tồn tại
     # trên model User (chỉ có user_roles quan hệ tới UserRole/Role), gọi vào
     # sẽ lỗi AttributeError. Sửa lại đúng theo pattern dùng ở middleware/auth.py.
+    from app.middleware.auth import _is_platform_employee
+
     roles = {ur.role.role_name for ur in current_user.user_roles if ur.status == "active"}
     is_admin    = "admin" in roles or "superadmin" in roles
-    is_warehouse = any(r in roles for r in [
-        "Admin_emp", "warehouse_hub_manager",
-        "warehouse_district_manager", "warehouse_ward_manager",
-    ])
+    # "employee" dùng chung cho cả nhân viên shop (ShopEmployee) lẫn nhân viên
+    # kho (SystemEmployee) — chỉ tính là "nhân viên kho" nếu có SystemEmployee
+    # active, tránh lộ phiếu giao hàng của đơn shop khác cho nhân viên shop.
+    is_warehouse = "Admin_emp" in roles or (
+        "employee" in roles and _is_platform_employee(current_user.user_id, db)
+    )
     is_shipper  = "shipper" in roles
     is_customer = current_user.user_id == order.user_id
 

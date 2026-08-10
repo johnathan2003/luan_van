@@ -86,43 +86,43 @@ services:
       # backend chính không cần GEMINI_API_KEY nữa.
 
   # ── Chatbot (service riêng — tách khỏi backend để sau này ESP32-S3 gọi thẳng)
-  chatbot:
-    build:
-      context: ./chatbot
-      dockerfile: Dockerfile
-    container_name: shopvn_chatbot
-    restart: unless-stopped
-    ports:
-      - "8002:8002"
-    volumes:
-      - ./chatbot:/app                       # bind mount — sửa code local là container thấy ngay
-      - ./backend/app:/app/backend_app/app:ro  # dùng chung model/DB/config với backend (read-only)
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      # ── Database (PostgreSQL) — CHUNG DB với backend
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_USER: shopvn_user
-      DB_PASSWORD: shopvn_pass
-      DB_NAME: ecommerce_db
-      DATABASE_URL: postgresql://shopvn_user:shopvn_pass@db:5432/ecommerce_db
-      # ── Redis — CHUNG Redis với backend (cache tool + lịch sử hội thoại)
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ""
-      REDIS_DB: 0
-      # ── JWT — PHẢI trùng SECRET_KEY với backend để verify token đăng nhập chung
-      SECRET_KEY: dev-secret-key-change-in-production
-      ALGORITHM: HS256
-      # ── CORS — cho phép frontend gọi thẳng vào chatbot (port khác backend)
-      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173
-      LOG_LEVEL: INFO
-      # ── Gemini (Chatbot) — set GEMINI_API_KEY trong file .env cùng cấp docker-compose.yml
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  # chatbot:
+  #   build:
+  #     context: ./chatbot
+  #     dockerfile: Dockerfile
+  #   container_name: shopvn_chatbot
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8002:8002"
+  #   volumes:
+  #     - ./chatbot:/app                       # bind mount — sửa code local là container thấy ngay
+  #     - ./backend/app:/app/backend_app/app:ro  # dùng chung model/DB/config với backend (read-only)
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   environment:
+  #     # ── Database (PostgreSQL) — CHUNG DB với backend
+  #     DB_HOST: db
+  #     DB_PORT: 5432
+  #     DB_USER: shopvn_user
+  #     DB_PASSWORD: shopvn_pass
+  #     DB_NAME: ecommerce_db
+  #     DATABASE_URL: postgresql://shopvn_user:shopvn_pass@db:5432/ecommerce_db
+  #     # ── Redis — CHUNG Redis với backend (cache tool + lịch sử hội thoại)
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: 6379
+  #     REDIS_PASSWORD: ""
+  #     REDIS_DB: 0
+  #     # ── JWT — PHẢI trùng SECRET_KEY với backend để verify token đăng nhập chung
+  #     SECRET_KEY: dev-secret-key-change-in-production
+  #     ALGORITHM: HS256
+  #     # ── CORS — cho phép frontend gọi thẳng vào chatbot (port khác backend)
+  #     ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173
+  #     LOG_LEVEL: INFO
+  #     # ── Gemini (Chatbot) — set GEMINI_API_KEY trong file .env cùng cấp docker-compose.yml
+  #     GEMINI_API_KEY: ${GEMINI_API_KEY:-}
 
   # ── Adminer ────────────────────────────────────────────────
   adminer:

@@ -7,7 +7,6 @@ Shop_id lấy từ bảng ShopEmployee (không phải user_id).
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
@@ -77,15 +76,9 @@ def employee_me(ctx: dict = Depends(get_current_employee), db: Session = Depends
 
 
 # ─── Orders ───────────────────────────────────────────────────────────────────
-
-# Luồng hợp lệ mà nhân viên được phép chuyển
-# pending → confirmed (xác nhận nhận đơn)
-# confirmed → ready_to_ship (đóng hàng xong — hệ thống auto-assign shipper)
-# NOTE: ready_to_ship → shipped do SHIPPER xác nhận lấy hàng, không phải nhân viên
-ALLOWED_TRANSITIONS: dict[str, str] = {
-    "pending":   "confirmed",
-    "confirmed": "ready_to_ship",
-}
+# Nhân viên shop CHỈ CÓ QUYỀN XEM — không được đổi trạng thái đơn/sửa sản phẩm.
+# (Trước đây có PATCH /orders/{id}/status + PATCH /products/{id}, đã bỏ để
+# phân biệt rõ với Admin_emp/nhân viên kho — role đó mới có quyền CRUD.)
 
 def _order_row(o: Order) -> dict:
     return {
@@ -191,144 +184,6 @@ def employee_order_detail(
     }
 
 
-@router.patch("/orders/{order_id}/status")
-def employee_update_order_status(
-    order_id: int,
-    data:     dict,
-    ctx:      dict    = Depends(require_perm("order:read")),
-    db:       Session = Depends(get_db),
-):
-    """Chuyển trạng thái đơn theo luồng: pending→confirmed→ready_to_ship.
-    Khi chuyển sang ready_to_ship: hệ thống tự chọn shipper ngẫu nhiên và tạo shipment.
-    """
-    from app.models.shipment import Shipment, Shipper
-    from app.services.notification_service import create_notification
-
-    new_status = data.get("order_status", "")
-
-    order = db.query(Order).filter(
-        Order.order_id == order_id,
-        Order.shop_id  == ctx["shop_id"],
-    ).first()
-    if not order:
-        raise HTTPException(404, "Không tìm thấy đơn hàng")
-
-    # Kiểm tra luồng hợp lệ
-    expected_next = ALLOWED_TRANSITIONS.get(order.order_status)
-    if expected_next is None:
-        raise HTTPException(400, f"Đơn đang ở '{order.order_status}', không thể chuyển tiếp")
-    if new_status != expected_next:
-        raise HTTPException(400, f"Bước tiếp theo phải là '{expected_next}', không phải '{new_status}'")
-
-    order.order_status = new_status
-
-    shipper_assigned = False
-    shipper_id = None
-    shipment_id = None
-
-    # ── Auto-assign shipper khi đóng hàng xong ────────────────────────────────
-    if new_status == "ready_to_ship":
-        # Lấy shop address để điền pickup_location
-        shop = db.query(Shop).filter(Shop.shop_id == ctx["shop_id"]).first()
-        pickup_loc = shop.address if shop else f"Shop #{ctx['shop_id']}"
-
-        # Tìm shipper random đang available
-        shipper = (
-            db.query(Shipper)
-            .filter(Shipper.status == "available")
-            .order_by(func.random())
-            .first()
-        )
-
-        if shipper:
-            # Tạo hoặc cập nhật Shipment
-            shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
-            if not shipment:
-                shipment = Shipment(
-                    order_id=order_id,
-                    shipper_id=shipper.shipper_id,
-                    pickup_location=pickup_loc,
-                    delivery_location=order.shipping_address or "Địa chỉ khách hàng",
-                    status="assigned",
-                )
-                db.add(shipment)
-            else:
-                shipment.shipper_id = shipper.shipper_id
-                shipment.pickup_location = pickup_loc
-                shipment.delivery_location = order.shipping_address or "Địa chỉ khách hàng"
-                shipment.status = "assigned"
-
-            # Cập nhật Order + Shipper
-            order.shipper_id = shipper.shipper_id
-            shipper.status = "on_delivery"
-
-            db.flush()  # để lấy shipment_id
-            shipment_id = shipment.shipment_id
-
-            # Gửi thông báo cho shipper (kèm chi tiết đơn)
-            try:
-                items_summary = ", ".join(
-                    f"{i.product_name} x{i.quantity}" for i in order.items
-                ) if order.items else "—"
-                create_notification(
-                    db=db,
-                    user_id=shipper.shipper_id,
-                    title="📦 Đơn hàng mới cần lấy",
-                    message=(
-                        f"Đơn {order.order_number} · {items_summary}\n"
-                        f"📦 Lấy tại: {pickup_loc}\n"
-                        f"📍 Giao đến: {order.shipping_address or '?'} ({order.recipient_name or ''} - {order.recipient_phone or ''})"
-                    ),
-                    notif_type="order",
-                    related_entity_type="order",
-                    related_entity_id=order_id,
-                    action_url="/shipper/deliveries",
-                )
-            except Exception:
-                pass  # notification fail không block flow
-
-            shipper_assigned = True
-            shipper_id = shipper.shipper_id
-
-    db.commit()
-
-    # ── Notify khách hàng về thay đổi trạng thái đơn ─────────────────────────
-    try:
-        _CUSTOMER_MSG = {
-            "confirmed": (
-                "✅ Đơn hàng đã được xác nhận",
-                f"Shop đã xác nhận đơn {order.order_number}. Chúng tôi đang chuẩn bị hàng cho bạn.",
-            ),
-            "ready_to_ship": (
-                "📦 Hàng đã được đóng gói xong",
-                f"Đơn {order.order_number} đã được đóng gói và đang chờ shipper tới lấy.",
-            ),
-        }
-        if new_status in _CUSTOMER_MSG:
-            title, message = _CUSTOMER_MSG[new_status]
-            create_notification(
-                db=db,
-                user_id=order.user_id,
-                title=title,
-                message=message,
-                notif_type="order",
-                related_entity_type="order",
-                related_entity_id=order_id,
-                action_url=f"/orders/{order_id}",
-            )
-    except Exception:
-        pass
-
-    return {
-        "message": f"Đã cập nhật → {new_status}",
-        "order_id": order_id,
-        "order_status": new_status,
-        "shipper_assigned": shipper_assigned,
-        "shipper_id": shipper_id,
-        "shipment_id": shipment_id,
-    }
-
-
 # ─── Products ─────────────────────────────────────────────────────────────────
 
 @router.get("/products")
@@ -362,23 +217,3 @@ def employee_products(
     }
 
 
-@router.patch("/products/{product_id}")
-def employee_update_product(
-    product_id: int,
-    data:       dict,
-    ctx:        dict    = Depends(require_perm("product:update")),
-    db:         Session = Depends(get_db),
-):
-    p = db.query(Product).filter(
-        Product.product_id == product_id,
-        Product.shop_id    == ctx["shop_id"],
-        Product.deleted_at.is_(None),
-    ).first()
-    if not p:
-        raise HTTPException(404, "Không tìm thấy sản phẩm")
-    allowed = {"product_name", "description", "stock_quantity", "price"}
-    for k, v in data.items():
-        if k in allowed:
-            setattr(p, k, str(v) if k == "price" else v)
-    db.commit()
-    return {"message": "Đã cập nhật sản phẩm", "product_id": product_id}

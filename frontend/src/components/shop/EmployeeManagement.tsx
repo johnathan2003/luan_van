@@ -7,16 +7,15 @@ const C = {
   success: '#16A34A', warning: '#D97706', error: '#DC2626',
 }
 
-// Danh sách quyền dựa trên constants.ts + thêm mô tả
+// Nhân viên shop CHỈ CÓ QUYỀN XEM (phân biệt với Admin_emp — nhân viên do
+// admin tạo, có quyền CRUD đầy đủ trong phạm vi được giao). Đã bỏ các quyền
+// sửa/xoá (order:confirm, order:cancel, product:create, product:delete) —
+// backend cũng đã khoá các endpoint tương ứng, xem app/routes/employee.py.
 const ALL_PERMISSIONS = [
   { code: 'order:read',    label: 'Xem đơn hàng',      icon: '📋', group: 'Đơn hàng' },
-  { code: 'order:confirm', label: 'Xác nhận đơn',       icon: '✅', group: 'Đơn hàng' },
-  { code: 'order:cancel',  label: 'Hủy đơn hàng',      icon: '❌', group: 'Đơn hàng' },
   { code: 'message:read',  label: 'Đọc tin nhắn',       icon: '💬', group: 'Hỗ trợ KH' },
   { code: 'message:send',  label: 'Gửi tin nhắn',       icon: '📤', group: 'Hỗ trợ KH' },
-  { code: 'product:create',label: 'Tạo sản phẩm',       icon: '➕', group: 'Sản phẩm' },
-  { code: 'product:update',label: 'Sửa sản phẩm',       icon: '✏️', group: 'Sản phẩm' },
-  { code: 'product:delete',label: 'Xóa sản phẩm',       icon: '🗑️', group: 'Sản phẩm' },
+  { code: 'product:update',label: 'Xem sản phẩm',       icon: '👁️', group: 'Sản phẩm' },
   { code: 'shop:analytics',label: 'Xem thống kê',        icon: '📊', group: 'Khác' },
 ]
 

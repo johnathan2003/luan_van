@@ -855,9 +855,11 @@ def seed():
         db.commit()
 
         # ── WAREHOUSE MANAGERS ───────────────────────────────────────────────
-        TIER_ROLES = {1: "warehouse_hub_manager", 2: "warehouse_district_manager", 3: "warehouse_ward_manager"}
-        for rname in TIER_ROLES.values():
-            upsert(db, Role, {"role_name": rname})
+        # hub/district/ward giờ dùng CHUNG role "employee" (khác Admin_emp,
+        # role của "Quản lý tổng") — tier phân biệt qua WarehouseManager ->
+        # Warehouse.tier, không qua role string riêng nữa.
+        TIER_ROLES = {1: "employee", 2: "employee", 3: "employee"}
+        upsert(db, Role, {"role_name": "employee"})
         db.commit()
         roles = {r.role_name: r for r in db.query(Role).all()}
 

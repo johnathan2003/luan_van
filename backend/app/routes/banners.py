@@ -29,9 +29,10 @@ from app.database import get_db
 from app.middleware.auth import get_current_user, require_shop_owner, require_admin_or_superadmin
 from app.models.user import User
 from app.models.wallet_auction import (
-    BannerSlot, BannerAuction, BannerBid, ShopWallet, ShopWalletTransaction,
+    BannerSlot, BannerAuction, BannerBid, Banner, ShopWallet, ShopWalletTransaction,
 )
 from app.models.shop import Shop
+from app.models.admin_config import PlatformTransaction
 from app.utils.helpers import paginate
 from app.utils.upload_service import save_upload_file
 from app.websocket.connection_manager import sio, fire
@@ -113,39 +114,42 @@ def get_live_banners(db: Session, position: str | None = None) -> list[dict]:
       - GET /api/v1/banners/live (public — Home.tsx trang chủ gọi)
       - GET /api/super/banners/live (superadmin xem — PHẢI khớp 100% với
         trang chủ, không có bản sao/logic riêng nào khác)
-    Điều kiện "đang live": auction đã ended, banner đã được duyệt
-    (banner_status='approved'), slot vẫn đang active. Mỗi slot chỉ lấy đúng 1
-    banner — auction được duyệt gần nhất (banner_reviewed_at desc).
+
+    Đọc TRỰC TIẾP từ bảng "banners" (banner CHÍNH THỨC, status='active') —
+    KHÔNG còn đọc thẳng banner_auctions nữa. Khi superadmin duyệt 1 banner
+    shop nộp, hoặc tự thêm/sửa/xoá banner thủ công trong bảng này, trang chủ
+    thấy thay đổi NGAY — đúng quy tắc "dữ liệu trong super luôn có hiệu lực
+    trong hệ thống". Mỗi slot chỉ lấy đúng 1 banner (mới nhất theo updated_at).
     """
     query = (
-        db.query(BannerAuction)
-        .join(BannerSlot, BannerAuction.slot_id == BannerSlot.slot_id)
+        db.query(Banner)
+        .join(BannerSlot, Banner.slot_id == BannerSlot.slot_id)
         .filter(
-            BannerAuction.status == "ended",
-            BannerAuction.banner_status == "approved",
+            Banner.status == "active",
             BannerSlot.is_active == True,
         )
     )
     if position:
         query = query.filter(BannerSlot.position == position)
-    auctions = query.order_by(BannerAuction.banner_reviewed_at.desc()).all()
+    rows = query.order_by(Banner.updated_at.desc()).all()
 
     seen_slots: set[int] = set()
     result = []
-    for a in auctions:
-        if a.slot_id in seen_slots:
+    for b in rows:
+        if b.slot_id in seen_slots:
             continue  # đã có banner mới hơn cho slot này rồi
-        seen_slots.add(a.slot_id)
+        seen_slots.add(b.slot_id)
         result.append({
-            "position":   a.slot.position if a.slot else None,
-            "slot_id":    a.slot_id,
-            "slot_name":  a.slot.name if a.slot else None,
-            "auction_id": a.auction_id,
-            "image_url":  a.banner_image_url,
-            "title":      a.banner_title,
-            "link":       a.banner_link,
-            "shop_name":  a.winner_shop.shop_name if a.winner_shop else None,
-            "reviewed_at": str(a.banner_reviewed_at) if a.banner_reviewed_at else None,
+            "banner_id":  b.banner_id,
+            "position":   b.slot.position if b.slot else b.position,
+            "slot_id":    b.slot_id,
+            "slot_name":  b.slot.name if b.slot else None,
+            "auction_id": b.source_auction_id,
+            "image_url":  b.image_url,
+            "title":      b.title,
+            "link":       b.link,
+            "shop_name":  b.shop_name,
+            "reviewed_at": str(b.updated_at) if b.updated_at else None,
         })
     return result
 
@@ -577,6 +581,17 @@ def _settle_auction(db: Session, auction: BannerAuction) -> None:
                     amount=-win_amount, txn_type="charge",
                     ref_type="auction_win", ref_id=auction.auction_id,
                     note=f"Thanh toán banner slot #{auction.slot_id} — thắng đấu giá #{auction.auction_id}",
+                ))
+                # Ghi nhận tiền này vào hệ thống — trước đây bị trừ khỏi ví
+                # shop nhưng không cộng vào đâu cả (tiền "biến mất"). Số tiền
+                # thắng đấu giá banner là doanh thu 100% của platform.
+                shop_obj = db.query(Shop).filter(Shop.shop_id == winner_bid.shop_id).first()
+                db.add(PlatformTransaction(
+                    type="commission", amount=win_amount,
+                    shop_id=winner_bid.shop_id,
+                    shop_name=shop_obj.shop_name if shop_obj else None,
+                    status="completed",
+                    note=f"Doanh thu đấu giá banner slot #{auction.slot_id} (phiên #{auction.auction_id})",
                 ))
 
     # Release tất cả loser bids còn active/outbid

@@ -11,6 +11,8 @@ from .routes.users import router as users_router
 from .routes.orders import router as orders_router
 from .routes.db_viewer import router as db_viewer_router
 from .routes.banners import router as banners_router
+from .routes.wallets import router as wallets_router
+from .routes.finance import router as finance_router
 
 super_router = APIRouter(prefix="/api/super", tags=["Superadmin"])
 
@@ -20,3 +22,5 @@ super_router.include_router(users_router,    prefix="/users")
 super_router.include_router(orders_router,   prefix="/orders")
 super_router.include_router(db_viewer_router, prefix="/db-viewer")
 super_router.include_router(banners_router,  prefix="/banners")
+super_router.include_router(wallets_router,  prefix="/wallets")
+super_router.include_router(finance_router,  prefix="/finance")

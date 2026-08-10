@@ -19,7 +19,7 @@ ACCOUNTS = [
         "name":     "Trần Văn Hub",
         "phone":    "0901000001",
         "address":  "Kho Tổng HCM, Bình Chánh, TP.HCM",
-        "role":     "warehouse_hub_manager",
+        "role":     "employee",   # hub/district/ward giờ dùng chung role "employee" (khác Admin_emp)
         "desc":     "Quản lý kho tổng cấp 1",
         "url":      "/hub",
         "city":     "hcmc",
@@ -31,7 +31,7 @@ ACCOUNTS = [
         "name":     "Nguyễn Thị Quận",
         "phone":    "0901000002",
         "address":  "Kho Quận 1, TP.HCM",
-        "role":     "warehouse_district_manager",
+        "role":     "employee",   # hub/district/ward giờ dùng chung role "employee" (khác Admin_emp)
         "desc":     "Quản lý kho quận cấp 2",
         "url":      "/district",
         "city":     "hcmc",
@@ -44,7 +44,7 @@ ACCOUNTS = [
         "name":     "Lê Văn Phường",
         "phone":    "0901000003",
         "address":  "Kho Phường Bến Nghé, Quận 1, TP.HCM",
-        "role":     "warehouse_ward_manager",
+        "role":     "employee",   # hub/district/ward giờ dùng chung role "employee" (khác Admin_emp)
         "desc":     "Quản lý kho phường cấp 3",
         "url":      "/ward",
         "city":     "hcmc",
@@ -235,15 +235,16 @@ try:
             print(f"  ⚠ Không tìm thấy kho tier={acc['tier']} — bỏ qua gán kho")
 
         db.commit()
-        results.append({"email": acc["email"], "password": acc["password"], "url": acc["url"], "role": acc["role"]})
+        results.append({"email": acc["email"], "password": acc["password"], "url": acc["url"], "tier": acc["tier"]})
 
     # In tổng kết
     print(f"\n{'='*50}")
     print("✅ Tạo tài khoản thành công!\n")
     print(f"{'Cấp':<12} {'Email':<25} {'Mật khẩu':<20} {'URL đăng nhập'}")
     print("-" * 80)
+    TIER_LEVEL = {1: "Kho tổng", 2: "Kho quận", 3: "Kho phường"}
     for r in results:
-        level = "Kho tổng" if "hub" in r["role"] else "Kho quận" if "district" in r["role"] else "Kho phường"
+        level = TIER_LEVEL.get(r["tier"], "Kho")
         print(f"{level:<12} {r['email']:<25} {r['password']:<20} {r['url']}")
 
 except Exception as e:

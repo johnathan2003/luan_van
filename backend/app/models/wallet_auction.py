@@ -109,6 +109,37 @@ class BannerAuction(Base):
     bids         = relationship("BannerBid", foreign_keys="[BannerBid.auction_id]", back_populates="auction", cascade="all, delete-orphan")
 
 
+class Banner(Base):
+    """
+    Banner CHÍNH THỨC — nguồn dữ liệu DUY NHẤT cho get_live_banners() (dùng
+    chung bởi trang chủ thật VÀ superadmin, đảm bảo 2 bên luôn khớp nhau).
+
+    Được tạo tự động khi superadmin duyệt 1 banner shop nộp sau đấu giá
+    (source_auction_id trỏ về banner_auctions), hoặc tạo thủ công bởi admin
+    (source_auction_id = NULL). Bảng này admin có TOÀN QUYỀN CRUD — sửa/xoá
+    ở đây ảnh hưởng NGAY tới trang chủ, không qua lại bước duyệt đấu giá.
+    """
+    __tablename__ = "banners"
+
+    banner_id       = Column(Integer, primary_key=True, autoincrement=True)
+    slot_id          = Column(Integer, ForeignKey("banner_slots.slot_id", ondelete="SET NULL"), nullable=True)
+    position         = Column(String(50), nullable=False)   # denormalized từ slot — query nhanh, không cần join
+    image_url        = Column(String(500), nullable=False)
+    title             = Column(String(255))
+    link              = Column(String(500))
+    shop_id           = Column(Integer, ForeignKey("shops.shop_id", ondelete="SET NULL"), nullable=True)
+    shop_name         = Column(String(200))
+    source_auction_id = Column(Integer, ForeignKey("banner_auctions.auction_id", ondelete="SET NULL"), nullable=True)
+    status            = Column(String(20), nullable=False, default="active")   # active | inactive
+    created_by        = Column(Integer, ForeignKey("users.user_id"), nullable=True)   # admin nếu tạo thủ công
+    created_at        = Column(DateTime, server_default=func.now())
+    updated_at        = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    slot   = relationship("BannerSlot", foreign_keys=[slot_id])
+    shop   = relationship("Shop", foreign_keys=[shop_id])
+    source_auction = relationship("BannerAuction", foreign_keys=[source_auction_id])
+
+
 class BannerBid(Base):
     """Một lần đặt giá của shop trong phiên đấu giá."""
     __tablename__ = "banner_bids"

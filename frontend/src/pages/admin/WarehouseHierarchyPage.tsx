@@ -6,9 +6,9 @@
  * POST /api/v1/warehouses/transfers          — tạo transfer
  * PUT  /api/v1/warehouses/transfers/{id}/status
  * GET  /api/v1/admin/users/search?q=         — tìm user để gán manager
- * POST /api/v1/admin/warehouse-managers/assign
- * DELETE /api/v1/admin/warehouse-managers/{user_id}/unassign
- * GET  /api/v1/admin/warehouse-managers      — danh sách tất cả manager
+ * POST /api/v1/warehouse-accounts/assign-existing  — gán tài khoản có sẵn (hub/district/ward dùng role "employee")
+ * PATCH /api/v1/warehouse-accounts/{user_id}/status — kích hoạt/vô hiệu (thay cho "unassign" cũ)
+ * GET  /api/v1/warehouse-accounts             — danh sách tất cả tài khoản kho
  */
 import React, { useEffect, useState, useCallback } from 'react'
 import { toast } from 'react-toastify'
@@ -54,10 +54,11 @@ interface ManagerRecord {
   user_id: number
   full_name: string
   email: string | null
-  warehouse_id: number
-  warehouse_name: string
-  tier: number
-  role_name: string
+  warehouse_id: number | null
+  warehouse_name: string | null
+  status: 'active' | 'inactive'
+  tier: 'dept' | 'hub' | 'district' | 'ward'
+  tier_label: string
 }
 
 // ── Colors ─────────────────────────────────────────────────────────────────────
@@ -107,12 +108,10 @@ const AssignManagerModal: React.FC<{
   const [creating, setCreating] = useState(false)
   const [created, setCreated]   = useState<{ email: string; password: string } | null>(null)
 
-  const TIER_ROLE: Record<number, string> = {
-    1: 'warehouse_hub_manager',
-    2: 'warehouse_district_manager',
-    3: 'warehouse_ward_manager',
-  }
+  // hub/district/ward giờ dùng CHUNG role "employee" (khác nhân viên shop qua
+  // SystemEmployee) — chỉ còn "tier" (hub/district/ward) phân biệt cấp bậc.
   const NUM_TO_TIER: Record<number, string> = { 1: 'hub', 2: 'district', 3: 'ward' }
+  const TIER_LABEL: Record<number, string> = { 1: 'Kho tổng (T1)', 2: 'Kho quận (T2)', 3: 'Kho phường (T3)' }
 
   const search = async (q: string) => {
     setQuery(q)
@@ -130,8 +129,9 @@ const AssignManagerModal: React.FC<{
     if (!selected) return
     setSaving(true)
     try {
-      await API.post('/api/v1/admin/warehouse-managers/assign', {
+      await API.post('/api/v1/warehouse-accounts/assign-existing', {
         user_id: selected.user_id,
+        tier: NUM_TO_TIER[warehouse.tier] ?? 'ward',
         warehouse_id: warehouse.warehouse_id,
       })
       toast.success(`Đã gán ${selected.full_name} làm quản lý ${warehouse.name}`)
@@ -187,7 +187,7 @@ const AssignManagerModal: React.FC<{
             </p>
           )}
           <p style={{ fontSize: 11, color: '#64748B', margin: '4px 0 0' }}>
-            Role sẽ gán: <code style={{ background: '#F1F5F9', padding: '2px 6px', borderRadius: 4 }}>{TIER_ROLE[warehouse.tier]}</code>
+            Cấp: <code style={{ background: '#F1F5F9', padding: '2px 6px', borderRadius: 4 }}>{TIER_LABEL[warehouse.tier]}</code>
           </p>
         </div>
 
@@ -428,6 +428,15 @@ const CreateTransferModal: React.FC<{
   )
 }
 
+// hub/district/ward giờ dùng chung role "employee" — style tra theo tier
+// dạng chuỗi (trả về từ /api/v1/warehouse-accounts) thay vì số.
+const TIER_STYLE_STR: Record<string, { bg: string; color: string }> = {
+  hub:      { bg: TIER_STYLE[1].bg, color: TIER_STYLE[1].color },
+  district: { bg: TIER_STYLE[2].bg, color: TIER_STYLE[2].color },
+  ward:     { bg: TIER_STYLE[3].bg, color: TIER_STYLE[3].color },
+  dept:     { bg: '#F5F3FF', color: '#7C3AED' },
+}
+
 // ── Manager List Tab ───────────────────────────────────────────────────────────
 const ManagerListTab: React.FC = () => {
   const [managers, setManagers] = useState<ManagerRecord[]>([])
@@ -436,23 +445,25 @@ const ManagerListTab: React.FC = () => {
 
   const load = () => {
     setLoading(true)
-    API.get('/api/v1/admin/warehouse-managers')
-      .then((r: any) => setManagers(r.data?.managers ?? []))
+    API.get('/api/v1/warehouse-accounts')
+      .then((r: any) => setManagers((r.data ?? []).filter((m: ManagerRecord) => m.tier !== 'dept')))
       .catch(() => {})
       .finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
 
+  // Kho không có endpoint "unassign" riêng (mô hình mới) — gỡ quyền = vô
+  // hiệu hoá tài khoản (PATCH .../status, toggle active/inactive).
   const unassign = async (m: ManagerRecord) => {
-    if (!window.confirm(`Gỡ ${m.full_name} khỏi kho ${m.warehouse_name}?`)) return
+    if (!window.confirm(`Vô hiệu hoá tài khoản ${m.full_name} (${m.tier_label})?`)) return
     setRemoving(m.user_id)
     try {
-      await API.delete(`/api/v1/admin/warehouse-managers/${m.user_id}/unassign`)
-      toast.success(`Đã gỡ ${m.full_name}`)
-      setManagers(ms => ms.filter(x => x.user_id !== m.user_id))
+      await API.patch(`/api/v1/warehouse-accounts/${m.user_id}/status`)
+      toast.success(`Đã vô hiệu hoá ${m.full_name}`)
+      setManagers(ms => ms.map(x => x.user_id === m.user_id ? { ...x, status: 'inactive' } : x))
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Lỗi gỡ manager')
+      toast.error(err.response?.data?.detail || 'Lỗi vô hiệu hoá')
     } finally { setRemoving(null) }
   }
 
@@ -463,7 +474,7 @@ const ManagerListTab: React.FC = () => {
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ background: '#F8FAFC' }}>
-            {['Người quản lý', 'Email', 'Kho phụ trách', 'Tier', 'Role', 'Hành động'].map(h => (
+            {['Người quản lý', 'Email', 'Kho phụ trách', 'Cấp', 'Trạng thái', 'Hành động'].map(h => (
               <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', borderBottom: '1px solid #E2E8F0' }}>
                 {h}
               </th>
@@ -474,25 +485,27 @@ const ManagerListTab: React.FC = () => {
           {managers.length === 0 ? (
             <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>Chưa có manager nào được gán</td></tr>
           ) : managers.map(m => {
-            const tierStyle = TIER_STYLE[m.tier] ?? TIER_STYLE[3]
+            const tierStyle = TIER_STYLE_STR[m.tier] ?? TIER_STYLE_STR.ward
             return (
               <tr key={m.user_id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                 <td style={{ padding: '12px 16px', fontWeight: 700, fontSize: 14, color: '#1E3A8A' }}>{m.full_name}</td>
                 <td style={{ padding: '12px 16px', fontSize: 13, color: '#64748B' }}>{m.email ?? '—'}</td>
-                <td style={{ padding: '12px 16px', fontSize: 13, color: '#0D9488', fontWeight: 600 }}>🏭 {m.warehouse_name}</td>
+                <td style={{ padding: '12px 16px', fontSize: 13, color: '#0D9488', fontWeight: 600 }}>🏭 {m.warehouse_name ?? '—'}</td>
                 <td style={{ padding: '12px 16px' }}>
                   <span style={{ background: tierStyle.bg, color: tierStyle.color, borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>
-                    Tier {m.tier}
+                    {m.tier_label}
                   </span>
                 </td>
-                <td style={{ padding: '12px 16px', fontSize: 12, color: '#64748B' }}>
-                  <code style={{ background: '#F1F5F9', padding: '2px 6px', borderRadius: 4 }}>{m.role_name}</code>
+                <td style={{ padding: '12px 16px', fontSize: 12 }}>
+                  <span style={{ color: m.status === 'active' ? '#16A34A' : '#94A3B8', fontWeight: 700 }}>
+                    {m.status === 'active' ? '● Hoạt động' : '○ Vô hiệu'}
+                  </span>
                 </td>
                 <td style={{ padding: '12px 16px' }}>
                   <button
                     onClick={() => unassign(m)}
-                    disabled={removing === m.user_id}
-                    style={{ padding: '5px 12px', background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    disabled={removing === m.user_id || m.status === 'inactive'}
+                    style={{ padding: '5px 12px', background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: m.status === 'inactive' ? 'default' : 'pointer', opacity: m.status === 'inactive' ? 0.5 : 1 }}>
                     {removing === m.user_id ? '⏳...' : 'Gỡ quyền'}
                   </button>
                 </td>

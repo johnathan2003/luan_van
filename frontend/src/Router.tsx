@@ -120,9 +120,11 @@ import WardDashboardPage from './pages/ward/WardDashboardPage'
 import WardShippersPage  from './pages/ward/WardShippersPage'
 import WardOrdersPage    from './pages/ward/WardOrdersPage'
 
-// Nhân viên nội bộ (quản lý kho các cấp) — không được mua/bán hàng trên sàn,
-// khớp với middleware/auth.py::EMPLOYMENT_ROLES ở backend.
-const EMPLOYMENT_ROLES = 'Admin_emp|warehouse_hub_manager|warehouse_district_manager|warehouse_ward_manager'
+// Nhân viên nội bộ (Admin_emp/quản lý kho các cấp/nhân viên shop) — không
+// được mua/bán hàng trên sàn, khớp với middleware/auth.py::EMPLOYMENT_ROLES
+// ở backend. "employee" dùng chung cho nhân viên shop lẫn nhân viên kho
+// hub/district/ward (phân biệt qua SystemEmployee, xem warehouseRole.ts).
+const EMPLOYMENT_ROLES = 'Admin_emp|employee'
 
 // ── Helper: bọc page trong layout ─────────────────────────────────────────────
 const inPublic   = (el: React.ReactNode) => <PublicLayout>{el}</PublicLayout>
@@ -256,7 +258,9 @@ const Router: React.FC = () => (
     </Route>
 
     {/* ── 🏢 Hub Manager — kho tổng cấp 1 ──────────────────────────── */}
-    <Route element={<ProtectedRoute requiredRole="warehouse_hub_manager|admin" />}>
+    {/* role "employee" dùng chung cho nhân viên shop/kho — requireEmployeeTier
+        gọi thêm API để xác nhận đúng tier trước khi cho vào (xem ProtectedRoute.tsx) */}
+    <Route element={<ProtectedRoute requiredRole="employee|admin" requireEmployeeTier="hub" />}>
       <Route path="/hub" element={<HubManagerLayout />}>
         <Route index            element={<HubDashboardPage />} />
         <Route path="districts" element={<HubDistrictsPage />} />
@@ -267,7 +271,7 @@ const Router: React.FC = () => (
     </Route>
 
     {/* ── 🏘️ District Manager — kho quận cấp 2 ──────────────────────── */}
-    <Route element={<ProtectedRoute requiredRole="warehouse_district_manager|admin" />}>
+    <Route element={<ProtectedRoute requiredRole="employee|admin" requireEmployeeTier="district" />}>
       <Route path="/district" element={<DistrictManagerLayout />}>
         <Route index            element={<DistrictDashboardPage />} />
         <Route path="wards"     element={<DistrictWardsPage />} />
@@ -276,7 +280,7 @@ const Router: React.FC = () => (
     </Route>
 
     {/* ── 🏠 Ward Manager — kho phường cấp 3 ───────────────────────── */}
-    <Route element={<ProtectedRoute requiredRole="warehouse_ward_manager|admin" />}>
+    <Route element={<ProtectedRoute requiredRole="employee|admin" requireEmployeeTier="ward" />}>
       <Route path="/ward" element={<WardManagerLayout />}>
         <Route index            element={<WardDashboardPage />} />
         <Route path="shippers"  element={<WardShippersPage />} />

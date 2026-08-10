@@ -7,6 +7,7 @@ import { resetFilters } from '../../store/slices/productSlice'
 import NotificationCenter from './NotificationCenter'
 import { formatCurrency } from '../../utils/formatters'
 import { getImageUrl } from '../../utils/helpers'
+import { getEmployeeTier, type EmployeeTier } from '../../utils/warehouseRole'
 import {
   getSearchHistory, saveSearchTerm, removeSearchTerm, clearSearchHistory,
   getRecentlyViewed, type SearchHistoryItem
@@ -305,6 +306,9 @@ const Navbar: React.FC = () => {
   const [searchQuery,     setSearchQuery]     = useState('')
   const [searchFocus,     setSearchFocus]     = useState(false)
   const [historyVersion,  setHistoryVersion]  = useState(0)
+  // Role "employee" dùng chung cho nhân viên shop lẫn nhân viên kho — cần
+  // biết tier thật (hub/district/ward) để hiện đúng menu/badge/điều hướng.
+  const [employeeTier,    setEmployeeTier]    = useState<EmployeeTier>(null)
 
   const radialRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
@@ -325,17 +329,26 @@ const Navbar: React.FC = () => {
 
   const availableRoles = user?.roles?.filter(r => r.status === 'active') || []
   const roleNames      = availableRoles.map(r => r.role_name)
+  const hasEmployeeRole = roleNames.includes('employee')
+
+  useEffect(() => {
+    if (!hasEmployeeRole) { setEmployeeTier(null); return }
+    let cancelled = false
+    getEmployeeTier().then(t => { if (!cancelled) setEmployeeTier(t) })
+    return () => { cancelled = true }
+  }, [hasEmployeeRole])
 
   const PURPLE = '#6D28D9'
+  const employeeGradient = employeeTier === 'hub'      ? `linear-gradient(to right, #0F766E 0%, #0D9488 100%)`
+    : employeeTier === 'district' ? `linear-gradient(to right, #6D28D9 0%, #7C3AED 100%)`
+    : employeeTier === 'ward'     ? `linear-gradient(to right, #C2410C 0%, #EA580C 100%)`
+    : `linear-gradient(to right, ${PURPLE} 0%, #DB2777 100%)`
   const roleGradient: Record<string, string> = {
-    admin:                      `linear-gradient(to right, ${PURPLE} 0%, #1D4ED8 100%)`,
-    shop:                       `linear-gradient(to right, ${PURPLE} 0%, #16A34A 100%)`,
-    shipper:                    `linear-gradient(to right, ${PURPLE} 0%, #D97706 100%)`,
-    employee:                   `linear-gradient(to right, ${PURPLE} 0%, #DB2777 100%)`,
-    warehouse_hub_manager:      `linear-gradient(to right, #0F766E 0%, #0D9488 100%)`,
-    warehouse_district_manager: `linear-gradient(to right, #6D28D9 0%, #7C3AED 100%)`,
-    warehouse_ward_manager:     `linear-gradient(to right, #C2410C 0%, #EA580C 100%)`,
-    Admin_emp:                  `linear-gradient(to right, #374151 0%, #4B5563 100%)`,
+    admin:     `linear-gradient(to right, ${PURPLE} 0%, #1D4ED8 100%)`,
+    shop:      `linear-gradient(to right, ${PURPLE} 0%, #16A34A 100%)`,
+    shipper:   `linear-gradient(to right, ${PURPLE} 0%, #D97706 100%)`,
+    employee:  employeeGradient,
+    Admin_emp: `linear-gradient(to right, #374151 0%, #4B5563 100%)`,
   }
   const navBg = (isAuthenticated && currentRole && roleGradient[currentRole])
     ? roleGradient[currentRole]
@@ -347,10 +360,12 @@ const Navbar: React.FC = () => {
     const dest = rn === 'admin' ? '/admin'
       : rn === 'shop' ? '/shop'
       : rn === 'shipper' ? '/shipper'
-      : rn === 'employee' ? '/employee'
-      : rn === 'warehouse_hub_manager' ? '/hub'
-      : rn === 'warehouse_district_manager' ? '/district'
-      : rn === 'warehouse_ward_manager' ? '/ward'
+      : rn === 'employee' ? (
+          employeeTier === 'hub' ? '/hub'
+          : employeeTier === 'district' ? '/district'
+          : employeeTier === 'ward' ? '/ward'
+          : '/employee'
+        )
       : rn === 'Admin_emp' ? '/warehouse'
       : '/'
     setTimeout(() => navigate(dest), 50)
@@ -384,10 +399,10 @@ const Navbar: React.FC = () => {
     if (role === 'admin')                       return { bg: '#FEF3C7', color: '#D97706', label: '⚙️ Admin' }
     if (role === 'shipper')                     return { bg: '#FEF9C3', color: '#854D0E', label: '🚚 Shipper' }
     if (role === 'user')                        return { bg: '#EDE9FE', color: '#7C3AED', label: '👤 Khách hàng' }
+    if (role === 'employee' && employeeTier === 'hub')      return { bg: '#CCFBF1', color: '#0F766E', label: '🏢 Kho Tổng' }
+    if (role === 'employee' && employeeTier === 'district') return { bg: '#EDE9FE', color: '#6D28D9', label: '🏬 Kho Quận' }
+    if (role === 'employee' && employeeTier === 'ward')     return { bg: '#FED7AA', color: '#C2410C', label: '🏠 Kho Phường' }
     if (role === 'employee')                    return { bg: '#FCE7F3', color: '#DB2777', label: '👷 Nhân viên' }
-    if (role === 'warehouse_hub_manager')       return { bg: '#CCFBF1', color: '#0F766E', label: '🏢 Kho Tổng' }
-    if (role === 'warehouse_district_manager')  return { bg: '#EDE9FE', color: '#6D28D9', label: '🏬 Kho Quận' }
-    if (role === 'warehouse_ward_manager')      return { bg: '#FED7AA', color: '#C2410C', label: '🏠 Kho Phường' }
     if (role === 'Admin_emp')                   return { bg: '#F3F4F6', color: '#374151', label: '🏭 Admin_emp' }
     return { bg: '#F3F4F6', color: '#6B7280', label: '👤 Khách hàng' }
   }
@@ -596,8 +611,8 @@ const Navbar: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Employee */}
-                    {currentRole === 'employee' && (
+                    {/* Employee (shop) — role "employee" nhưng KHÔNG phải nhân viên kho */}
+                    {currentRole === 'employee' && !employeeTier && (
                       <div>
                         <NavSectionLabel>Tài khoản</NavSectionLabel>
                         <MenuItem icon="👤" label="Hồ sơ cá nhân"           path="/profile"           onClick={close} />
@@ -609,8 +624,8 @@ const Navbar: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Warehouse Hub Manager */}
-                    {currentRole === 'warehouse_hub_manager' && (
+                    {/* Employee (kho, tier hub) — role "employee" + SystemEmployee tier=hub */}
+                    {currentRole === 'employee' && employeeTier === 'hub' && (
                       <div>
                         <NavSectionLabel>Tài khoản</NavSectionLabel>
                         <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"     onClick={close} />
@@ -621,8 +636,8 @@ const Navbar: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Warehouse District Manager */}
-                    {currentRole === 'warehouse_district_manager' && (
+                    {/* Employee (kho, tier district) */}
+                    {currentRole === 'employee' && employeeTier === 'district' && (
                       <div>
                         <NavSectionLabel>Tài khoản</NavSectionLabel>
                         <MenuItem icon="👤" label="Hồ sơ cá nhân"         path="/profile"          onClick={close} />
@@ -633,8 +648,8 @@ const Navbar: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Warehouse Ward Manager */}
-                    {currentRole === 'warehouse_ward_manager' && (
+                    {/* Employee (kho, tier ward) */}
+                    {currentRole === 'employee' && employeeTier === 'ward' && (
                       <div>
                         <NavSectionLabel>Tài khoản</NavSectionLabel>
                         <MenuItem icon="👤" label="Hồ sơ cá nhân"         path="/profile"         onClick={close} />

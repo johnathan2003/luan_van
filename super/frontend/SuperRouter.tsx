@@ -13,6 +13,8 @@ import SuperProducts  from './pages/SuperProducts'
 import SuperOrders    from './pages/SuperOrders'
 import SuperUsers     from './pages/SuperUsers'
 import SuperBanners    from './pages/SuperBanners'
+import SuperWallets    from './pages/SuperWallets'
+import SuperFinance    from './pages/SuperFinance'
 import DBViewerPage    from './pages/DBViewerPage'
 import ERDPage         from './pages/ERDPage'
 import SystemDocsPage  from './pages/SystemDocsPage'
@@ -39,6 +41,8 @@ const SuperRouter: React.FC = () => (
             <Route path="orders"     element={<SuperOrders />} />
             <Route path="users"      element={<SuperUsers />} />
             <Route path="banners"    element={<SuperBanners />} />
+            <Route path="wallets"    element={<SuperWallets />} />
+            <Route path="finance"    element={<SuperFinance />} />
             <Route path="db-viewer"  element={<DBViewerPage />} />
             <Route path="erd"        element={<ERDPage />} />
             <Route path="docs"       element={<SystemDocsPage />} />
