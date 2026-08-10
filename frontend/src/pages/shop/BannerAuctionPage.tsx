@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import { toast } from 'react-toastify'
+import type { RootState } from '../../store/store'
 import {
   BANNER_POSITIONS, BannerAuctionSession, BannerBid, BannerPositionKey, BannerSubmission,
   BANNER_IMAGE_SPECS, ImageSpec,
@@ -8,6 +10,7 @@ import {
   getShopCooldownRemaining, msUntilEnd,
   isAuctionLive, msUntilStart,
   placeBid, placeBuyNow, sweepExpiredWins, getPendingWinsForShop, payDeposit, payWin,
+  cancelDeposit as cancelBannerDeposit,
   submitBanner, getSubmissionByHistoryId, getAllSubmissions as getAllBannerSubmissions, resubmitSubmission,
   getAdminSettings as getBannerAdminSettings,
   AuctionAdminSettings as BannerAdminSettings,
@@ -26,6 +29,7 @@ import {
   placeBid as placeFlashBid, sweepExpiredWins as sweepFlash,
   getPendingWinsForShop as getFlashPendingWins,
   payDeposit as payFlashDeposit, payWin as payFlashWin,
+  cancelDeposit as cancelFlashDeposit,
   submitFlashProduct, getFlashSubmissionByHistoryId, getAllFlashSubmissions,
 } from '../../utils/flashSaleAuctionStore'
 import {
@@ -171,9 +175,94 @@ const BannerAuctionPage: React.FC = () => {
   const [topBidAmounts, setTopBidAmounts] = useState<Record<string, string>>({})
 
   const [poolTick, setPoolTick] = useState(0)
+  // Countdown độc lập cho "Thời gian chờ" bên phải mỗi banner card
+  const waitCountdownRef = useRef<Record<string, { initMs: number; initAt: number }>>({})
+  const getWaitMs = (sessionId: string, currentMsUntilStart: number): number => {
+    if (!waitCountdownRef.current[sessionId]) {
+      waitCountdownRef.current[sessionId] = { initMs: Math.floor(currentMsUntilStart / 2), initAt: Date.now() }
+    }
+    const { initMs, initAt } = waitCountdownRef.current[sessionId]
+    return Math.max(0, initMs - (Date.now() - initAt))
+  }
 
   // ── State: banner admin settings (buyNowPrice, slots, etc.) ──────────────
   const [bannerAdminSettings, setBannerAdminSettings] = useState<Record<BannerPositionKey, BannerAdminSettings>>({} as any)
+
+  // ── Tiền đấu giá — đọc từ localStorage theo userId ───────────────────────
+  const userId = useSelector((s: RootState) => s.auth.user?.user_id ?? 0)
+  const navigate = useNavigate()
+  const [walletReserved, setWalletReserved] = useState(0)
+  useEffect(() => {
+    if (!userId) return
+    try {
+      const d = JSON.parse(localStorage.getItem(`shop_wallet_v2_${userId}`) || 'null')
+      setWalletReserved(d?.reserved ?? 0)
+    } catch {}
+  }, [userId])
+
+  // ── Trừ Tiền đấu giá sau khi cọc / thanh toán đủ ────────────────────────
+  const deductWallet = (amount: number, note: string) => {
+    if (!amount || !userId) return
+    try {
+      // Cập nhật số dư
+      const wKey = `shop_wallet_v2_${userId}`
+      const d = JSON.parse(localStorage.getItem(wKey) || 'null') ?? { balance: 0, reserved: 0, available: 0 }
+      const next = {
+        ...d,
+        balance:  Math.max(0, (d.balance  ?? 0) - amount),
+        reserved: Math.max(0, (d.reserved ?? 0) - amount),
+        // available không đổi — tiền đó đã bị khóa khi chuyển vào reserved
+      }
+      localStorage.setItem(wKey, JSON.stringify(next))
+      setWalletReserved(next.reserved)
+
+      // Ghi lịch sử giao dịch
+      const tKey = `shop_wallet_txns_v2_${userId}`
+      const txns = JSON.parse(localStorage.getItem(tKey) || '[]')
+      const txn = { txn_id: Date.now(), amount, txn_type: 'charge', ref_type: 'auction', ref_id: null, note, created_at: new Date().toISOString() }
+      localStorage.setItem(tKey, JSON.stringify([txn, ...txns]))
+    } catch {}
+  }
+
+  // ── Toast khi bid chạm endPrice ──────────────────────────────────────────
+  const toastBidResult = (hit: number | undefined, defaultMsg: string) => {
+    if (hit !== undefined) {
+      if (hit >= 3) toast.warning('🏁 Giá đạt ngưỡng kết thúc lần 3 — phiên đấu giá kết thúc!')
+      else toast.info(`⏱ Giá đạt ngưỡng! Đồng hồ reset về 10 giây (${hit}/3 lần)`)
+    } else {
+      toast.success(defaultMsg)
+    }
+  }
+
+  // ── Modal cảnh báo vượt tiền đấu giá ─────────────────────────────────────
+  const [bidWarning, setBidWarning] = useState<{
+    type: 'blocked' | 'over70'
+    pendingBid?: () => void
+  } | null>(null)
+  const over70WarnedRef = useRef(false) // chỉ hiện 1 lần/session
+
+  const checkAndBid = (amount: number, doBid: () => void) => {
+    if (isBanned()) {
+      toast.error('🚫 Tài khoản bị khóa đấu giá do vi phạm hủy cọc quá 2 lần!')
+      return
+    }
+    if (walletReserved > 0 && amount > walletReserved) {
+      setBidWarning({ type: 'blocked' }); return
+    }
+    if (!over70WarnedRef.current && walletReserved > 0 && amount > walletReserved * 0.7) {
+      over70WarnedRef.current = true
+      setBidWarning({ type: 'over70', pendingBid: doBid }); return
+    }
+    doBid()
+  }
+
+  // Helper: màu inline theo mức cảnh báo
+  const bidWarnLevel = (amount: number) => {
+    if (!amount || walletReserved <= 0) return null
+    if (amount > walletReserved) return 'blocked'
+    if (amount > walletReserved * 0.7) return 'over70'
+    return null
+  }
 
   // ── State: Deposit expired warning modal ─────────────────────────────────
   const [depositExpiredWarn, setDepositExpiredWarn] = useState<{ n: number; max: number } | null>(null)
@@ -181,6 +270,15 @@ const BannerAuctionPage: React.FC = () => {
   const MISSED_DEPOSIT_KEY = `buyzo_missed_deposit_${SHOP_NAME}`
   const getMissedCount = () => { try { return Number(localStorage.getItem(MISSED_DEPOSIT_KEY) || '0') } catch { return 0 } }
   const incMissedCount = () => { try { const n = getMissedCount() + 1; localStorage.setItem(MISSED_DEPOSIT_KEY, String(n)); return n } catch { return 1 } }
+
+  // ── Vi phạm hủy cọc ──────────────────────────────────────────────────────
+  const BAN_KEY = `shop_auction_ban_${userId}`
+  const getViolations = () => { try { return Number(localStorage.getItem(BAN_KEY) || '0') } catch { return 0 } }
+  const addViolation  = () => { const n = getViolations() + 1; try { localStorage.setItem(BAN_KEY, String(n)) } catch {}; return n }
+  const isBanned      = () => getViolations() >= 3
+
+  // ── State: Hủy cọc modal ─────────────────────────────────────────────────
+  const [cancelDepositModal, setCancelDepositModal] = useState<{ id: string; kind: 'banner' | 'flash' } | null>(null)
 
   // ── State: Buy Now confirmation modal ─────────────────────────────────────
   const [buyNowConfirm, setBuyNowConfirm] = useState<{
@@ -530,9 +628,11 @@ const BannerAuctionPage: React.FC = () => {
   const handlePlaceBannerBid = () => {
     const amount = parseInt((bidAmounts[selectedBannerPos] || '').replace(/[^\d]/g, ''))
     if (!amount) { toast.error('Vui lòng nhập số tiền đặt giá'); return }
-    const result = placeBid(selectedBannerPos, SHOP_NAME, amount)
-    if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
-    toast.success('✅ Đặt giá thành công!'); setBidAmounts(p => ({ ...p, [selectedBannerPos]: '' })); refresh()
+    checkAndBid(amount, () => {
+      const result = placeBid(selectedBannerPos, SHOP_NAME, amount)
+      if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
+      toastBidResult(result.endPriceHit, '✅ Đặt giá thành công!'); setBidAmounts(p => ({ ...p, [selectedBannerPos]: '' })); refresh()
+    })
   }
 
   // ── Flash tab ─────────────────────────────────────────────────────────────
@@ -546,9 +646,11 @@ const BannerAuctionPage: React.FC = () => {
     const productName = (flashBidProducts[selectedFlashSlot] || '').trim()
     if (!productName) { toast.error('Vui lòng nhập tên sản phẩm'); return }
     if (!amount) { toast.error('Vui lòng nhập số tiền đặt giá'); return }
-    const result = placeFlashBid(selectedFlashSlot, SHOP_NAME, productName, amount)
-    if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
-    toast.success('✅ Đặt giá thành công!'); setFlashBidAmounts(p => ({ ...p, [selectedFlashSlot]: '' })); refreshFlash()
+    checkAndBid(amount, () => {
+      const result = placeFlashBid(selectedFlashSlot, SHOP_NAME, productName, amount)
+      if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
+      toast.success('✅ Đặt giá thành công!'); setFlashBidAmounts(p => ({ ...p, [selectedFlashSlot]: '' })); refreshFlash()
+    })
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -579,8 +681,98 @@ const BannerAuctionPage: React.FC = () => {
     (rightTab === 'flash' && !!flashPoolSession) ||
     (rightTab === 'top' && !!rTopSession)
 
+  // ── Modal cảnh báo tiền đấu giá ───────────────────────────────────────────
+  const walletWarningModal = bidWarning && (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 28, maxWidth: 380, width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+        {bidWarning.type === 'blocked' ? (
+          <>
+            <div style={{ fontSize: 32, marginBottom: 10, textAlign: 'center' }}>⛔</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#DC2626', marginBottom: 8, textAlign: 'center' }}>Không thể đặt cược</div>
+            <div style={{ fontSize: 13, color: '#444', marginBottom: 20, textAlign: 'center', lineHeight: 1.6 }}>
+              Số tiền đặt cược vượt quá <b>Tiền đấu giá</b> trong ví
+              <br /><span style={{ color: '#7C3AED', fontWeight: 700 }}>({walletReserved.toLocaleString('vi-VN')}đ)</span>.
+              <br />Vui lòng nạp thêm để tiếp tục.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setBidWarning(null)}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #DC2626', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                Đóng
+              </button>
+              <button onClick={() => { setBidWarning(null); navigate('/shop/wallet?tab=auction_fund') }}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#7C3AED', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                🔒 Nạp tiền
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 32, marginBottom: 10, textAlign: 'center' }}>⚠️</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#D97706', marginBottom: 8, textAlign: 'center' }}>Số tiền đã vượt 70%</div>
+            <div style={{ fontSize: 13, color: '#444', marginBottom: 20, textAlign: 'center', lineHeight: 1.6 }}>
+              Số tiền đặt cược đã vượt <b>70%</b> Tiền đấu giá trong ví
+              <br /><span style={{ color: '#7C3AED', fontWeight: 700 }}>({walletReserved.toLocaleString('vi-VN')}đ)</span>.
+              <br />Bạn có muốn tiếp tục?
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { bidWarning.pendingBid?.(); setBidWarning(null) }}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #D97706', background: '#FFF7ED', color: '#D97706', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                Đã rõ
+              </button>
+              <button onClick={() => { setBidWarning(null); navigate('/shop/wallet?tab=auction_fund') }}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#7C3AED', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                🔒 Nạp tiền
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+
+  // ── Modal hủy cọc ─────────────────────────────────────────────────────────
+  const cancelDepositModalJSX = cancelDepositModal && (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.48)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 28, maxWidth: 400, width: '92%', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+        <div style={{ fontSize: 36, textAlign: 'center', marginBottom: 8 }}>🚫</div>
+        <div style={{ fontWeight: 800, fontSize: 17, color: '#DC2626', textAlign: 'center', marginBottom: 12 }}>Hủy cọc đấu giá</div>
+        <div style={{ fontSize: 13, color: '#444', lineHeight: 1.7, marginBottom: 14, textAlign: 'center' }}>
+          Tiền cọc sẽ <b style={{ color: '#DC2626' }}>KHÔNG được hoàn trả</b> khi hủy cọc.
+        </div>
+        <div style={{ background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.25)', borderRadius: 10, padding: '12px 16px', fontSize: 13, lineHeight: 1.7, marginBottom: 20 }}>
+          ⚠️ <b>Cảnh báo:</b> Vi phạm hủy cọc <b>trên 2 lần</b> sẽ bị <b>khóa vĩnh viễn</b> — không được tham gia đấu giá và không thể nạp <b>Tiền đấu giá</b>.<br />
+          <span style={{ color: '#7C3AED', fontWeight: 700 }}>Vi phạm hiện tại: {getViolations()}/2</span>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={() => setCancelDepositModal(null)}
+            style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #16A34A', background: '#F0FDF4', color: '#16A34A', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+            Giữ lại cọc
+          </button>
+          <button
+            onClick={() => {
+              const { id, kind } = cancelDepositModal
+              const ok = kind === 'banner' ? cancelBannerDeposit(id) : cancelFlashDeposit(id)
+              if (ok) {
+                const newCount = addViolation()
+                setCancelDepositModal(null)
+                refresh(); refreshFlash()
+                if (newCount >= 3) toast.error('🚫 Tài khoản bị khóa đấu giá do vi phạm hủy cọc quá 2 lần!')
+                else toast.warning(`⚠️ Đã hủy cọc. Vi phạm ${newCount}/2 — còn ${2 - newCount} lần trước khi bị khóa.`)
+              }
+            }}
+            style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #DC2626', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+            Xác nhận hủy
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div style={{ paddingBottom: 80 }}>
+      {walletWarningModal}
+      {cancelDepositModalJSX}
       {/* ── Main content ──────────────────────────────────────────────────── */}
       <div>
       <h2 style={{ marginBottom: 4 }}>🏆 Đấu giá vị trí quảng cáo</h2>
@@ -596,32 +788,38 @@ const BannerAuctionPage: React.FC = () => {
               : FLASH_SLOTS.find(s => s.key === (w as FlashAuctionSession).slot)?.label
             const depositAmt = w.depositAmount ?? 0
             const depositDeadline = w.depositDeadline ? new Date(w.depositDeadline) : null
-            const msLeft = depositDeadline ? depositDeadline.getTime() - Date.now() : 0
-            const minLeft = Math.max(0, Math.ceil(msLeft / 60000))
+            const msLeft = Math.max(0, depositDeadline ? depositDeadline.getTime() - Date.now() : 0)
+            const depositMmSs = (() => {
+              const totalSec = Math.floor(msLeft / 1000)
+              const mm = Math.floor(totalSec / 60).toString().padStart(2, '0')
+              const ss = (totalSec % 60).toString().padStart(2, '0')
+              return `${mm}:${ss}`
+            })()
+            const isDepositUrgent = msLeft > 0 && msLeft <= 5 * 60 * 1000 // đỏ khi còn < 5 phút
 
             if (w.confirmation === 'pending') {
               return (
-                <div key={w.id} style={{ borderRadius: 14, padding: 20, background: 'linear-gradient(135deg,#FFF7ED,#FEF3C7)', border: `2px solid ${C.orange}` }}>
+                <div key={w.id} style={{ borderRadius: 14, padding: 20, background: isDepositUrgent ? 'linear-gradient(135deg,#FFF1F2,#FEE2E2)' : 'linear-gradient(135deg,#FFF7ED,#FEF3C7)', border: `2px solid ${isDepositUrgent ? '#DC2626' : C.orange}` }}>
                   {/* Header */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                    <span style={{ fontSize: 28 }}>🏆</span>
+                    <span style={{ fontSize: 28 }}>{isDepositUrgent ? '🚨' : '🏆'}</span>
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: 16, color: C.orange }}>Chúc mừng! Bạn đã thắng đấu giá</div>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: isDepositUrgent ? '#DC2626' : C.orange }}>Chúc mừng! Bạn đã thắng đấu giá</div>
                       <div style={{ fontSize: 13, color: C.gray }}>{kind === 'banner' ? '🖼️' : '⚡'} {posLabel} — Giá thắng: <b>{w.winner?.amount.toLocaleString('vi-VN')}đ</b></div>
                     </div>
                     <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: '#DC2626' }}>⏰ {minLeft} phút</div>
-                      <div style={{ fontSize: 11, color: C.gray }}>còn lại để đặt cọc</div>
+                      <div style={{ fontSize: 26, fontWeight: 800, color: '#DC2626', fontVariantNumeric: 'tabular-nums', letterSpacing: 1 }}>⏰ {depositMmSs}</div>
+                      <div style={{ fontSize: 11, color: isDepositUrgent ? '#DC2626' : C.gray, fontWeight: isDepositUrgent ? 700 : 400 }}>{isDepositUrgent ? '⚠️ Sắp hết giờ!' : 'còn lại để đặt cọc'}</div>
                     </div>
                   </div>
 
                   {/* Điều kiện */}
                   <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: 10, padding: '12px 16px', marginBottom: 14, fontSize: 13 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 8, color: '#92400E' }}>📋 Điều kiện đặt cọc</div>
+                    <div style={{ fontWeight: 700, marginBottom: 8, color: isDepositUrgent ? '#DC2626' : '#92400E' }}>📋 Điều kiện đặt cọc</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <span>💰 Số tiền cọc: <b style={{ color: C.orange }}>{depositAmt.toLocaleString('vi-VN')}đ</b> <span style={{ color: C.gray, fontSize: 12 }}>(20% giá thắng)</span></span>
-                      <span>⏱ Hạn đặt cọc: <b>{depositDeadline?.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</b> hôm nay</span>
-                      <span style={{ color: '#DC2626' }}>⚠️ Không đặt cọc trong {minLeft} phút → <b>kết quả thắng bị huỷ tự động</b></span>
+                      <span>⏱ Hạn đặt cọc: <b>{depositDeadline?.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</b> hôm nay</span>
+                      <span style={{ color: '#DC2626' }}>⚠️ Hết giờ → <b>mất quyền thắng vĩnh viễn, không hoàn tiền cọc</b></span>
                       <span>✅ Sau khi đặt cọc: mẫu banner sẽ tự gửi Admin duyệt. Thanh toán đủ 100% để banner đi vào hoạt động.</span>
                     </div>
                   </div>
@@ -637,6 +835,7 @@ const BannerAuctionPage: React.FC = () => {
                           ok = payFlashDeposit(w.id)
                         }
                         if (ok) {
+                          deductWallet(depositAmt, `Đặt cọc đấu giá — ${kind === 'banner' ? 'Banner' : 'Flash Sale'}`)
                           refresh(); refreshFlash()
                           toast.success(`💰 Đặt cọc ${depositAmt.toLocaleString('vi-VN')}đ thành công! Vào tab Giao dịch để thanh toán phần còn lại.`)
                           setTab('mytx')
@@ -683,8 +882,9 @@ const BannerAuctionPage: React.FC = () => {
                     {sub?.status === 'approved' && (
                       <button style={btnStyle(C.blue)}
                         onClick={() => {
+                          const remaining = (w.winner?.amount ?? 0) - depositAmt
                           const ok = kind === 'banner' ? payWin(w.id) : payFlashWin(w.id)
-                          if (ok) { refresh(); refreshFlash(); toast.success('💳 Thanh toán đủ thành công!') }
+                          if (ok) { deductWallet(remaining, `Thanh toán đủ đấu giá — ${kind === 'banner' ? 'Banner' : 'Flash Sale'}`); refresh(); refreshFlash(); toast.success('💳 Thanh toán đủ thành công!') }
                         }}>
                         💳 Thanh toán đủ ({((w.winner?.amount ?? 0) - depositAmt).toLocaleString('vi-VN')}đ)
                       </button>
@@ -874,30 +1074,39 @@ const BannerAuctionPage: React.FC = () => {
                         ) : (
                           <>
                             <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                              {[0, 50_000, 100_000, 200_000, 500_000].map(extra => {
-                                const val = minBid + extra
-                                return (
-                                  <button key={extra} onClick={e => { e.stopPropagation(); setBidAmounts(p => ({ ...p, [pos.key]: val.toLocaleString('vi-VN') })) }}
-                                    style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${C.border}`, background: bidAmounts[pos.key] === String(val) ? C.primary : 'transparent', color: bidAmounts[pos.key] === String(val) ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
-                                    {extra === 0 ? 'Tối thiểu' : `+${(extra / 1000).toFixed(0)}k`} ({val.toLocaleString('vi-VN')}đ)
+                              {(() => {
+                                const raw = minBid / 10
+                                const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))))
+                                const niceStep = Math.round(raw / mag) * mag || mag
+                                const firstVal = Math.ceil((minBid + 1) / niceStep) * niceStep
+                                const presets = [minBid, firstVal, firstVal + niceStep, firstVal + 2 * niceStep, firstVal + 3 * niceStep, firstVal + 4 * niceStep]
+                                return presets.map((val, i) => (
+                                  <button key={i} onClick={e => { e.stopPropagation(); setBidAmounts(p => ({ ...p, [pos.key]: val.toLocaleString('vi-VN') })) }}
+                                    style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${C.border}`, background: bidAmounts[pos.key] === val.toLocaleString('vi-VN') ? C.primary : 'transparent', color: bidAmounts[pos.key] === val.toLocaleString('vi-VN') ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
+                                    {i === 0 ? 'Tối thiểu' : val.toLocaleString('vi-VN')}đ
                                   </button>
-                                )
-                              })}
+                                ))
+                              })()}
                             </div>
                             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                              <input type="text"
-                                placeholder={`Tối thiểu ${minBid.toLocaleString('vi-VN')}đ`}
-                                value={bidAmounts[pos.key] || ''}
-                                onChange={e => {
-                                  const raw = e.target.value.replace(/[^\d]/g, '')
-                                  const num = Number(raw)
-                                  const maxBid = minBid + 500_000
-                                  if (num > maxBid) { toast.error(`Chỉ được nhập tối đa ${maxBid.toLocaleString('vi-VN')}đ`); return }
-                                  setBidAmounts(p => ({ ...p, [pos.key]: raw ? num.toLocaleString('vi-VN') : '' }))
-                                }}
-                                onClick={e => e.stopPropagation()}
-                                style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }}
-                              />
+                              <div style={{ flex: 1, minWidth: 200 }}>
+                                <input type="text"
+                                  placeholder={`Tối thiểu ${minBid.toLocaleString('vi-VN')}đ`}
+                                  value={bidAmounts[pos.key] || ''}
+                                  onChange={e => {
+                                    const raw = e.target.value.replace(/[^\d]/g, '')
+                                    const num = Number(raw)
+                                    setBidAmounts(p => ({ ...p, [pos.key]: raw ? num.toLocaleString('vi-VN') : '' }))
+                                  }}
+                                  onClick={e => e.stopPropagation()}
+                                  style={{ width: '100%', padding: '8px 12px', border: `1px solid ${bidWarnLevel(parseInt((bidAmounts[pos.key]||'').replace(/[^\d]/g,''))) === 'blocked' ? '#DC2626' : bidWarnLevel(parseInt((bidAmounts[pos.key]||'').replace(/[^\d]/g,''))) === 'over70' ? '#D97706' : C.border}`, borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                                />
+                                {(() => { const w = bidWarnLevel(parseInt((bidAmounts[pos.key]||'').replace(/[^\d]/g,''))); return w ? (
+                                  <div style={{ fontSize: 11, marginTop: 3, fontWeight: 600, color: w === 'blocked' ? '#DC2626' : '#D97706' }}>
+                                    {w === 'blocked' ? '⛔ Vượt Tiền đấu giá!' : '⚠️ Vượt 70% Tiền đấu giá'}
+                                  </div>
+                                ) : null })()}
+                              </div>
                               <button
                                 style={btnStyle(!live || cooldown > 0 ? '#9CA3AF' : C.primary)}
                                 disabled={!live || cooldown > 0}
@@ -905,9 +1114,11 @@ const BannerAuctionPage: React.FC = () => {
                                   e.stopPropagation()
                                   const amount = parseInt((bidAmounts[pos.key] || '').replace(/[^\d]/g, ''))
                                   if (!amount) { toast.error('Vui lòng nhập số tiền đặt giá'); return }
-                                  const result = placeBid(pos.key, SHOP_NAME, amount)
-                                  if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
-                                  toast.success('✅ Đặt giá thành công!'); setBidAmounts(p => ({ ...p, [pos.key]: '' })); refresh()
+                                  checkAndBid(amount, () => {
+                                    const result = placeBid(pos.key, SHOP_NAME, amount)
+                                    if (!result.ok) { toast.error(result.error || 'Không thể đặt giá'); return }
+                                    toastBidResult(result.endPriceHit, '✅ Đặt giá thành công!'); setBidAmounts(p => ({ ...p, [pos.key]: '' })); refresh()
+                                  })
                                 }}>
                                 {!live ? '⏳ Chưa bắt đầu' : cooldown > 0 ? `Chờ ${Math.ceil(cooldown / 1000)}s` : '🏹 Đặt giá'}
                               </button>
@@ -934,7 +1145,7 @@ const BannerAuctionPage: React.FC = () => {
                       <div>
                         <div style={{ fontSize: 10, color: '#EF4444', marginBottom: 2 }}>⏳ Thời gian chờ</div>
                         <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 1, color: live ? '#9CA3AF' : '#D97706' }}>
-                          {live ? '--:--' : formatCountdown(Math.max(0, msUntilStart(session) / 2))}
+                          {live ? '--:--' : formatCountdown(getWaitMs(session.id, msUntilStart(session)))}
                         </div>
                       </div>
 
@@ -1002,10 +1213,13 @@ const BannerAuctionPage: React.FC = () => {
         const handleBid = () => {
           const amount = parseInt(flashPoolBidAmount.replace(/[^\d]/g, ''))
           if (!amount) { toast.error('Vui lòng nhập giá/slot'); return }
-          const r = placeFlashPoolBid(SHOP_NAME, amount, flashPoolSlots)
-          if (!r.ok) { toast.error(r.error || 'Không thể đặt giá'); return }
-          toast.success(`✅ Đặt giá thành công! ${flashPoolSlots} slot × ${amount.toLocaleString('vi-VN')}đ/slot`)
-          setFlashPoolBidAmount(''); refreshPools()
+          const total = amount * flashPoolSlots
+          checkAndBid(total, () => {
+            const r = placeFlashPoolBid(SHOP_NAME, amount, flashPoolSlots)
+            if (!r.ok) { toast.error(r.error || 'Không thể đặt giá'); return }
+            toast.success(`✅ Đặt giá thành công! ${flashPoolSlots} slot × ${amount.toLocaleString('vi-VN')}đ/slot`)
+            setFlashPoolBidAmount(''); refreshPools()
+          })
         }
 
         return (
@@ -1091,11 +1305,22 @@ const BannerAuctionPage: React.FC = () => {
                         ⚡ {myExistingBid ? 'Cập nhật giá' : 'Đặt giá'}
                       </button>
                     </div>
-                    {flashPoolBidAmount && (
-                      <div style={{ marginTop: 8, fontSize: 12, color: C.orange }}>
-                        Tổng ước tính: <b>{((parseInt(flashPoolBidAmount) || 0) * flashPoolSlots).toLocaleString('vi-VN')}đ</b> cho {flashPoolSlots} slot
-                      </div>
-                    )}
+                    {flashPoolBidAmount && (() => {
+                      const total = (parseInt(flashPoolBidAmount.replace(/[^\d]/g,'')) || 0) * flashPoolSlots
+                      const w = bidWarnLevel(total)
+                      return (
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{ fontSize: 12, color: C.orange }}>
+                            Tổng ước tính: <b>{total.toLocaleString('vi-VN')}đ</b> cho {flashPoolSlots} slot
+                          </div>
+                          {w && (
+                            <div style={{ fontSize: 11, marginTop: 3, fontWeight: 600, color: w === 'blocked' ? '#DC2626' : '#D97706' }}>
+                              {w === 'blocked' ? '⛔ Vượt Tiền đấu giá!' : '⚠️ Vượt 70% Tiền đấu giá'}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )}
 
@@ -1154,11 +1379,13 @@ const BannerAuctionPage: React.FC = () => {
         const handleBid = () => {
           const amount = parseInt(bidVal.replace(/[^\d]/g, ''))
           if (!amount) { toast.error('Vui lòng nhập giá đấu'); return }
-          const r = placeTopBid(selectedTopSlot, SHOP_NAME, '(sản phẩm sẽ xác nhận sau)', amount)
-          if (!r.ok) { toast.error(r.error || 'Không thể đặt giá'); return }
-          toast.success(`✅ Đặt giá thành công! ${amount.toLocaleString('vi-VN')}đ cho ${slotDef.label}`)
-          setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: '' }))
-          refreshPools()
+          checkAndBid(amount, () => {
+            const r = placeTopBid(selectedTopSlot, SHOP_NAME, '(sản phẩm sẽ xác nhận sau)', amount)
+            if (!r.ok) { toast.error(r.error || 'Không thể đặt giá'); return }
+            toastBidResult(r.endPriceHit, `✅ Đặt giá thành công! ${amount.toLocaleString('vi-VN')}đ cho ${slotDef.label}`)
+            setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: '' }))
+            refreshPools()
+          })
         }
 
         return (
@@ -1230,22 +1457,33 @@ const BannerAuctionPage: React.FC = () => {
                       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                         <label style={{ fontSize: 12, color: C.gray, flex: 1, minWidth: 180 }}>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, width: '100%' }}>
-                          {[0, 50_000, 100_000, 200_000, 500_000].map(extra => {
-                            const val = minNext + extra
-                            const formatted = val.toLocaleString('vi-VN')
-                            return (
-                              <button key={extra} onClick={() => setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: formatted }))}
-                                style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${bidVal === formatted ? C.purple : C.border}`, background: bidVal === formatted ? C.purple : 'transparent', color: bidVal === formatted ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
-                                {extra === 0 ? 'Tối thiểu' : `+${(extra/1000).toFixed(0)}k`} ({val.toLocaleString('vi-VN')}đ)
-                              </button>
-                            )
-                          })}
+                          {(() => {
+                            const raw = minNext / 10
+                            const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))))
+                            const niceStep = Math.round(raw / mag) * mag || mag
+                            const firstVal = Math.ceil((minNext + 1) / niceStep) * niceStep
+                            const presets = [minNext, firstVal, firstVal + niceStep, firstVal + 2 * niceStep, firstVal + 3 * niceStep, firstVal + 4 * niceStep]
+                            return presets.map((val, i) => {
+                              const formatted = val.toLocaleString('vi-VN')
+                              return (
+                                <button key={i} onClick={() => setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: formatted }))}
+                                  style={{ padding: '4px 10px', fontSize: 12, borderRadius: 6, border: `1px solid ${bidVal === formatted ? C.purple : C.border}`, background: bidVal === formatted ? C.purple : 'transparent', color: bidVal === formatted ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
+                                  {i === 0 ? 'Tối thiểu' : val.toLocaleString('vi-VN')}đ
+                                </button>
+                              )
+                            })
+                          })()}
                         </div>
                           Giá đặt (đ) — tối thiểu {minNext.toLocaleString('vi-VN')}đ
                           <input type="text" value={bidVal}
                             onChange={e => { const raw = e.target.value.replace(/[^\d]/g, ''); setTopBidAmounts(prev => ({ ...prev, [selectedTopSlot]: raw ? Number(raw).toLocaleString('vi-VN') : '' })) }}
                             placeholder={minNext.toLocaleString('vi-VN')}
-                            style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }} />
+                            style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', border: `1px solid ${bidWarnLevel(parseInt(bidVal.replace(/[^\d]/g,''))) === 'blocked' ? '#DC2626' : bidWarnLevel(parseInt(bidVal.replace(/[^\d]/g,''))) === 'over70' ? '#D97706' : C.border}`, borderRadius: 8, fontSize: 14 }} />
+                          {(() => { const w = bidWarnLevel(parseInt(bidVal.replace(/[^\d]/g,''))); return w ? (
+                            <div style={{ fontSize: 11, marginTop: 3, fontWeight: 600, color: w === 'blocked' ? '#DC2626' : '#D97706' }}>
+                              {w === 'blocked' ? '⛔ Vượt Tiền đấu giá!' : '⚠️ Vượt 70% Tiền đấu giá'}
+                            </div>
+                          ) : null })()}
                         </label>
                         <button style={{ ...btnStyle(C.purple), padding: '9px 20px' }} onClick={handleBid}>
                           🏆 {myBid ? 'Cập nhật giá' : 'Đặt giá'}
@@ -1357,6 +1595,7 @@ const BannerAuctionPage: React.FC = () => {
           if (r.confirmation === 'paid') return { color: C.primary, bg: C.primaryLight, label: '✅ Đã thanh toán đủ' }
           if (r.confirmation === 'expired' || r.confirmation === 'declined') return { color: '#DC2626', bg: 'rgba(220,38,38,0.1)', label: '⚠️ Hết hạn/Từ chối' }
           if (r.confirmation === 'deposit_paid') return { color: C.blue, bg: C.blueLight, label: '💰 Đã cọc — chờ TT đủ' }
+          if ((r.confirmation as string) === 'deposit_cancelled') return { color: '#DC2626', bg: 'rgba(220,38,38,0.08)', label: '🚫 Đã hủy cọc' }
           return { color: C.orange, bg: C.orangeLight, label: '⏳ Chờ xác nhận' }
         }
 
@@ -1498,11 +1737,18 @@ const BannerAuctionPage: React.FC = () => {
                               <span style={badgeStyle('#DC2626', 'rgba(220,38,38,0.1)')}>❌ Từ chối vĩnh viễn</span>
                             )}
                             {/* ── Auction bid-win actions ── */}
+                            {!r.isBuyNow && r.confirmation === 'deposit_paid' && (
+                              <button
+                                onClick={() => setCancelDepositModal({ id: r.id, kind: r.kind as 'banner' | 'flash' })}
+                                style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 8, padding: '3px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                                🚫 Hủy cọc
+                              </button>
+                            )}
                             {!r.isBuyNow && r.confirmation === 'deposit_paid' && r.subStatus === 'approved' && (
                               <button style={{ ...btnStyle(C.blue), fontSize: 11, padding: '5px 10px' }}
                                 onClick={() => {
                                   const ok = r.kind === 'banner' ? payWin(r.id) : payFlashWin(r.id)
-                                  if (ok) { refresh(); refreshFlash(); toast.success('💳 Thanh toán đủ thành công!') }
+                                  if (ok) { deductWallet(remaining, `Thanh toán đủ đấu giá — ${r.kind === 'banner' ? 'Banner' : 'Flash Sale'}`); refresh(); refreshFlash(); toast.success('💳 Thanh toán đủ thành công!') }
                                 }}>
                                 💳 TT đủ ({remaining.toLocaleString('vi-VN')}đ)
                               </button>
@@ -1547,7 +1793,10 @@ const BannerAuctionPage: React.FC = () => {
                               </button>
                             )}
                             {!r.isBuyNow && r.subStatus === 'rejected' && <span style={badgeStyle('#DC2626', 'rgba(220,38,38,0.1)')}>❌ Từ chối vĩnh viễn</span>}
-                            {!r.isBuyNow && (!r.confirmation || (!['deposit_paid'].includes(r.confirmation) && !r.subStatus)) ? <span style={{ color: C.gray, fontSize: 12 }}>–</span> : null}
+                            {!r.isBuyNow && (r.confirmation as string) === 'deposit_cancelled' && (
+                              <span style={badgeStyle('#DC2626', 'rgba(220,38,38,0.08)')}>🚫 Đã hủy cọc</span>
+                            )}
+                            {!r.isBuyNow && (!r.confirmation || (!['deposit_paid', 'deposit_cancelled'].includes(r.confirmation) && !r.subStatus)) ? <span style={{ color: C.gray, fontSize: 12 }}>–</span> : null}
                           </div>
                         </div>
                       )

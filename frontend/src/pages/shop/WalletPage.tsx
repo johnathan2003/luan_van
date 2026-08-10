@@ -4,10 +4,13 @@
  * GET  /api/v1/wallet/me
  * GET  /api/v1/wallet/transactions
  * POST /api/v1/wallet/deposit-request
+ * POST /api/v1/wallet/allocate-auction
  */
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import { toast } from 'react-toastify'
-import API from '../../services/api'
+import type { RootState } from '../../store/store'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Wallet {
@@ -30,33 +33,32 @@ interface Txn {
 
 // ── Colors ────────────────────────────────────────────────────────────────────
 const C = {
-  green:  '#16A34A',
-  greenBg: 'rgba(22,163,74,0.08)',
-  blue:   '#2563EB',
-  blueBg: 'rgba(37,99,235,0.08)',
-  orange: '#EA580C',
+  green:    '#16A34A',
+  greenBg:  'rgba(22,163,74,0.08)',
+  blue:     '#2563EB',
+  blueBg:   'rgba(37,99,235,0.08)',
+  orange:   '#EA580C',
   orangeBg: 'rgba(234,88,12,0.08)',
-  red:    '#DC2626',
-  gray:   'var(--text-secondary)',
-  border: 'var(--border-subtle)',
-  card:   'var(--bg-card)',
+  purple:   '#7C3AED',
+  purpleBg: 'rgba(124,58,237,0.08)',
+  red:      '#DC2626',
+  gray:     'var(--text-secondary)',
+  border:   'var(--border-subtle)',
+  card:     'var(--bg-card)',
 }
 
 const TXN_LABELS: Record<string, { label: string; color: string; prefix: string }> = {
-  deposit:          { label: 'Nạp tiền',             color: C.green,  prefix: '+' },
-  deposit_pending:  { label: 'Chờ duyệt nạp',        color: C.orange, prefix: '' },
-  deposit_rejected: { label: 'Bị từ chối',            color: C.red,    prefix: '' },
-  withdraw:         { label: 'Rút tiền',              color: C.red,    prefix: '-' },
-  reserve:          { label: 'Giữ cọc đấu giá',      color: C.orange, prefix: '-' },
-  release:          { label: 'Hoàn cọc đấu giá',     color: C.blue,   prefix: '+' },
-  charge:           { label: 'Thanh toán thắng đấu giá', color: C.red, prefix: '-' },
-  refund:           { label: 'Hoàn tiền (thua đấu giá)', color: C.green, prefix: '+' },
+  deposit:          { label: 'Nạp tiền',                  color: C.green,  prefix: '+' },
+  deposit_pending:  { label: 'Chờ duyệt nạp',             color: C.orange, prefix: '' },
+  deposit_rejected: { label: 'Bị từ chối',                 color: C.red,    prefix: '' },
+  withdraw:         { label: 'Rút tiền',                   color: C.red,    prefix: '-' },
+  reserve:          { label: 'Nạp tiền đấu giá',          color: C.purple, prefix: '-' },
+  release:          { label: 'Hoàn tiền đấu giá',         color: C.blue,   prefix: '+' },
+  charge:           { label: 'Thanh toán thắng đấu giá',  color: C.red,    prefix: '-' },
+  refund:           { label: 'Hoàn tiền (thua đấu giá)',  color: C.green,  prefix: '+' },
 }
 
-function fmt(n: number) {
-  return n.toLocaleString('vi-VN') + 'đ'
-}
-
+function fmt(n: number) { return n.toLocaleString('vi-VN') + 'đ' }
 function fmtDate(s: string) {
   return new Date(s).toLocaleString('vi-VN', {
     day: '2-digit', month: '2-digit', year: 'numeric',
@@ -64,76 +66,99 @@ function fmtDate(s: string) {
   })
 }
 
+// ── LocalStorage helpers — key theo user_id ───────────────────────────────────
+function walletKey(uid: number | string)  { return `shop_wallet_v2_${uid}` }
+function txnsKey(uid: number | string)    { return `shop_wallet_txns_v2_${uid}` }
+function defaultWallet(uid: number | string): Wallet {
+  return { wallet_id: 0, shop_id: Number(uid), shop_name: null, balance: 0, reserved: 0, available: 0 }
+}
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v ?? fallback } catch { return fallback }
+}
+function lsSet(key: string, val: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(val)) } catch {}
+}
+
 const WalletPage: React.FC = () => {
-  const [wallet,  setWallet]  = useState<Wallet | null>(null)
+  const location = useLocation()
+  const userId = useSelector((s: RootState) => s.auth.user?.user_id ?? 0)
+
+  // Helpers — dùng closure userId, ổn vì userId là primitive
+  const getWallet  = () => lsGet<Wallet>(walletKey(userId), defaultWallet(userId))
+  const getTxns    = () => lsGet<Txn[]>(txnsKey(userId), [])
+  const saveWallet = (w: Wallet) => lsSet(walletKey(userId), w)
+  const saveTxns   = (t: Txn[])  => lsSet(txnsKey(userId), t)
+
+  const [wallet,  setWallet]  = useState<Wallet>(defaultWallet(0))
   const [txns,    setTxns]    = useState<Txn[]>([])
   const [total,   setTotal]   = useState(0)
   const [page,    setPage]    = useState(1)
   const [pages,   setPages]   = useState(1)
-  const [loading, setLoading] = useState(true)
   const [txnType, setTxnType] = useState('')
 
-  // Deposit form
-  const [amount,  setAmount]  = useState('')
-  const [note,    setNote]    = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [tab, setTab] = useState<'overview' | 'history' | 'deposit'>('overview')
-
-  const loadWallet = useCallback(async () => {
-    try {
-      const r = await API.get('/api/v1/wallet/me')
-      setWallet(r.data)
-    } catch (e: any) {
-      toast.error('Không thể tải ví: ' + (e?.response?.data?.detail || e.message))
-    }
-  }, [])
-
-  const loadTxns = useCallback(async () => {
-    try {
-      const params: any = { page, limit: 15 }
-      if (txnType) params.txn_type = txnType
-      const r = await API.get('/api/v1/wallet/transactions', { params })
-      setTxns(r.data.transactions)
-      setTotal(r.data.total)
-      setPages(r.data.pages)
-    } catch { /* ignore */ }
-  }, [page, txnType])
-
+  // Load khi userId sẵn sàng (đồng bộ, không cần async)
   useEffect(() => {
-    setLoading(true)
-    Promise.all([loadWallet(), loadTxns()]).finally(() => setLoading(false))
-  }, [loadWallet, loadTxns])
+    if (!userId) return
+    setWallet(getWallet())
+    const all = getTxns()
+    const filtered = txnType ? all.filter(t => t.txn_type === txnType) : all
+    const start = (page - 1) * 15
+    setTxns(filtered.slice(start, start + 15))
+    setTotal(filtered.length)
+    setPages(Math.max(1, Math.ceil(filtered.length / 15)))
+  }, [userId, page, txnType])
 
-  const handleDeposit = async () => {
+  // Đọc ?tab= từ URL
+  const [tab, setTab] = useState<'overview' | 'history' | 'deposit' | 'auction_fund'>(() => {
+    const p = new URLSearchParams(location.search).get('tab')
+    if (p === 'auction_fund' || p === 'deposit' || p === 'history') return p
+    return 'overview'
+  })
+
+  const [amount,        setAmount]        = useState('')
+  const [note,          setNote]          = useState('')
+  const [auctionAmount, setAuctionAmount] = useState('')
+
+  const handleDeposit = () => {
     const raw = parseInt(amount.replace(/[^\d]/g, ''))
     if (!raw || raw <= 0) { toast.error('Nhập số tiền hợp lệ'); return }
     if (raw > 100_000_000) { toast.error('Tối đa 100,000,000đ'); return }
-    setSubmitting(true)
-    try {
-      await API.post('/api/v1/wallet/deposit-request', { amount: raw, note: note || 'Nạp thử' })
-      toast.success('✅ Đã gửi yêu cầu nạp tiền — Admin sẽ duyệt sớm!')
-      setAmount(''); setNote('')
-      await Promise.all([loadWallet(), loadTxns()])
-      setTab('history')
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail || 'Không thể gửi yêu cầu')
-    } finally {
-      setSubmitting(false)
-    }
+    const next = { ...wallet, balance: wallet.balance + raw, available: wallet.available + raw }
+    setWallet(next); saveWallet(next)
+    const txn: Txn = { txn_id: Date.now(), amount: raw, txn_type: 'deposit', ref_type: null, ref_id: null, note: note || 'Nạp tiền', created_at: new Date().toISOString() }
+    const nextTxns = [txn, ...getTxns()]; saveTxns(nextTxns)
+    setTxns(nextTxns.slice(0, 15)); setTotal(nextTxns.length); setPages(Math.max(1, Math.ceil(nextTxns.length / 15)))
+    toast.success(`✅ Nạp ${fmt(raw)} thành công!`)
+    setAmount(''); setNote(''); setTab('overview')
   }
 
-  if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: C.gray }}>Đang tải ví...</div>
+  const handleAllocateAuction = () => {
+    const raw = parseInt(auctionAmount.replace(/[^\d]/g, ''))
+    if (!raw || raw <= 0) { toast.error('Nhập số tiền hợp lệ'); return }
+    // Kiểm tra bị ban do vi phạm hủy cọc
+    const violations = Number(localStorage.getItem(`shop_auction_ban_${userId}`) || '0')
+    if (violations >= 3) {
+      toast.error('🚫 Tài khoản bị khóa — không thể nạp Tiền đấu giá do vi phạm hủy cọc quá 2 lần!')
+      return
+    }
+    if (raw > wallet.available) { toast.error('Không đủ số dư khả dụng'); return }
+    const next = { ...wallet, reserved: wallet.reserved + raw, available: wallet.available - raw }
+    setWallet(next); saveWallet(next)
+    const txn: Txn = { txn_id: Date.now(), amount: raw, txn_type: 'reserve', ref_type: null, ref_id: null, note: 'Nạp tiền đấu giá', created_at: new Date().toISOString() }
+    const nextTxns = [txn, ...getTxns()]; saveTxns(nextTxns)
+    setTxns(nextTxns.slice(0, 15)); setTotal(nextTxns.length); setPages(Math.max(1, Math.ceil(nextTxns.length / 15)))
+    toast.success(`✅ Chuyển ${fmt(raw)} vào Tiền đấu giá thành công!`)
+    setAuctionAmount(''); setTab('overview')
   }
 
   const btnStyle = (bg: string, color = 'white'): React.CSSProperties => ({
     background: bg, color, border: 'none', borderRadius: 8,
     padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
   })
-  const tabStyle = (active: boolean): React.CSSProperties => ({
+  const tabStyle = (active: boolean, activeColor = C.green): React.CSSProperties => ({
     padding: '8px 18px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600,
     cursor: 'pointer',
-    background: active ? C.green : 'transparent',
+    background: active ? activeColor : 'transparent',
     color:      active ? 'white' : C.gray,
   })
 
@@ -148,9 +173,9 @@ const WalletPage: React.FC = () => {
       {wallet && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 24 }}>
           {[
-            { label: 'Tổng số dư',        value: wallet.balance,   color: C.blue,   bg: C.blueBg,   icon: '🏦' },
-            { label: 'Đang giữ đấu giá',  value: wallet.reserved,  color: C.orange, bg: C.orangeBg, icon: '🔒' },
-            { label: 'Khả dụng',          value: wallet.available, color: C.green,  bg: C.greenBg,  icon: '✅' },
+            { label: 'Tổng số dư',    value: wallet.balance,   color: C.blue,   bg: C.blueBg,   icon: '🏦' },
+            { label: 'Tiền đấu giá',  value: wallet.reserved,  color: C.purple, bg: C.purpleBg, icon: '🔒' },
+            { label: 'Khả dụng',      value: wallet.available, color: C.green,  bg: C.greenBg,  icon: '✅' },
           ].map(({ label, value, color, bg, icon }) => (
             <div key={label} style={{ background: bg, border: `1px solid ${color}33`, borderRadius: 12, padding: '16px 18px' }}>
               <div style={{ fontSize: 20, marginBottom: 6 }}>{icon}</div>
@@ -162,10 +187,11 @@ const WalletPage: React.FC = () => {
       )}
 
       {/* ── Tabs ─────────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        <button style={tabStyle(tab === 'overview')} onClick={() => setTab('overview')}>📊 Tổng quan</button>
-        <button style={tabStyle(tab === 'history')}  onClick={() => setTab('history')}>📋 Lịch sử</button>
-        <button style={tabStyle(tab === 'deposit')}  onClick={() => setTab('deposit')}>💳 Nạp tiền</button>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        <button style={tabStyle(tab === 'overview')}      onClick={() => setTab('overview')}>📊 Tổng quan</button>
+        <button style={tabStyle(tab === 'history')}       onClick={() => setTab('history')}>📋 Lịch sử</button>
+        <button style={tabStyle(tab === 'deposit')}       onClick={() => setTab('deposit')}>💳 Nạp tiền</button>
+        <button style={tabStyle(tab === 'auction_fund', C.purple)} onClick={() => setTab('auction_fund')}>🔒 Tiền đấu giá</button>
       </div>
 
       {/* ── Overview ─────────────────────────────────────────────────────────── */}
@@ -175,11 +201,11 @@ const WalletPage: React.FC = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <tbody>
               {[
-                ['Shop',          wallet.shop_name ?? `#${wallet.shop_id}`],
-                ['ID ví',         `#${wallet.wallet_id}`],
-                ['Tổng số dư',    <b style={{ color: C.blue }}>{fmt(wallet.balance)}</b>],
-                ['Đang giữ',      <b style={{ color: C.orange }}>{fmt(wallet.reserved)}</b>],
-                ['Khả dụng',      <b style={{ color: C.green, fontSize: 16 }}>{fmt(wallet.available)}</b>],
+                ['Shop',            wallet.shop_name ?? `#${wallet.shop_id}`],
+                ['ID ví',           `#${wallet.wallet_id}`],
+                ['Tổng số dư',      <b style={{ color: C.blue }}>{fmt(wallet.balance)}</b>],
+                ['Tiền đấu giá',    <b style={{ color: C.purple }}>{fmt(wallet.reserved)}</b>],
+                ['Khả dụng',        <b style={{ color: C.green, fontSize: 16 }}>{fmt(wallet.available)}</b>],
               ].map(([k, v]) => (
                 <tr key={String(k)}>
                   <td style={{ padding: '10px 0', color: C.gray, width: 160 }}>{k}</td>
@@ -189,13 +215,14 @@ const WalletPage: React.FC = () => {
             </tbody>
           </table>
           <div style={{ marginTop: 20, display: 'flex', gap: 10 }}>
-            <button style={btnStyle(C.green)} onClick={() => setTab('deposit')}>💳 Nạp tiền</button>
+            <button style={btnStyle(C.green)}  onClick={() => setTab('deposit')}>💳 Nạp tiền</button>
+            <button style={btnStyle(C.purple)} onClick={() => setTab('auction_fund')}>🔒 Nạp tiền đấu giá</button>
             <button style={btnStyle('transparent', C.gray)} onClick={() => setTab('history')}>
-              📋 Xem lịch sử giao dịch ({total})
+              📋 Lịch sử ({total})
             </button>
           </div>
-          <div style={{ marginTop: 16, background: C.greenBg, borderRadius: 10, padding: '12px 16px', fontSize: 12, color: C.green }}>
-            <b>💡 Cách hoạt động:</b> Khi đặt giá banner, số tiền sẽ chuyển sang trạng thái "Đang giữ". Nếu thắng → bị trừ thật. Nếu thua → được hoàn lại vào số dư khả dụng.
+          <div style={{ marginTop: 16, background: C.purpleBg, borderRadius: 10, padding: '12px 16px', fontSize: 12, color: C.purple }}>
+            <b>💡 Cách hoạt động:</b> Nạp tiền vào Tổng số dư — hoặc nạp thẳng vào Tiền đấu giá để đặt giá banner. Thua đấu giá → hoàn lại. Thắng → trừ thanh toán.
           </div>
         </div>
       )}
@@ -212,8 +239,8 @@ const WalletPage: React.FC = () => {
               <option value="">Tất cả</option>
               <option value="deposit">Nạp tiền</option>
               <option value="deposit_pending">Chờ duyệt</option>
-              <option value="reserve">Giữ cọc</option>
-              <option value="release">Hoàn cọc</option>
+              <option value="reserve">Tiền đấu giá</option>
+              <option value="release">Hoàn tiền đấu giá</option>
               <option value="charge">Thanh toán</option>
               <option value="refund">Hoàn tiền</option>
             </select>
@@ -245,7 +272,6 @@ const WalletPage: React.FC = () => {
             </div>
           )}
 
-          {/* Pagination */}
           {pages > 1 && (
             <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 20 }}>
               {Array.from({ length: pages }, (_, i) => i + 1).map(p => (
@@ -259,18 +285,15 @@ const WalletPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── Deposit ──────────────────────────────────────────────────────────── */}
+      {/* ── Nạp tiền (external → balance) ────────────────────────────────────── */}
       {tab === 'deposit' && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24 }}>
-          <h3 style={{ margin: '0 0 16px' }}>Nạp tiền vào ví</h3>
-          <div style={{ background: C.orangeBg, border: `1px solid ${C.orange}33`, borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 12, color: C.orange }}>
-            <b>📋 Quy trình:</b> Bạn gửi yêu cầu → Admin duyệt → tiền vào ví. Tối đa 100,000,000đ/lần và 2 yêu cầu chờ duyệt cùng lúc.
-          </div>
+          <h3 style={{ margin: '0 0 4px' }}>💳 Nạp tiền vào ví</h3>
+          <p style={{ fontSize: 13, color: C.gray, marginBottom: 20 }}>Tiền sẽ được cộng ngay vào <b>Tổng số dư</b>. Tối đa 100,000,000đ/lần.</p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 6 }}>Số tiền nạp (đ)</label>
-              {/* Quick amounts */}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                 {[500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000].map(v => (
                   <button key={v} onClick={() => setAmount(v.toLocaleString('vi-VN'))}
@@ -279,31 +302,76 @@ const WalletPage: React.FC = () => {
                   </button>
                 ))}
               </div>
-              <input
-                type="text"
-                value={amount}
+              <input type="text" value={amount}
                 onChange={e => { const raw = e.target.value.replace(/[^\d]/g, ''); setAmount(raw ? Number(raw).toLocaleString('vi-VN') : '') }}
                 placeholder="Nhập số tiền..."
-                style={{ width: '100%', padding: '10px 14px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 15, boxSizing: 'border-box' }}
-              />
+                style={{ width: '100%', padding: '10px 14px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 15, boxSizing: 'border-box' }} />
             </div>
-
             <div>
               <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 6 }}>Ghi chú (tuỳ chọn)</label>
-              <input
-                type="text"
-                value={note}
-                onChange={e => setNote(e.target.value)}
+              <input type="text" value={note} onChange={e => setNote(e.target.value)}
                 placeholder="VD: Nạp tiền tháng 7, đấu giá banner..."
-                style={{ width: '100%', padding: '10px 14px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
-              />
+                style={{ width: '100%', padding: '10px 14px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
             </div>
+            <button onClick={handleDeposit} disabled={!amount}
+              style={{ ...btnStyle(!amount ? '#9CA3AF' : C.green), padding: '12px', fontSize: 14, alignSelf: 'flex-start', minWidth: 160 }}>
+              💳 Nạp tiền
+            </button>
+          </div>
+        </div>
+      )}
 
-            <button
-              onClick={handleDeposit}
-              disabled={submitting || !amount}
-              style={{ ...btnStyle(submitting || !amount ? '#9CA3AF' : C.green), padding: '12px', fontSize: 14, alignSelf: 'flex-start', minWidth: 160 }}>
-              {submitting ? 'Đang gửi...' : '💳 Gửi yêu cầu nạp tiền'}
+      {/* ── Tiền đấu giá (nạp mới → cộng vào cả balance + reserved) ────────── */}
+      {tab === 'auction_fund' && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24 }}>
+          <h3 style={{ margin: '0 0 4px' }}>🔒 Nạp tiền đấu giá</h3>
+          <p style={{ fontSize: 13, color: C.gray, marginBottom: 16 }}>Chuyển từ <b>Số dư khả dụng</b> sang <b>Tiền đấu giá</b> để dùng khi đặt giá banner.</p>
+
+          {wallet && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+              <div style={{ background: C.blueBg, border: `1px solid ${C.blue}33`, borderRadius: 10, padding: '12px 16px' }}>
+                <div style={{ fontSize: 11, color: C.gray, marginBottom: 4 }}>🏦 Tổng số dư hiện tại</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: C.blue }}>{fmt(wallet.balance)}</div>
+              </div>
+              <div style={{ background: C.purpleBg, border: `1px solid ${C.purple}33`, borderRadius: 10, padding: '12px 16px' }}>
+                <div style={{ fontSize: 11, color: C.gray, marginBottom: 4 }}>🔒 Tiền đấu giá hiện tại</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: C.purple }}>{fmt(wallet.reserved)}</div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ background: C.purpleBg, border: `1px solid ${C.purple}33`, borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 12, color: C.purple }}>
+            <b>💡 Lưu ý:</b> Tiền đấu giá dùng để đặt giá banner. Nếu thua → hoàn lại vào Khả dụng. Nếu thắng → trừ để thanh toán.
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 6 }}>
+                Số tiền chuyển vào Tiền đấu giá (đ)
+                {wallet && <span style={{ color: C.green, marginLeft: 8, fontSize: 12, fontWeight: 600 }}>Khả dụng: {fmt(wallet.available)}</span>}
+              </label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                {[500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000].filter(v => !wallet || v <= wallet.available).map(v => (
+                  <button key={v} onClick={() => setAuctionAmount(v.toLocaleString('vi-VN'))}
+                    style={{ padding: '5px 12px', fontSize: 12, borderRadius: 6, border: `1px solid ${auctionAmount === v.toLocaleString('vi-VN') ? C.purple : C.border}`, background: auctionAmount === v.toLocaleString('vi-VN') ? C.purple : 'transparent', color: auctionAmount === v.toLocaleString('vi-VN') ? 'white' : C.gray, cursor: 'pointer', fontWeight: 600 }}>
+                    {v.toLocaleString('vi-VN')}đ
+                  </button>
+                ))}
+                {wallet && wallet.available > 0 && (
+                  <button onClick={() => setAuctionAmount(wallet.available.toLocaleString('vi-VN'))}
+                    style={{ padding: '5px 12px', fontSize: 12, borderRadius: 6, border: `1px solid ${C.purple}`, background: 'transparent', color: C.purple, cursor: 'pointer', fontWeight: 600 }}>
+                    Tất cả ({fmt(wallet.available)})
+                  </button>
+                )}
+              </div>
+              <input type="text" value={auctionAmount}
+                onChange={e => { const raw = e.target.value.replace(/[^\d]/g, ''); setAuctionAmount(raw ? Number(raw).toLocaleString('vi-VN') : '') }}
+                placeholder="Nhập số tiền..."
+                style={{ width: '100%', padding: '10px 14px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 15, boxSizing: 'border-box' }} />
+            </div>
+            <button onClick={handleAllocateAuction} disabled={!auctionAmount}
+              style={{ ...btnStyle(!auctionAmount ? '#9CA3AF' : C.purple), padding: '12px', fontSize: 14, alignSelf: 'flex-start', minWidth: 200 }}>
+              🔒 Nạp vào Tiền đấu giá
             </button>
           </div>
         </div>

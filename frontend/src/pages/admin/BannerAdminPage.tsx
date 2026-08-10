@@ -535,14 +535,14 @@ const BannerAdminPage: React.FC = () => {
   // ── Counts ───────────────────────────────────────────────────────────
   const pendingCount  = banners.filter(b => b.status === 'pending').length  + auctionSubs.filter(({ sub }) => sub.status === 'pending' || sub.status === 'awaiting_edit').length + buyNowTxs.filter(t => t.status === 'pending_review' || t.status === 'awaiting_edit').length
   const activeCount   = banners.filter(b => b.status === 'active').length   + auctionSubs.filter(({ sub }) => sub.status === 'approved').length + buyNowTxs.filter(t => t.status === 'approved').length
-  const rejectedCount = banners.filter(b => b.status === 'rejected').length + auctionSubs.filter(({ sub }) => sub.status === 'rejected').length + buyNowTxs.filter(t => t.status === 'rejected').length
+  const rejectedCount = banners.filter(b => b.status === 'rejected').length + auctionSubs.filter(({ sub }) => sub.status === 'rejected' || sub.status === 'cancelled').length + buyNowTxs.filter(t => t.status === 'rejected').length
   const counts = { pending: pendingCount, active: activeCount, rejected: rejectedCount }
 
   const regularByTab = banners.filter(b => b.status === tab)
   const auctionFiltered = tab === 'active'
     ? auctionSubs.filter(({ sub }) => sub.status === 'approved')
     : tab === 'rejected'
-    ? auctionSubs.filter(({ sub }) => sub.status === 'rejected')
+    ? auctionSubs.filter(({ sub }) => sub.status === 'rejected' || sub.status === 'cancelled')
     : auctionSubs.filter(({ sub }) => sub.status === 'pending' || sub.status === 'awaiting_edit')
 
   const statusColor: Record<string, string> = { active: C.success, pending: C.warning, rejected: C.error }
@@ -697,6 +697,9 @@ const BannerAdminPage: React.FC = () => {
               )}
               {sub.status === 'awaiting_edit' && (
                 <span style={badge('#7C3AED', '#EDE9FE')}>✏️ Đợi sửa</span>
+              )}
+              {sub.status === 'cancelled' && (
+                <span style={badge('#DC2626', 'rgba(220,38,38,0.1)')}>🚫 Shop hủy cọc</span>
               )}
               {/* Số lần từ chối n/3 (auction) hoặc n/10 (buy-now) */}
               {isBanner && (sub as BannerSubmission).rejectCount != null && (sub as BannerSubmission).rejectCount! > 0 && (() => {
@@ -897,6 +900,11 @@ const BannerAdminPage: React.FC = () => {
           {sub.status === 'awaiting_edit' && (
             <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(124,58,237,0.07)', fontSize: 12, color: '#7C3AED' }}>
               ✏️ Đang chờ shop chỉnh sửa và gửi lại.
+            </div>
+          )}
+          {sub.status === 'cancelled' && (
+            <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(220,38,38,0.07)', fontSize: 12, color: '#DC2626' }}>
+              🚫 Shop đã hủy cọc — đơn này không cần duyệt nữa. Tiền cọc không được hoàn trả.
             </div>
           )}
 

@@ -75,7 +75,7 @@ export const BANNER_POSITIONS: BannerPositionDef[] = [
 ]
 
 export const AUCTION_DURATION_MS = 5 * 60 * 1000
-export const MIN_STEP = 50_000
+export const MIN_STEP = 2  // bội số của 2
 export const TURN_COOLDOWN_MS = 10 * 1000
 export const PAYMENT_WINDOW_MS = 60 * 60 * 1000
 export const DEPOSIT_WINDOW_MS = 30 * 60 * 1000   // 30 phút đặt cọc
@@ -100,12 +100,13 @@ export interface BannerAuctionSession {
   paused?: boolean
   status: 'active' | 'ended'
   winner?: BannerBid
-  confirmation?: 'pending' | 'deposit_paid' | 'declined' | 'expired' | 'paid'
+  confirmation?: 'pending' | 'deposit_paid' | 'declined' | 'expired' | 'paid' | 'deposit_cancelled'
   depositDeadline?: string   // hạn 30p đặt cọc
   depositAmount?: number     // 20% số tiền thắng
   paymentDeadline?: string   // hạn thanh toán đủ (sau khi cọc)
   displayDurationMs?: number
   buyNowPurchases?: Array<{ shopName: string; time: string }> // danh sách shop đã mua slot
+  endPriceHits?: number      // số lần bid chạm endPrice (max 3 → kết thúc phiên)
 }
 
 /** True khi phiên đã qua thời gian chờ và đang nhận đặt giá */
@@ -130,7 +131,7 @@ export interface AuctionAdminSettings {
   locked: boolean
 }
 
-export interface PlaceBidResult { ok: boolean; error?: string; session?: BannerAuctionSession }
+export interface PlaceBidResult { ok: boolean; error?: string; session?: BannerAuctionSession; endPriceHit?: number }
 
 // ── Yêu cầu kích thước/định dạng ảnh banner cho từng vị trí ──────────────────
 export interface ImageSpec {
@@ -299,7 +300,7 @@ export function getMinNextBid(position: BannerPositionKey): number {
   const data = getStore()
   const basePrice = data.settings[position]?.basePrice ?? BANNER_POSITIONS.find(d => d.key === position)!.basePrice
   const highest = getHighestBid(position)
-  return (highest ? highest.amount : basePrice - MIN_STEP) + MIN_STEP
+  return (highest ? highest.amount : basePrice) + 2
 }
 
 export function getShopCooldownRemaining(position: BannerPositionKey, shopName: string): number {
@@ -314,7 +315,8 @@ export function placeBid(position: BannerPositionKey, shopName: string, amount: 
   if (!session) return { ok: false, error: 'Vị trí này đang bị Admin tạm khoá, chưa thể đặt giá.' }
   if (session.paused) return { ok: false, error: 'Phiên đấu giá đang bị tạm dừng bởi Admin.' }
   const basePrice = data.settings[position]?.basePrice ?? BANNER_POSITIONS.find(d => d.key === position)!.basePrice
-  const minNext = (session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice - MIN_STEP) + MIN_STEP
+  const highest = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)).amount : basePrice
+  const minNext = highest + 2
   if (!isAuctionLive(session)) return { ok: false, error: `⏳ Phiên chưa bắt đầu. Vui lòng chờ đến ${session.scheduledStartAt ? new Date(session.scheduledStartAt).toLocaleTimeString('vi-VN') : ''}` }
   if (new Date(session.endsAt).getTime() <= Date.now()) return { ok: false, error: 'Phiên đấu giá đã kết thúc, vui lòng đặt giá ở phiên mới.' }
   const lastByShop = session.bids.find(b => b.shopName === shopName)
@@ -325,10 +327,25 @@ export function placeBid(position: BannerPositionKey, shopName: string, amount: 
       return { ok: false, error: `Vui lòng chờ ${remainingSec}s nữa để đặt giá lượt tiếp theo.` }
     }
   }
-  if (amount < minNext) return { ok: false, error: `Giá đặt phải tối thiểu ${minNext.toLocaleString('vi-VN')}đ` }
+  if (amount < minNext) return { ok: false, error: `Giá đặt tối thiểu ${minNext.toLocaleString('vi-VN')}đ.` }
+  if ((amount - highest) % 2 !== 0) return { ok: false, error: 'Giá đặt phải là bội số của 2đ.' }
   const bid: BannerBid = { id: 'bid-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), shopName, amount, bannerImage, time: new Date().toISOString() }
-  session.bids.unshift(bid); data.sessions[position] = session; saveStore(data)
-  return { ok: true, session }
+  session.bids.unshift(bid)
+
+  // ── endPrice: restart về 10s, tối đa 3 lần rồi kết thúc ─────────────────
+  const endPrice = data.settings[position]?.endPrice
+  if (endPrice && amount >= endPrice) {
+    const hits = (session.endPriceHits ?? 0) + 1
+    session.endPriceHits = hits
+    if (hits >= 3) {
+      session.endsAt = new Date(Date.now() - 1).toISOString() // kết thúc ngay
+    } else {
+      session.endsAt = new Date(Date.now() + 10_000).toISOString() // restart 10s
+    }
+  }
+
+  data.sessions[position] = session; saveStore(data)
+  return { ok: true, session, endPriceHit: endPrice && amount >= endPrice ? session.endPriceHits : undefined }
 }
 
 /** Shop dùng "Mua ngay" — mua 1 slot, tối đa buySlots shop */
@@ -350,8 +367,9 @@ export function injectFakeBid(position: BannerPositionKey): BannerBid | null {
   if (!session || new Date(session.endsAt).getTime() <= Date.now()) return null
   const basePrice = data.settings[position]?.basePrice ?? BANNER_POSITIONS.find(d => d.key === position)!.basePrice
   const highest = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)) : undefined
-  const base = highest ? highest.amount : basePrice - MIN_STEP
-  const bump = MIN_STEP + Math.floor(Math.random() * 4) * 25_000
+  const base = highest ? highest.amount : basePrice
+  // Bot đặt thêm một số chẵn ngẫu nhiên (2,000 – 100,000đ)
+  const bump = (Math.floor(Math.random() * 50) + 1) * 2_000
   const amount = base + bump
   const bid: BannerBid = {
     id: 'fake-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
@@ -420,6 +438,24 @@ export function payDeposit(historyId: string, draft?: { title: string; link?: st
       saveStore(data)
     }
   }
+  return true
+}
+
+/** Shop hủy cọc — mất tiền cọc, đơn nộp admin bị hủy luôn */
+export function cancelDeposit(historyId: string): boolean {
+  const data = getStore()
+  const idx = data.history.findIndex(h => h.id === historyId)
+  if (idx === -1) return false
+  if (data.history[idx].confirmation !== 'deposit_paid') return false
+  // Hủy session
+  data.history[idx] = { ...data.history[idx], confirmation: 'deposit_cancelled' }
+  // Hủy submission liên quan (nếu có) — admin không duyệt nữa
+  data.submissions = data.submissions.map(s =>
+    s.historyId === historyId && s.status !== 'approved'
+      ? { ...s, status: 'cancelled' as const }
+      : s
+  )
+  saveStore(data)
   return true
 }
 
