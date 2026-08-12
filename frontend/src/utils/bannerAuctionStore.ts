@@ -678,7 +678,7 @@ export function adminCreateBanner(opts: {
     id: fakeHistId,
     position: opts.position,
     startedAt: now,
-    endedAt: now,
+    endsAt: now,
     bids: [],
     status: 'ended',
     confirmation: 'paid',

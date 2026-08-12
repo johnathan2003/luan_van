@@ -1,0 +1,715 @@
+import React, { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../hooks/useAuth'
+import { useTheme } from '../../hooks/useTheme'
+import { useAppSelector, useAppDispatch } from '../../store/hooks'
+import { resetFilters } from '../../store/slices/productSlice'
+import NotificationCenter from './NotificationCenter'
+import { formatCurrency } from '../../utils/formatters'
+import { getImageUrl } from '../../utils/helpers'
+import {
+  getSearchHistory, saveSearchTerm, removeSearchTerm, clearSearchHistory,
+  getRecentlyViewed, type SearchHistoryItem
+} from '../../store/searchTrackingStore'
+
+const ROLE_META: Record<string, { icon: string; color: string; label: string }> = {
+  admin:    { icon: '⚙️', color: '#1D4ED8', label: 'Admin' },
+  shop:     { icon: '🏪', color: '#16A34A', label: 'Shop' },
+  shipper:  { icon: '🚚', color: '#D97706', label: 'Shipper' },
+  user:     { icon: '👤', color: '#7C3AED', label: 'Khách hàng' },
+  employee: { icon: '👷', color: '#DB2777', label: 'Nhân viên' },
+}
+
+const BTN       = 36
+const ROLE_STEP = BTN + 6
+
+const LOGO_LIGHT = import.meta.env.VITE_LOGO_LIGHT || import.meta.env.VITE_LOGO_URL || '/logo.png'
+const LOGO_DARK  = import.meta.env.VITE_LOGO_DARK  || '/logo1.png'
+const BRAND_NAME = import.meta.env.VITE_APP_NAME   || 'BuyZo'
+
+const ANIM_CSS = '@keyframes fsd{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}} @keyframes sug{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}'
+
+// ─── SuggestBox ───────────────────────────────────────────────────────────────
+interface SuggestBoxProps {
+  query: string
+  onNavigate: (path: string) => void
+  onRefreshHistory: () => void
+}
+
+// helper: highlight chữ khớp
+const Hl: React.FC<{ text: string; q: string }> = ({ text, q }) => {
+  if (!q) return <>{text}</>
+  const idx = text.toLowerCase().indexOf(q.toLowerCase())
+  if (idx < 0) return <>{text}</>
+  return <>{text.slice(0, idx)}<strong style={{ color: 'var(--primary,#7C3AED)' }}>{text.slice(idx, idx + q.length)}</strong>{text.slice(idx + q.length)}</>
+}
+
+const SuggestBox: React.FC<SuggestBoxProps> = ({ query, onNavigate, onRefreshHistory }) => {
+  const [products,  setProducts]  = React.useState<any[]>([])
+  const [shops,     setShops]     = React.useState<any[]>([])
+  const [loading,   setLoading]   = React.useState(false)
+  // dữ liệu placeholder (load 1 lần khi mount)
+  const [flashItems,    setFlashItems]    = React.useState<any[]>([])
+  const [featuredItems, setFeaturedItems] = React.useState<any[]>([])
+  const [suggestShops,  setSuggestShops]  = React.useState<any[]>([])
+  const [history,       setHistory]       = React.useState<SearchHistoryItem[]>([])
+  const viewed = getRecentlyViewed().slice(0, 2)
+
+  React.useEffect(() => {
+    setHistory(getSearchHistory())
+    // fetch flash sale + nổi bật + shop gợi ý
+    fetch('/api/v1/shop/public/featured/products?limit=6')
+      .then(r => r.ok ? r.json() : { products: [] })
+      .then(d => {
+        const all: any[] = d.products ?? []
+        setFlashItems(all.slice(0, 2))
+        setFeaturedItems(all.slice(2, 4))
+      }).catch(() => {})
+    fetch('/api/v1/shop/search?q=&limit=4')
+      .then(r => r.ok ? r.json() : { shops: [] })
+      .then(d => setSuggestShops(d.shops ?? []))
+      .catch(() => {})
+  }, [])
+
+  // reload history khi parent báo cập nhật
+  React.useEffect(() => { setHistory(getSearchHistory()) }, [onRefreshHistory])
+
+  React.useEffect(() => {
+    if (!query.trim()) { setProducts([]); setShops([]); return }
+    const timer = setTimeout(() => {
+      setLoading(true)
+      const q = encodeURIComponent(query.trim())
+      Promise.all([
+        fetch(`/api/v1/products?search=${q}&limit=5`).then(r => r.ok ? r.json() : { items: [] }),
+        fetch(`/api/v1/shop/search?q=${q}&limit=4`).then(r => r.ok ? r.json() : { shops: [] }),
+      ]).then(([pRes, sRes]) => {
+        setProducts(pRes.items ?? [])
+        setShops(sRes.shops ?? [])
+      }).finally(() => setLoading(false))
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  const row = (e: React.MouseEvent<HTMLDivElement>, enter: boolean) => {
+    (e.currentTarget as HTMLDivElement).style.background = enter ? 'var(--bg-highlight,#f3f4f6)' : 'transparent'
+  }
+
+  const SectionLabel = ({ icon, label, action, onAction }: { icon: string; label: string; action?: string; onAction?: () => void }) => (
+    <div style={{ padding: '10px 16px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span style={{ fontSize: 13 }}>{icon}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</span>
+      </div>
+      {action && onAction && (
+        <button onMouseDown={e => { e.preventDefault(); onAction() }}
+          style={{ fontSize: 11, color: 'var(--primary,#7C3AED)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
+          {action}
+        </button>
+      )}
+    </div>
+  )
+
+  const ProductRow = ({ p, badge, badgeColor }: { p: any; badge?: string; badgeColor?: string }) => (
+    <div onMouseDown={e => { e.preventDefault(); onNavigate(`/products/${p.product_id}`) }}
+      onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
+      {p.image_urls?.[0] || p.image_url
+        ? <img src={p.image_urls?.[0] ?? p.image_url} alt={p.product_name} style={{ width: 38, height: 38, borderRadius: 6, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+        : <div style={{ width: 38, height: 38, borderRadius: 6, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>📦</div>
+      }
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Hl text={p.product_name} q={query} />
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: badgeColor === '#ef4444' ? '#ef4444' : 'var(--primary,#7C3AED)' }}>{formatCurrency(parseFloat(p.price))}</span>
+          {badge && <span style={{ fontSize: 10, background: badgeColor === '#ef4444' ? '#fef2f2' : 'rgba(124,58,237,0.1)', color: badgeColor ?? 'var(--primary,#7C3AED)', fontWeight: 700, padding: '1px 6px', borderRadius: 10 }}>{badge}</span>}
+        </div>
+      </div>
+    </div>
+  )
+
+  const Divider = () => <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
+
+  // ── Khi đang gõ ──────────────────────────────────────────────────────────────
+  if (query.trim()) {
+    if (loading) return <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>Đang tìm kiếm...</div>
+    const empty = products.length === 0 && shops.length === 0
+    return (
+      <div>
+        {products.length > 0 && (
+          <>
+            <SectionLabel icon="📦" label="Sản phẩm" action="Xem tất cả →" onAction={() => onNavigate(`/products?search=${encodeURIComponent(query.trim())}`)} />
+            {products.map((p: any) => <ProductRow key={p.product_id} p={p} />)}
+          </>
+        )}
+        {products.length > 0 && shops.length > 0 && <Divider />}
+        {shops.length > 0 && (
+          <>
+            <SectionLabel icon="🏪" label="Cửa hàng" />
+            {shops.map((sh: any) => (
+              <div key={sh.shop_id} onMouseDown={e => { e.preventDefault(); onNavigate(`/shops/${sh.shop_id}`) }}
+                onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
+                {sh.avatar_url
+                  ? <img src={sh.avatar_url} alt={sh.shop_name} style={{ width: 38, height: 38, borderRadius: 6, objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+                  : <div style={{ width: 38, height: 38, borderRadius: 6, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🏪</div>
+                }
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Hl text={sh.shop_name} q={query} /></p>
+                  <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>⭐ {sh.rating}{sh.address && ` · ${sh.address}`}</p>
+                </div>
+                <span style={{ flexShrink: 0, padding: '2px 8px', background: '#dcfce7', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#16a34a' }}>Shop</span>
+              </div>
+            ))}
+          </>
+        )}
+        {empty && (
+          <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>🔍</div>
+            Không tìm thấy kết quả cho "{query}"
+          </div>
+        )}
+        {!empty && (
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-highlight,#f8f9fa)' }}>
+            <button onMouseDown={e => { e.preventDefault(); onNavigate(`/products?search=${encodeURIComponent(query.trim())}`) }}
+              style={{ width: '100%', padding: '7px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary,#7C3AED)', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              🔍 Tìm kiếm tất cả kết quả cho "{query}"
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Khi chưa gõ: hiện gợi ý đầy đủ ─────────────────────────────────────────
+  const recentHistory = history.slice(0, 5)
+  const hasAny = viewed.length > 0 || flashItems.length > 0 || featuredItems.length > 0 || suggestShops.length > 0 || recentHistory.length > 0
+
+  if (!hasAny) return (
+    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
+      Nhập từ khoá để tìm sản phẩm hoặc cửa hàng
+    </div>
+  )
+
+  return (
+    <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+      {/* Vừa xem */}
+      {viewed.length > 0 && (
+        <>
+          <SectionLabel icon="🕐" label="Vừa xem" />
+          {viewed.map((p: any) => <ProductRow key={p.product_id} p={p} />)}
+          <Divider />
+        </>
+      )}
+
+      {/* Flash Sale */}
+      {flashItems.length > 0 && (
+        <>
+          <SectionLabel icon="⚡" label="Flash Sale" />
+          {flashItems.map((p: any) => <ProductRow key={p.product_id} p={p} badge="⚡ HOT" badgeColor="#ef4444" />)}
+          <Divider />
+        </>
+      )}
+
+      {/* Nổi bật */}
+      {featuredItems.length > 0 && (
+        <>
+          <SectionLabel icon="🌟" label="Nổi bật" />
+          {featuredItems.map((p: any) => <ProductRow key={p.product_id} p={p} badge="🌟 TOP" />)}
+          <Divider />
+        </>
+      )}
+
+      {/* Shop gợi ý */}
+      {suggestShops.length > 0 && (
+        <>
+          <SectionLabel icon="🏪" label="Cửa hàng nổi bật" />
+          {suggestShops.slice(0, 4).map((sh: any) => (
+            <div key={sh.shop_id} onMouseDown={e => { e.preventDefault(); onNavigate(`/shops/${sh.shop_id}`) }}
+              onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
+              {sh.avatar_url
+                ? <img src={sh.avatar_url} alt={sh.shop_name} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+                : <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>🏪</div>
+              }
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sh.shop_name}</p>
+              </div>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>⭐ {sh.rating}</span>
+            </div>
+          ))}
+          <Divider />
+        </>
+      )}
+
+      {/* Lịch sử tìm kiếm */}
+      {recentHistory.length > 0 && (
+        <>
+          <SectionLabel icon="🔍" label="Tìm kiếm gần đây" action="Xoá tất cả"
+            onAction={() => { clearSearchHistory(); setHistory([]) }} />
+          {recentHistory.map((item, i) => (
+            <div key={i}
+              onMouseEnter={e => row(e, true)} onMouseLeave={e => row(e, false)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 16px', cursor: 'pointer', transition: 'background 0.15s' }}>
+              <span style={{ fontSize: 14, color: 'var(--text-secondary)', flexShrink: 0 }}>{item.type === 'shop' ? '🏪' : '🔍'}</span>
+              <span onMouseDown={e => { e.preventDefault(); onNavigate(item.type === 'shop' ? `/shops?q=${encodeURIComponent(item.q)}` : `/products?search=${encodeURIComponent(item.q)}`) }}
+                style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{item.q}</span>
+              <button onMouseDown={e => { e.preventDefault(); removeSearchTerm(item.q); setHistory(h => h.filter(x => x.q !== item.q)) }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 16, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Dropdown menu item helper ────────────────────────────────────────────────
+interface MenuItemProps {
+  icon: string
+  label: string
+  sub?: string
+  path: string
+  onClick: () => void
+}
+const MenuItem: React.FC<MenuItemProps> = ({ icon, label, sub, path, onClick }) => (
+  <Link to={path} onClick={onClick}
+    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', fontSize: 14, color: 'var(--text-primary)', textDecoration: 'none', transition: 'background 0.15s' }}
+    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-highlight,#f3f4f6)')}
+    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+    <span style={{ fontSize: 18, width: 24, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+    <div>
+      <p style={{ margin: 0, fontWeight: 500, lineHeight: 1.3 }}>{label}</p>
+      {sub && <p style={{ margin: 0, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.3 }}>{sub}</p>}
+    </div>
+  </Link>
+)
+
+const NavSectionLabel: React.FC<{ children: React.ReactNode; border?: boolean }> = ({ children, border }) => (
+  <div style={{ padding: '8px 16px 4px', fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6, borderTop: border ? '1px solid var(--border-subtle)' : 'none', marginTop: border ? 4 : 0 }}>
+    {children}
+  </div>
+)
+
+// ─── Navbar ───────────────────────────────────────────────────────────────────
+const Navbar: React.FC = () => {
+  const { user, isAuthenticated, signOut, isAdmin, isShop, isShipper, currentRole, switchRole } = useAuth()
+  const { resolvedTheme } = useTheme()
+  const { cart }          = useAppSelector(s => s.cart)
+  const navigate          = useNavigate()
+  const dispatch          = useAppDispatch()
+
+  const [radialOpen,      setRadialOpen]      = useState(false)
+  const [logoError,       setLogoError]       = useState(false)
+  const [searchQuery,     setSearchQuery]     = useState('')
+  const [searchFocus,     setSearchFocus]     = useState(false)
+  const [historyVersion,  setHistoryVersion]  = useState(0)
+
+  const radialRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!radialOpen) return
+    const h = (e: MouseEvent) => {
+      if (radialRef.current && !radialRef.current.contains(e.target as Node)) setRadialOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [radialOpen])
+
+  const logoSrc = resolvedTheme === 'dark' ? LOGO_DARK : LOGO_LIGHT
+  useEffect(() => { setLogoError(false) }, [logoSrc])
+
+  const handleLogout = () => { signOut(); navigate('/login') }
+
+  const availableRoles = user?.roles?.filter(r => r.status === 'active') || []
+  const roleNames      = availableRoles.map(r => r.role_name)
+
+  const PURPLE = '#6D28D9'
+  const roleGradient: Record<string, string> = {
+    admin:                      `linear-gradient(to right, ${PURPLE} 0%, #1D4ED8 100%)`,
+    shop:                       `linear-gradient(to right, ${PURPLE} 0%, #16A34A 100%)`,
+    shipper:                    `linear-gradient(to right, ${PURPLE} 0%, #D97706 100%)`,
+    employee:                   `linear-gradient(to right, ${PURPLE} 0%, #DB2777 100%)`,
+    warehouse_hub_manager:      `linear-gradient(to right, #0F766E 0%, #0D9488 100%)`,
+    warehouse_district_manager: `linear-gradient(to right, #6D28D9 0%, #7C3AED 100%)`,
+    warehouse_ward_manager:     `linear-gradient(to right, #C2410C 0%, #EA580C 100%)`,
+    warehouse_manager:          `linear-gradient(to right, #374151 0%, #4B5563 100%)`,
+  }
+  const navBg = (isAuthenticated && currentRole && roleGradient[currentRole])
+    ? roleGradient[currentRole]
+    : 'var(--topbar-gradient, var(--bg-topbar))'
+
+  const goTo = (rn: string) => {
+    switchRole(rn)
+    setRadialOpen(false)
+    const dest = rn === 'admin' ? '/admin'
+      : rn === 'shop' ? '/shop'
+      : rn === 'shipper' ? '/shipper'
+      : rn === 'employee' ? '/employee'
+      : rn === 'warehouse_hub_manager' ? '/hub'
+      : rn === 'warehouse_district_manager' ? '/district'
+      : rn === 'warehouse_ward_manager' ? '/ward'
+      : rn === 'warehouse_manager' ? '/warehouse'
+      : '/'
+    setTimeout(() => navigate(dest), 50)
+  }
+
+  const bellShift = radialOpen ? roleNames.length * ROLE_STEP : 0
+
+  const handleSearchNav = (path: string) => {
+    setSearchFocus(false)
+    setSearchQuery('')
+    if (path.startsWith('#')) {
+      const el = document.getElementById(path.slice(1))
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } else {
+        navigate('/')
+        setTimeout(() => {
+          document.getElementById(path.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 400)
+      }
+      return
+    }
+    navigate(path)
+  }
+
+  const showSuggest = searchFocus
+
+  // Role badge color
+  const roleBadgeStyle = (role: string | undefined) => {
+    if (role === 'shop')                        return { bg: '#DBEAFE', color: '#1D4ED8', label: '🏪 Shop' }
+    if (role === 'admin')                       return { bg: '#FEF3C7', color: '#D97706', label: '⚙️ Admin' }
+    if (role === 'shipper')                     return { bg: '#FEF9C3', color: '#854D0E', label: '🚚 Shipper' }
+    if (role === 'user')                        return { bg: '#EDE9FE', color: '#7C3AED', label: '👤 Khách hàng' }
+    if (role === 'employee')                    return { bg: '#FCE7F3', color: '#DB2777', label: '👷 Nhân viên' }
+    if (role === 'warehouse_hub_manager')       return { bg: '#CCFBF1', color: '#0F766E', label: '🏢 Kho Tổng' }
+    if (role === 'warehouse_district_manager')  return { bg: '#EDE9FE', color: '#6D28D9', label: '🏬 Kho Quận' }
+    if (role === 'warehouse_ward_manager')      return { bg: '#FED7AA', color: '#C2410C', label: '🏠 Kho Phường' }
+    if (role === 'warehouse_manager')           return { bg: '#F3F4F6', color: '#374151', label: '🏭 Kho' }
+    return { bg: '#F3F4F6', color: '#6B7280', label: '👤 Khách hàng' }
+  }
+  const badge = roleBadgeStyle(currentRole)
+
+  const close = () => setRadialOpen(false)
+
+  return (
+    <>
+    <nav style={{
+      background: navBg,
+      color: 'var(--text-on-topbar)',
+      height: 'var(--navbar-height)',
+      display: 'flex', alignItems: 'center',
+      position: 'sticky', top: 0, zIndex: 1000,
+      boxShadow: 'var(--topbar-shadow, var(--shadow-md))',
+      transition: 'background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease',
+    }}>
+      <style dangerouslySetInnerHTML={{ __html: ANIM_CSS }} />
+
+      <div className="container navbar-inner" style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 'var(--navbar-gap)', width: '100%',
+        paddingLeft: 'var(--navbar-padding-x)', paddingRight: 'var(--navbar-padding-x)',
+      }}>
+
+        {/* Logo — click khi đang ở trang chủ thì reset filter & scroll lên đầu */}
+        <div title={BRAND_NAME} onClick={() => {
+          if (window.location.pathname === '/') {
+            dispatch(resetFilters())
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+          } else {
+            navigate('/')
+          }
+        }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, textDecoration: 'none', marginRight: 'var(--space-2)', gap: 2, cursor: 'pointer' }}>
+          {!logoError
+            ? <img key={logoSrc} src={logoSrc} alt={BRAND_NAME} onError={() => setLogoError(true)} style={{ height: 'var(--logo-height)', width: 'auto', maxWidth: 'var(--logo-max-width)', objectFit: 'contain', display: 'block' }} />
+            : <span style={{ fontWeight: 700, fontSize: 28, color: 'var(--text-on-topbar)', letterSpacing: -0.5 }}>{BRAND_NAME}</span>
+          }
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.5, color: 'var(--text-on-topbar)', opacity: 0.85, lineHeight: 1 }}>BuyZO.com</span>
+        </div>
+
+        {/* Search */}
+        <div ref={searchRef} style={{ flex: 1, maxWidth: 560, marginLeft: 'var(--space-4)', marginRight: 'var(--space-4)', position: 'relative' }}>
+          <div style={{ position: 'relative' }}>
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onFocus={() => setSearchFocus(true)}
+              onBlur={() => setTimeout(() => setSearchFocus(false), 200)}
+              placeholder="Tìm kiếm sản phẩm, nhận hàng, cửa hàng..."
+              style={{
+                width: '100%', padding: '8px 40px 8px 14px', fontSize: 14, outline: 'none',
+                borderRadius: showSuggest ? '10px 10px 0 0' : 'var(--radius-full)',
+                border: showSuggest ? '1.5px solid var(--primary,#7C3AED)' : 'none',
+                borderBottom: showSuggest ? 'none' : undefined,
+                background: 'var(--bg-surface)', color: 'var(--text-primary)',
+                transition: 'border-radius 0.15s', boxSizing: 'border-box',
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && searchQuery.trim()) {
+                  saveSearchTerm(searchQuery.trim(), 'keyword')
+                  setHistoryVersion(v => v + 1)
+                  setSearchFocus(false)
+                  navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`)
+                  setSearchQuery('')
+                }
+                if (e.key === 'Escape') setSearchFocus(false)
+              }}
+            />
+            <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: showSuggest ? 'var(--primary,#7C3AED)' : 'var(--gray-400)', pointerEvents: 'none', transition: 'color 0.2s' }}>
+              🔍
+            </span>
+          </div>
+
+          {showSuggest && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 2000 }}>
+              <div style={{
+                background: 'var(--bg-card)', borderRadius: '0 0 14px 14px',
+                border: '1.5px solid var(--primary,#7C3AED)', borderTop: 'none',
+                boxShadow: '0 12px 40px rgba(0,0,0,0.18)', overflow: 'hidden',
+                animation: 'sug 0.18s cubic-bezier(0.34,1.2,0.64,1)',
+                maxHeight: 460, overflowY: 'auto',
+              }}>
+                <SuggestBox query={searchQuery} onNavigate={handleSearchNav} onRefreshHistory={() => setHistoryVersion(v => v + 1)} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--navbar-actions-gap)', flexShrink: 0, marginLeft: 'var(--space-2)' }}>
+          {isAuthenticated ? (
+            <div ref={radialRef} style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+
+              {/* Cart + Bell */}
+              <div style={{ transform: `translateX(-${bellShift}px)`, transition: 'transform 0.35s cubic-bezier(0.34,1.2,0.64,1)', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, position: 'relative', zIndex: 2 }}>
+                <Link to="/cart" style={{ position: 'relative', textDecoration: 'none', width: BTN, height: BTN, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.12)', border: '1.5px solid rgba(255,255,255,0.25)', color: 'var(--text-on-topbar)', fontSize: 17, transition: 'background 0.2s', flexShrink: 0 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.22)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}>
+                  🛒
+                  {cart.item_count > 0 && (
+                    <span style={{ position: 'absolute', top: -3, right: -3, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 17, height: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, border: '1.5px solid rgba(255,255,255,0.8)' }}>
+                      {cart.item_count > 9 ? '9+' : cart.item_count}
+                    </span>
+                  )}
+                </Link>
+                <NotificationCenter />
+              </div>
+
+              {/* Role buttons + Avatar */}
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                {roleNames.map((rn, i) => {
+                  const meta     = ROLE_META[rn] || { icon: '👤', color: '#888', label: rn }
+                  const isActive = rn === currentRole
+                  return (
+                    <button key={rn} title={meta.label} onClick={() => goTo(rn)} style={{
+                      position: 'absolute', right: `calc(100% + ${i * ROLE_STEP}px + 4px)`, top: '50%',
+                      width: BTN, height: BTN, borderRadius: '50%',
+                      background: isActive ? meta.color : 'rgba(255,255,255,0.2)',
+                      border: isActive ? '2.5px solid #fff' : '2px solid rgba(255,255,255,0.5)',
+                      color: '#fff', fontSize: 16, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: isActive ? `0 0 0 3px ${meta.color}55` : '0 2px 6px rgba(0,0,0,0.25)',
+                      zIndex: 10,
+                      transform: radialOpen ? 'translateY(-50%) scale(1)' : 'translateY(-50%) scale(0.1)',
+                      opacity: radialOpen ? 1 : 0,
+                      pointerEvents: radialOpen ? 'auto' : 'none',
+                      transition: `transform 0.3s cubic-bezier(0.34,1.56,0.64,1) ${i * 50}ms, opacity 0.25s ease ${i * 50}ms`,
+                    }}>
+                      {meta.icon}
+                    </button>
+                  )
+                })}
+
+                <button onClick={() => setRadialOpen(o => !o)} title={user?.full_name || ''} style={{
+                  background: radialOpen ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.15)',
+                  border: radialOpen ? '2px solid rgba(255,255,255,0.8)' : '2px solid rgba(255,255,255,0.3)',
+                  borderRadius: 20, height: BTN + 4, padding: '0 10px 0 8px',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                  color: 'var(--text-on-topbar)', fontWeight: 700, fontSize: 14,
+                  transition: 'all 0.2s ease', position: 'relative', zIndex: 3,
+                }}>
+                  <span style={{ width: BTN - 6, height: BTN - 6, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0, overflow: 'hidden' }}>
+                    {user?.avatar_url
+                      ? <img src={getImageUrl(user.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : (user?.full_name?.[0]?.toUpperCase() || '?')}
+                  </span>
+                  <span style={{ fontSize: 10, opacity: 0.8, display: 'inline-block', transform: radialOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease' }}>▾</span>
+                </button>
+
+                {/* Dropdown */}
+                {radialOpen && (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: 'var(--bg-card)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-lg)', minWidth: 220, overflow: 'hidden', zIndex: 400, border: '1px solid var(--border-subtle)', animation: 'fsd 0.18s ease' }}>
+
+                    {/* Header */}
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+                      <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', margin: 0 }}>{user?.full_name}</p>
+                      <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 6px' }}>{user?.email}</p>
+                      <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: badge.bg, color: badge.color }}>
+                        {badge.label}
+                      </span>
+                    </div>
+
+
+              
+                    {/* ── Menu theo current_role ── */}
+
+                    {/* Shop owner */}
+                    {currentRole === 'shop' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Trang cá nhân"       path="/profile"               onClick={close} />
+                        <MenuItem icon="📦" label="Đơn hàng của tôi"    sub="Lịch sử mua hàng"         path="/orders"              onClick={close} />
+                        <MenuItem icon="💬" label="Tin nhắn khách"      sub="Chat với người mua"       path="/shop/chat"           onClick={close} />
+                        <NavSectionLabel border>Quản lý Shop</NavSectionLabel>
+                        <MenuItem icon="⚙️" label="Quản lý shop"       sub="Sản phẩm, đơn hàng, NV"   path="/shop"                onClick={close} />
+                        <MenuItem icon="🏪" label="Xem trang shop"     sub="Giao diện khách thấy"     path={`/shops/${user?.user_id}`} onClick={close} />
+                        <MenuItem icon="🎫" label="Voucher shop"        sub="Mã giảm giá của shop"     path="/shop/vouchers"       onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tâm voucher"                                  path="/vouchers"            onClick={close} />
+                        <MenuItem icon="⚠️" label="Khiếu nại của tôi"                                 path="/complaints"          onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Admin */}
+                    {currentRole === 'admin' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"  onClick={close} />
+                        <MenuItem icon="📦" label="Đơn hàng của tôi"    path="/orders"   onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tâm voucher"   path="/vouchers" onClick={close} />
+                        <NavSectionLabel border>Quản trị</NavSectionLabel>
+                        <MenuItem icon="⚙️" label="Admin dashboard"    sub="Người dùng, shop, đơn hàng" path="/admin" onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Shipper */}
+                    {currentRole === 'shipper' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"   onClick={close} />
+                        <MenuItem icon="📦" label="Đơn hàng của tôi"    path="/orders"    onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tâm voucher"   path="/vouchers"  onClick={close} />
+                        <NavSectionLabel border>Giao hàng</NavSectionLabel>
+                        <MenuItem icon="🚚" label="Quản lý giao hàng"  sub="Đơn hàng, lộ trình, thu nhập" path="/shipper" onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Employee */}
+                    {currentRole === 'employee' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"           path="/profile"           onClick={close} />
+                        <NavSectionLabel border>Nhân viên</NavSectionLabel>
+                        <MenuItem icon="🏠" label="Tổng quan"              sub="Dashboard của bạn"    path="/employee"          onClick={close} />
+                        <MenuItem icon="📋" label="Đơn hàng"                                          path="/employee/orders"   onClick={close} />
+                        <MenuItem icon="📦" label="Sản phẩm"                                          path="/employee/products" onClick={close} />
+                        <MenuItem icon="💬" label="Tin nhắn"                                          path="/employee/messages" onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Warehouse Hub Manager */}
+                    {currentRole === 'warehouse_hub_manager' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"     onClick={close} />
+                        <NavSectionLabel border>Kho Tổng</NavSectionLabel>
+                        <MenuItem icon="🏢" label="Tổng quan"            sub="Dashboard kho tổng"          path="/hub"           onClick={close} />
+                        <MenuItem icon="📦" label="Kho quận"             sub="Danh sách kho cấp 2"         path="/hub/districts" onClick={close} />
+                        <MenuItem icon="🚚" label="Đơn liên tỉnh"        sub="Vận chuyển liên tỉnh"        path="/hub/shipments" onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Warehouse District Manager */}
+                    {currentRole === 'warehouse_district_manager' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"         path="/profile"          onClick={close} />
+                        <NavSectionLabel border>Kho Quận</NavSectionLabel>
+                        <MenuItem icon="🏬" label="Tổng quan"              sub="Dashboard kho quận"  path="/district"          onClick={close} />
+                        <MenuItem icon="📮" label="Kho phường"             sub="Danh sách kho cấp 3" path="/district/wards"    onClick={close} />
+                        <MenuItem icon="🚚" label="Đơn hàng"               sub="Theo dõi vận chuyển" path="/district/shipments" onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Warehouse Ward Manager */}
+                    {currentRole === 'warehouse_ward_manager' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"         path="/profile"         onClick={close} />
+                        <NavSectionLabel border>Kho Phường</NavSectionLabel>
+                        <MenuItem icon="🏠" label="Tổng quan"              sub="Dashboard kho phường" path="/ward"          onClick={close} />
+                        <MenuItem icon="🛵" label="Shipper"                sub="Quản lý shipper"      path="/ward/shippers" onClick={close} />
+                        <MenuItem icon="📦" label="Đơn hàng"               sub="Gán & theo dõi đơn"  path="/ward/orders"   onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Warehouse Manager (legacy) */}
+                    {currentRole === 'warehouse_manager' && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"     onClick={close} />
+                        <NavSectionLabel border>Quản lý Kho</NavSectionLabel>
+                        <MenuItem icon="🏭" label="Vào giao diện kho"   sub="Quản lý đơn hàng & shipper" path="/warehouse" onClick={close} />
+                      </div>
+                    )}
+
+                    {/* Customer / default */}
+                    {(currentRole === 'user' || !currentRole) && (
+                      <div>
+                        <NavSectionLabel>Tài khoản</NavSectionLabel>
+                        <MenuItem icon="👤" label="Hồ sơ cá nhân"       path="/profile"     onClick={close} />
+                        <MenuItem icon="📦" label="Đơn hàng của tôi"    path="/orders"      onClick={close} />
+                        <MenuItem icon="💬" label="Tin nhắn"            path="/chat"        onClick={close} />
+                        <MenuItem icon="🎁" label="Trung tâm voucher"   path="/vouchers"    onClick={close} />
+                        <MenuItem icon="⚠️" label="Khiếu nại của tôi"  path="/complaints"  onClick={close} />
+                        {roleNames.includes('warehouse_manager') && (
+                          <>
+                            <NavSectionLabel border>Quản lý Kho</NavSectionLabel>
+                            <MenuItem icon="🏭" label="Vào giao diện kho" sub="Quản lý đơn hàng & shipper" path="/warehouse" onClick={close} />
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Logout */}
+                    <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 4 }}>
+                      <button onClick={handleLogout}
+                        style={{ width: '100%', padding: '10px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 14, color: 'var(--error)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
+                        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#FFF1F1')}
+                        onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'none')}>
+                        <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>🚪</span>
+                        Đăng xuất
+                      </button>
+                    </div>
+
+                  </div>
+                )}
+              </div>
+
+            </div>
+          ) : (
+            <React.Fragment>
+              <Link to="/login" style={{ color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: 14, padding: '7px 16px', borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.15)', transition: 'background var(--transition)' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.25)')}
+                onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.15)')}>
+                Đăng nhập
+              </Link>
+              <Link to="/register" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 600, fontSize: 14, padding: '7px 16px', borderRadius: 'var(--radius)', background: 'white', transition: 'background var(--transition)' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.background = '#F0F4FF')}
+                onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.background = 'white')}>
+                Đăng ký
+              </Link>
+            </React.Fragment>
+          )}
+        </div>
+      </div>
+      </nav>
+
+      {/* Search mobile */}
+    </>
+  )
+}
+
+export default Navbar

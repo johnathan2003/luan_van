@@ -1,0 +1,136 @@
+/**
+ * 🏪 Shop Overview — trang tổng quan của shop owner
+ * Layout: ShopLayout (do Router bọc ngoài)
+ */
+import React, { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import Loading from '../../components/common/Loading'
+import { shopService } from '../../services/shopService'
+import { formatCurrency } from '../../utils/formatters'
+import { useAppSelector } from '../../store/hooks'
+import { getDisputesByComplainant, getDisputesByTarget } from '../../utils/disputeStore'
+
+const ShopOverviewPage: React.FC = () => {
+  const { user } = useAppSelector(s => s.auth)
+  const navigate = useNavigate()
+  const [shop, setShop]       = useState<any>(null)
+  const [analytics, setAnalytics] = useState<any>(null)
+  const [orders, setOrders]   = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [mallMsg, setMallMsg] = useState('')
+
+  const requestMall = async () => {
+    try {
+      const r = await fetch('/api/v1/shop/me/request-mall', { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` } })
+      const d = await r.json()
+      setMallMsg(d.message ?? d.detail ?? 'Đã gửi yêu cầu')
+      if (r.ok) setShop((s: any) => ({ ...s, mall_request_status: 'pending' }))
+    } catch { setMallMsg('Lỗi kết nối') }
+  }
+
+  const sentDisputes = user ? getDisputesByComplainant('shop', user.user_id) : []
+  const receivedDisputes = user ? getDisputesByTarget('shop', user.user_id) : []
+  const allDisputes = [...sentDisputes, ...receivedDisputes]
+  const pendingDisputes = allDisputes.filter(d => d.status === 'pending' || d.status === 'reviewing')
+
+  useEffect(() => {
+    Promise.all([
+      shopService.getMyShop(),
+      shopService.getAnalytics(30),
+      shopService.getOrders({ limit: 5, order_status: 'pending' }),
+    ]).then(([s, a, o]) => {
+      setShop(s.data)
+      setAnalytics(a.data)
+      setOrders(o.data.orders || [])
+    }).finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <Loading />
+
+  return (
+    <div>
+      {/* Shop header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>{shop?.shop_name}</h1>
+          <p style={{ color: 'var(--gray-500)', fontSize: 14 }}>📍 {shop?.address}</p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {shop?.shop_id && (
+            <Link to={`/shops/${shop.shop_id}`} className="btn btn-outline">
+              🏪 Xem trang shop
+            </Link>
+          )}
+          {/* Nút đăng ký Mall */}
+          {shop?.is_mall ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', background: 'linear-gradient(135deg, #7C3AED, #4F46E5)', color: '#fff', borderRadius: 20, fontWeight: 700, fontSize: 13 }}>🏆 BuyZo Mall</span>
+          ) : shop?.mall_request_status === 'pending' ? (
+            <span style={{ padding: '7px 14px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 20, fontSize: 13, color: 'var(--text-secondary)' }}>⏳ Đang chờ duyệt Mall</span>
+          ) : (
+            <button onClick={() => navigate('/shop/mall')} style={{ padding: '7px 16px', background: 'linear-gradient(135deg, #7C3AED, #4F46E5)', color: '#fff', border: 'none', borderRadius: 20, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>🏆 Đăng ký BuyZo Mall</button>
+          )}
+          {mallMsg && <span style={{ fontSize: 13, color: 'var(--text-secondary)', alignSelf: 'center' }}>{mallMsg}</span>}
+          <Link to="/shop/products" className="btn btn-primary">+ Thêm sản phẩm</Link>
+        </div>
+      </div>
+
+      {/* KPI */}
+      {analytics && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
+          {[
+            { label: 'Doanh thu (30 ngày)', value: formatCurrency(analytics.total_revenue), icon: '💰', color: 'var(--primary)', path: '/shop/revenue' },
+            { label: 'Tổng đơn hàng',       value: analytics.total_orders,                 icon: '📦', color: 'var(--info)',    path: '/shop/orders' },
+            { label: 'Sản phẩm',            value: analytics.total_products,               icon: '🏷️', color: 'var(--success)', path: '/shop/products' },
+            { label: 'Khiếu nại đang chờ',  value: pendingDisputes.length,                 icon: '⚠️', color: '#dc2626',        path: '/complaints' },
+          ].map(k => (
+            <Link key={k.label} to={k.path} style={{ textDecoration: 'none' }}>
+              <div className="card" style={{ padding: 20, borderTop: `4px solid ${k.color}`, transition: 'transform 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = '')}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>{k.icon}</div>
+                <p style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 4 }}>{k.label}</p>
+                <p style={{ fontSize: 24, fontWeight: 800, color: k.color }}>{k.value}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        {/* Đơn hàng chờ xác nhận */}
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h3 style={{ fontWeight: 700, fontSize: 15 }}>⏳ Đơn chờ xác nhận</h3>
+            <Link to="/shop/orders?status=pending" style={{ fontSize: 13, color: 'var(--primary)' }}>Xem tất cả</Link>
+          </div>
+          {orders.length === 0 ? (
+            <p style={{ color: 'var(--gray-400)', fontSize: 14 }}>Không có đơn nào đang chờ</p>
+          ) : orders.map((o: any) => (
+            <div key={o.order_id} style={{ padding: '10px 0', borderBottom: '1px solid var(--gray-100)', display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 13 }}>#{o.order_id} · {o.items?.[0]?.product_name}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>{formatCurrency(o.final_price)}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Top sản phẩm */}
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h3 style={{ fontWeight: 700, fontSize: 15 }}>🔥 Bán chạy nhất</h3>
+            <Link to="/shop/analytics" style={{ fontSize: 13, color: 'var(--primary)' }}>Chi tiết</Link>
+          </div>
+          {analytics?.top_products?.length === 0 && <p style={{ color: 'var(--gray-400)', fontSize: 14 }}>Chưa có dữ liệu</p>}
+          {analytics?.top_products?.map((p: any, i: number) => (
+            <div key={p.product_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--gray-100)' }}>
+              <span style={{ width: 24, height: 24, background: i < 3 ? 'var(--primary)' : 'var(--gray-200)', color: i < 3 ? 'white' : 'var(--gray-500)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+              <span style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.product_name}</span>
+              <span style={{ fontSize: 12, color: 'var(--gray-500)', flexShrink: 0 }}>{p.sales} đã bán</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default ShopOverviewPage
