@@ -74,6 +74,9 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     logout(state) {
+      if (state.user?.email) {
+        try { localStorage.setItem('last_login_email', state.user.email) } catch {}
+      }
       state.user = null
       state.access_token = null
       state.refresh_token = null

@@ -358,6 +358,9 @@ const ShopProfilePage: React.FC = () => {
 
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [logoPreview,  setLogoPreview]  = useState<string | null>(null)
+  const [coverFile,    setCoverFile]    = useState<File | null>(null)
+  const [logoFile,     setLogoFile]     = useState<File | null>(null)
+  const [saving,       setSaving]       = useState(false)
   const [saveMsg,      setSaveMsg]      = useState('')
   const [modal,        setModal]        = useState<ImageType | null>(null)
 
@@ -365,6 +368,41 @@ const ShopProfilePage: React.FC = () => {
   const [followerDelta, setFollowerDelta] = useState(0)
   const [shopVoucher,   setShopVoucher]   = useState<ShopVoucherItem | null>(null)
   const [collectingVoucher, setCollectingVoucher] = useState(false)
+
+  // true = ảnh bìa tối → chữ trắng; false = sáng → chữ tối; mặc định true (gradient tối)
+  const [coverIsDark, setCoverIsDark] = useState(true)
+
+  /** Phân tích luminance của ảnh bìa vùng dưới (chỗ phần profile row đè lên) */
+  const analyzeCoverBrightness = useCallback((url: string) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const W = Math.min(img.naturalWidth, 600)
+        const H = Math.min(img.naturalHeight, 200)
+        const canvas = document.createElement('canvas')
+        canvas.width  = W
+        canvas.height = H
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        ctx.drawImage(img, 0, 0, W, H)
+        // Lấy pixel ở 40% dưới cùng — vùng bị profile row đè lên
+        const startY    = Math.floor(H * 0.6)
+        const imgData   = ctx.getImageData(0, startY, W, H - startY)
+        const d         = imgData.data
+        let lum = 0
+        const px = d.length / 4
+        for (let i = 0; i < d.length; i += 4) {
+          lum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+        }
+        setCoverIsDark(lum / px < 140) // ngưỡng 140/255
+      } catch {
+        setCoverIsDark(true) // fallback: coi là tối
+      }
+    }
+    img.onerror = () => setCoverIsDark(true)
+    img.src = url
+  }, [])
 
   useEffect(() => {
     if (!shopId) return
@@ -428,15 +466,74 @@ const ShopProfilePage: React.FC = () => {
     if (shopId) trackMissionEvent('view_shop')
   }, [shopId])
 
+  // Phân tích độ sáng ảnh bìa để đổi màu chữ
+  useEffect(() => {
+    if (coverPreview) {
+      analyzeCoverBrightness(coverPreview)
+    } else if (shop?.cover_url) {
+      analyzeCoverBrightness(getImageUrl(shop.cover_url))
+    } else {
+      setCoverIsDark(true) // không có ảnh bìa → gradient tối → chữ trắng
+    }
+  }, [coverPreview, shop?.cover_url, analyzeCoverBrightness])
+
   const flashSave = (msg: string) => {
     setSaveMsg(msg)
     setTimeout(() => setSaveMsg(''), 2800)
   }
 
-  const handleConfirm = (type: ImageType) => (_file: File, url: string) => {
-    if (type === 'cover') setCoverPreview(url)
-    else setLogoPreview(url)
-    flashSave(type === 'cover' ? 'Đã cập nhật ảnh bìa!' : 'Đã cập nhật logo shop!')
+  const handleConfirm = (type: ImageType) => (file: File, _url: string) => {
+    // Tạo URL mới từ file — tránh bị revoke khi modal unmount
+    const stableUrl = URL.createObjectURL(file)
+    if (type === 'cover') { setCoverPreview(stableUrl); setCoverFile(file) }
+    else                  { setLogoPreview(stableUrl);  setLogoFile(file) }
+    flashSave(type === 'cover' ? 'Đã chọn ảnh bìa — nhấn Lưu để áp dụng!' : 'Đã chọn logo — nhấn Lưu để áp dụng!')
+  }
+
+  const handleSave = async () => {
+    if (!coverFile && !logoFile) { flashSave('Đã lưu thay đổi!'); return }
+    setSaving(true)
+    // transformRequest xóa Content-Type để browser tự set multipart/form-data với boundary đúng
+    const multipartConfig = {
+      transformRequest: (data: any, headers: any) => { if (headers) delete headers['Content-Type']; return data },
+    }
+    const errors: string[] = []
+    try {
+      if (coverFile) {
+        const fd = new FormData()
+        fd.append('file', coverFile)
+        try {
+          await API.post('/api/v1/shop/me/cover', fd, multipartConfig)
+          setCoverFile(null)
+          setCoverPreview(null)
+        } catch (err: any) {
+          errors.push('Ảnh bìa: ' + (err.response?.data?.detail || 'Lỗi upload'))
+        }
+      }
+      if (logoFile) {
+        const fd = new FormData()
+        fd.append('file', logoFile)
+        try {
+          await API.post('/api/v1/shop/me/avatar', fd, multipartConfig)
+          setLogoFile(null)
+          setLogoPreview(null)
+        } catch (err: any) {
+          errors.push('Logo: ' + (err.response?.data?.detail || 'Lỗi upload'))
+        }
+      }
+      // Reload shop data để cập nhật URL mới từ DB
+      const res = await API.get(`/api/v1/shop/public/${shopId}`)
+      setShop(res.data)
+      if (errors.length > 0) {
+        flashSave('❌ ' + errors.join(' | '))
+      } else {
+        flashSave('✅ Đã lưu — ảnh đã cập nhật cho tất cả người dùng!')
+      }
+    } catch (err: any) {
+      flashSave('❌ Lỗi không xác định: ' + (err.response?.data?.detail || String(err)))
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) return (
@@ -489,12 +586,13 @@ const ShopProfilePage: React.FC = () => {
       {saveMsg && (
         <div style={{
           position: 'fixed', top: 80, right: 24, zIndex: 9998,
-          background: '#16A34A', color: '#fff',
+          background: saveMsg.startsWith('❌') ? '#DC2626' : '#16A34A',
+          color: '#fff',
           padding: '10px 20px', borderRadius: 10, fontWeight: 600, fontSize: 14,
           boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
           animation: 'fadeInRight 0.25s ease',
         }}>
-          &#10003; {saveMsg}
+          {saveMsg}
         </div>
       )}
 
@@ -504,17 +602,19 @@ const ShopProfilePage: React.FC = () => {
           height: 240,
           background: coverPreview
             ? `url(${coverPreview}) center/cover no-repeat`
-            : 'linear-gradient(135deg,#1E3A8A 0%,#1D4ED8 40%,#0EA5E9 100%)',
+            : shop.cover_url
+              ? `url(${getImageUrl(shop.cover_url)}) center/cover no-repeat`
+              : 'linear-gradient(135deg,#1E3A8A 0%,#1D4ED8 40%,#0EA5E9 100%)',
           position: 'relative', overflow: 'hidden',
         }}>
-          {!coverPreview && [...Array(6)].map((_, i) => (
+          {!coverPreview && !shop.cover_url && [...Array(6)].map((_, i) => (
             <div key={i} style={{
               position: 'absolute', width: 120 + i * 40, height: 120 + i * 40,
               borderRadius: '50%', border: '1px solid rgba(255,255,255,0.08)',
               top: -20 + i * 10, right: 100 + i * 60,
             }} />
           ))}
-          {!coverPreview && (
+          {!coverPreview && !shop.cover_url && (
             <div style={{
               position: 'absolute', inset: 0,
               background: 'repeating-linear-gradient(45deg,rgba(255,255,255,0.02) 0px,rgba(255,255,255,0.02) 1px,transparent 1px,transparent 40px)',
@@ -584,7 +684,12 @@ const ShopProfilePage: React.FC = () => {
             {/* Info */}
             <div style={{ flex: 1, paddingBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <h1 style={{ fontSize: 24, fontWeight: 800, color: C.navy, margin: 0 }}>{shop.shop_name}</h1>
+                <h1 style={{
+                  fontSize: 24, fontWeight: 800, margin: 0,
+                  color: coverIsDark ? '#ffffff' : C.navy,
+                  textShadow: coverIsDark ? '0 1px 4px rgba(0,0,0,0.55)' : 'none',
+                  transition: 'color 0.3s, text-shadow 0.3s',
+                }}>{shop.shop_name}</h1>
                 {isVerified && (
                   <span style={{ background: '#DBEAFE', color: C.blue, fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
                     &#10003; Chinh thuc
@@ -623,12 +728,23 @@ const ShopProfilePage: React.FC = () => {
                 <p style={{ fontSize: 11, color: C.gray, margin: 0 }}>Danh giá</p>
               </div>
               {isShopOwner ? (
-                <button
-                  onClick={() => flashSave('Đã lưu thay đổi!')}
-                  className="btn btn-primary"
-                  style={{ padding: '10px 24px', fontWeight: 700, background: '#16A34A', borderColor: '#16A34A' }}>
-                  &#10003; Lưu thay đổi
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="btn btn-primary"
+                    style={{ padding: '10px 24px', fontWeight: 700, background: (coverFile || logoFile) ? '#16A34A' : '#64748B', borderColor: (coverFile || logoFile) ? '#16A34A' : '#64748B', opacity: saving ? 0.7 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                    {saving ? '⏳ Đang lưu...' : (coverFile || logoFile) ? '💾 Lưu thay đổi' : '✓ Không có thay đổi'}
+                  </button>
+                  {(coverFile || logoFile) && !saving && (
+                    <button
+                      onClick={() => { setCoverFile(null); setCoverPreview(null); setLogoFile(null); setLogoPreview(null) }}
+                      className="btn"
+                      style={{ padding: '10px 20px', fontWeight: 700, cursor: 'pointer', background: 'white', color: C.error, border: `1.5px solid ${C.error}` }}>
+                      ✕ Hủy
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button

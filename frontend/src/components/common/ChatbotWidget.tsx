@@ -1,3 +1,4 @@
+
 /**
  * ChatbotWidget — floating AI assistant, bottom-left corner.
  * Role-aware: admin (Pro), user/shop/shipper (Flash).
@@ -6,7 +7,7 @@
  */
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useAuth } from '../../hooks/useAuth'
-import ChatbotAPI from '../../services/chatbotApi'
+import API from '../../services/api'
 
 // ── Role config ───────────────────────────────────────────────────────────────
 const ROLE_CONFIG: Record<string, {
@@ -190,10 +191,12 @@ const ChatbotWidget: React.FC = () => {
 
   const role = currentRole as string
   const cfg  = ROLE_CONFIG[role]
-  if (!isAuthenticated || !cfg) return null
+
+  // ── All hooks MUST come before any early return (Rules of Hooks) ──────────
 
   // Initialize greeting once when opened
   useEffect(() => {
+    if (!cfg) return
     if (open && !initialized) {
       setMsgs([{ role: 'bot', text: cfg.greeting, ts: new Date() }])
       setInitialized(true)
@@ -219,7 +222,7 @@ const ChatbotWidget: React.FC = () => {
     setMsgs(m => [...m, { role: 'user', text: msg, ts: new Date() }])
     setLoading(true)
     try {
-      const res = await ChatbotAPI.post('/api/v1/bot/query', { message: msg })
+      const res = await API.post('/api/v1/bot/query', { message: msg })
       const reply: string = res.data.reply
       setMsgs(m => [...m, { role: 'bot', text: reply, ts: new Date() }])
     } catch (e: any) {
@@ -230,6 +233,9 @@ const ChatbotWidget: React.FC = () => {
     }
   }, [input, loading])
 
+  // Early return AFTER all hooks
+  if (!isAuthenticated || !cfg) return null
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -238,7 +244,7 @@ const ChatbotWidget: React.FC = () => {
   }
 
   const handleClear = async () => {
-    try { await ChatbotAPI.post('/api/v1/bot/clear') } catch {}
+    try { await API.post('/api/v1/bot/clear') } catch {}
     setMsgs([{ role: 'bot', text: cfg.greeting, ts: new Date() }])
     setShowChips(true)
   }

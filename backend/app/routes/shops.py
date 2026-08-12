@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
@@ -15,6 +15,7 @@ from app.services.shop_service import (
 )
 from app.services.order_service import get_shop_orders
 from app.services.product_service import get_products
+from app.utils.upload_service import save_upload_file
 
 router = APIRouter()
 
@@ -84,6 +85,7 @@ def get_public_shop(shop_id: int, db: Session = Depends(get_db)):
         "shop_name": shop.shop_name,
         "description": shop.description,
         "avatar_url": shop.avatar_url,
+        "cover_url": shop.cover_url,
         "address": shop.address,
         "phone": shop.phone,
         "rating": str(shop.rating) if shop.rating else "0.0",
@@ -116,7 +118,8 @@ def my_shop(current_user: User = Depends(require_shop_owner), db: Session = Depe
     # Dùng raw SQL để lấy cả status/suspended_reason (cột có thể mới thêm)
     row = db.execute(
         text("""
-            SELECT shop_id, shop_name, description, avatar_url, address, phone,
+            SELECT shop_id, shop_name, description, avatar_url, cover_url,
+                   address, phone,
                    rating, total_followers, total_orders, verification_status,
                    COALESCE(status, 'active') AS status,
                    suspended_reason, suspended_at,
@@ -133,6 +136,7 @@ def my_shop(current_user: User = Depends(require_shop_owner), db: Session = Depe
         "shop_name":            row.shop_name,
         "description":          row.description,
         "avatar_url":           row.avatar_url,
+        "cover_url":            row.cover_url,
         "address":              row.address,
         "phone":                row.phone,
         "rating":               row.rating,
@@ -154,6 +158,38 @@ def update_my_shop(
 ):
     shop = update_shop(db, current_user.user_id, data)
     return {"message": "Shop updated", "shop_id": shop.shop_id}
+
+
+@router.post("/me/avatar")
+async def upload_shop_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_shop_owner),
+    db: Session = Depends(get_db),
+):
+    """Upload ảnh avatar/logo cho shop."""
+    url = await save_upload_file(file, "shops")
+    shop = db.query(Shop).filter(Shop.shop_id == current_user.user_id).first()
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop not found")
+    shop.avatar_url = url
+    db.commit()
+    return {"message": "Avatar uploaded", "avatar_url": url}
+
+
+@router.post("/me/cover")
+async def upload_shop_cover(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_shop_owner),
+    db: Session = Depends(get_db),
+):
+    """Upload ảnh bìa cho shop."""
+    url = await save_upload_file(file, "shops")
+    shop = db.query(Shop).filter(Shop.shop_id == current_user.user_id).first()
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop not found")
+    shop.cover_url = url
+    db.commit()
+    return {"message": "Cover uploaded", "cover_url": url}
 
 
 @router.get("/products")
