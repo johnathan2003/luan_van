@@ -5,7 +5,11 @@ import { useAuth } from "../../hooks";
 // ─── Login ─────────────────────────────────────────────────
 export function Login() {
   const { loginAndRedirect, isLoading, error } = useAuth();
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState(() => {
+    let lastEmail = ""
+    try { lastEmail = localStorage.getItem('last_login_email') || "" } catch {}
+    return { email: lastEmail, password: "" }
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();

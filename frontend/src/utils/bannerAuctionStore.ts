@@ -678,11 +678,12 @@ export function adminCreateBanner(opts: {
     id: fakeHistId,
     position: opts.position,
     startedAt: now,
-    endedAt: now,
+    endsAt: now,
     bids: [],
-    status: 'ended',
+    status: "ended",
     confirmation: 'paid',
     displayDurationMs: opts.displayDurationMs ?? 7 * 24 * 60 * 60 * 1000,
+    
   }
   data.history.unshift(fakeHistory)
   // Nếu image đã là ref (idb: / ref:) thì giữ nguyên, không bọc thêm

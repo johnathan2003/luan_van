@@ -158,6 +158,48 @@ def _ensure_shop_status_columns():
         db.close()
 
 
+def _ensure_shop_cover_column():
+    """Tự động thêm cột cover_url vào bảng shops nếu chưa có."""
+    from sqlalchemy import text
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        exists = db.execute(text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name='shops' AND column_name='cover_url'"
+        )).fetchone()
+        if not exists:
+            db.execute(text("ALTER TABLE shops ADD COLUMN cover_url VARCHAR(500)"))
+            db.commit()
+            logger.info("[startup] Added column shops.cover_url")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[startup] Could not ensure shops.cover_url: {e}")
+    finally:
+        db.close()
+
+
+def _ensure_shop_avatar_column():
+    """Tự động thêm cột avatar_url vào bảng shops nếu chưa có (safety net)."""
+    from sqlalchemy import text
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        exists = db.execute(text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name='shops' AND column_name='avatar_url'"
+        )).fetchone()
+        if not exists:
+            db.execute(text("ALTER TABLE shops ADD COLUMN avatar_url VARCHAR(500)"))
+            db.commit()
+            logger.info("[startup] Added column shops.avatar_url")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[startup] Could not ensure shops.avatar_url: {e}")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_main_loop()   # capture asyncio loop sớm nhất — trước mọi request
@@ -167,6 +209,8 @@ async def lifespan(app: FastAPI):
     _ensure_shop_status_columns()
     _ensure_variant_attrs_column()
     _ensure_shipper_registration_columns()
+    _ensure_shop_cover_column()
+    _ensure_shop_avatar_column()
     yield
     logger.info("Shutting down E-Commerce API...")
 

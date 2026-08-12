@@ -190,10 +190,12 @@ const ChatbotWidget: React.FC = () => {
 
   const role = currentRole as string
   const cfg  = ROLE_CONFIG[role]
-  if (!isAuthenticated || !cfg) return null
+
+  // ── All hooks MUST come before any early return (Rules of Hooks) ──────────
 
   // Initialize greeting once when opened
   useEffect(() => {
+    if (!cfg) return
     if (open && !initialized) {
       setMsgs([{ role: 'bot', text: cfg.greeting, ts: new Date() }])
       setInitialized(true)
@@ -229,6 +231,9 @@ const ChatbotWidget: React.FC = () => {
       setLoading(false)
     }
   }, [input, loading])
+
+  // Early return AFTER all hooks
+  if (!isAuthenticated || !cfg) return null
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

@@ -24,7 +24,11 @@ const LoginForm: React.FC = () => {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const { loading } = useAppSelector(s => s.auth)
-  const [form, setForm] = useState({ email: '', password: '' })
+  const [form, setForm] = useState(() => {
+    let lastEmail = ''
+    try { lastEmail = localStorage.getItem('last_login_email') || '' } catch {}
+    return { email: lastEmail, password: '' }
+  })
   const [showPw, setShowPw] = useState(false)
   const [validErr, setValidErr] = useState('')
 
@@ -36,6 +40,8 @@ const LoginForm: React.FC = () => {
       setValidErr('Không được dùng ký tự: < > ? / : ; " \' | \\')
       return
     }
+
+    try { localStorage.setItem('last_login_email', form.email) } catch {}
 
     const result = await dispatch(login(form))
     if (login.fulfilled.match(result)) {

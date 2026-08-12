@@ -11,6 +11,7 @@ class Shop(Base):
     shop_name = Column(String(255), nullable=False)
     description = Column(Text)
     avatar_url = Column(String(500))
+    cover_url = Column(String(500))
     address = Column(Text, nullable=False)
     phone = Column(String(20))
     rating = Column(String(5), default="0.00")
