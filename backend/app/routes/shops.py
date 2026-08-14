@@ -167,7 +167,7 @@ async def upload_shop_avatar(
     db: Session = Depends(get_db),
 ):
     """Upload ảnh avatar/logo cho shop."""
-    url = await save_upload_file(file, "shops")
+    url = await save_upload_file(file, "shops", db=db, uploaded_by=current_user.user_id)
     shop = db.query(Shop).filter(Shop.shop_id == current_user.user_id).first()
     if not shop:
         raise HTTPException(status_code=404, detail="Shop not found")
@@ -183,7 +183,7 @@ async def upload_shop_cover(
     db: Session = Depends(get_db),
 ):
     """Upload ảnh bìa cho shop."""
-    url = await save_upload_file(file, "shops")
+    url = await save_upload_file(file, "shops", db=db, uploaded_by=current_user.user_id)
     shop = db.query(Shop).filter(Shop.shop_id == current_user.user_id).first()
     if not shop:
         raise HTTPException(status_code=404, detail="Shop not found")

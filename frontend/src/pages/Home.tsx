@@ -161,7 +161,9 @@ const FlashSaleSection: React.FC = () => {
   const scroll = (dir: number) => scrollRef.current?.scrollBy({ left: dir * 220, behavior: 'smooth' })
 
   useEffect(() => {
-    API.get('/api/v1/products', { params: { limit: 12, sort: 'popular' } })
+    // Ưu tiên danh sách admin ghim thủ công (quản lý ở /super/flash-sale);
+    // rỗng thì backend tự fallback về top bán chạy (hành vi cũ).
+    API.get('/api/v1/products/flash-sale', { params: { limit: 12 } })
       .then(r => setItems(r.data.products ?? []))
       .catch(() => {})
   }, [])

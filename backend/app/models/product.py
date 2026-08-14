@@ -166,4 +166,19 @@ class ProductDeletionAuditLog(Base):
 
     # Relationships
     deleter = relationship("User", foreign_keys=[deleted_by])
+
+
+class FlashSalePick(Base):
+    """Sản phẩm được admin ghim thủ công để hiện ở khu Flash Sale trang chủ
+    (tối đa 10, quản lý qua super). Rỗng -> Flash Sale fallback về top bán
+    chạy tự động (sort=popular), hành vi cũ."""
+    __tablename__ = "flash_sale_picks"
+
+    pick_id    = Column(Integer, primary_key=True, autoincrement=True)
+    product_id = Column(Integer, ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, unique=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+    created_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    product = relationship("Product", foreign_keys=[product_id])
     deletion_request = relationship("ProductDeletionRequest")

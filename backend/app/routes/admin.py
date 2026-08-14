@@ -1042,78 +1042,13 @@ def admin_vouchers(
 
 
 # ─── Banners ─────────────────────────────────────────────────────────────────
-
-@router.get("/banners")
-def list_banners(
-    status: Optional[str] = None,
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    from app.models.admin_config import Banner
-    q = db.query(Banner)
-    if status and status != "all":
-        q = q.filter(Banner.status == status)
-    banners = q.order_by(Banner.display_order.asc(), Banner.created_at.desc()).all()
-    return {
-        "banners": [
-            {
-                "banner_id":     b.banner_id,
-                "title":         b.title,
-                "shop_id":       b.shop_id,
-                "shop_name":     b.shop_name,
-                "status":        b.status,
-                "valid_from":    b.valid_from,
-                "valid_to":      b.valid_to,
-                "link":          b.link,
-                "image_url":     b.image_url,
-                "emoji":         b.emoji,
-                "color1":        b.color1,
-                "color2":        b.color2,
-                "display_order": b.display_order,
-                "created_at":    b.created_at.isoformat() if b.created_at else None,
-            }
-            for b in banners
-        ]
-    }
-
-
-@router.post("/banners", status_code=201)
-def create_banner(data: dict, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    from app.models.admin_config import Banner
-    banner = Banner(**{k: v for k, v in data.items() if k in (
-        "title", "shop_id", "shop_name", "valid_from", "valid_to",
-        "link", "image_url", "emoji", "color1", "color2", "display_order"
-    )})
-    db.add(banner)
-    db.commit()
-    db.refresh(banner)
-    return {"banner_id": banner.banner_id, "message": "Đã thêm banner"}
-
-
-@router.patch("/banners/{banner_id}")
-def update_banner(banner_id: int, data: dict, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    from app.models.admin_config import Banner
-    banner = db.query(Banner).filter(Banner.banner_id == banner_id).first()
-    if not banner:
-        raise HTTPException(404, "Banner không tồn tại")
-    allowed = ("title", "shop_name", "status", "valid_from", "valid_to",
-               "link", "image_url", "emoji", "color1", "color2", "display_order")
-    for k, v in data.items():
-        if k in allowed:
-            setattr(banner, k, v)
-    db.commit()
-    return {"message": "Đã cập nhật banner"}
-
-
-@router.delete("/banners/{banner_id}")
-def delete_banner(banner_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    from app.models.admin_config import Banner
-    banner = db.query(Banner).filter(Banner.banner_id == banner_id).first()
-    if not banner:
-        raise HTTPException(404, "Banner không tồn tại")
-    db.delete(banner)
-    db.commit()
-    return {"message": "Đã xóa banner"}
+# NOTE: the old ad-hoc banner CRUD that used to live here (against the legacy
+# admin_config.Banner schema: emoji/color1/color2/valid_from/valid_to/
+# display_order) has been removed. Banners are now managed through the
+# auction-to-official pipeline: shops submit via banner auctions
+# (app/routes/banners.py), superadmin approves + fully manages the official
+# record (super/backend/routes/banners.py, table `banners` /
+# app.models.wallet_auction.Banner).
 
 
 # ─── Feedbacks ────────────────────────────────────────────────────────────────

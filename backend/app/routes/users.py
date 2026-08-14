@@ -82,7 +82,7 @@ async def upload_avatar(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    url = await save_upload_file(file, "users")
+    url = await save_upload_file(file, "users", db=db, uploaded_by=current_user.user_id)
     current_user.avatar_url = url
     db.commit()
     return {"message": "Avatar uploaded", "avatar_url": url}
@@ -92,8 +92,9 @@ async def upload_avatar(
 async def upload_image(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    url = await save_upload_file(file, "shop_registrations")
+    url = await save_upload_file(file, "shop_registrations", db=db, uploaded_by=current_user.user_id)
     return {"url": url}
 
 

@@ -13,6 +13,8 @@ const NAV_ITEMS = [
   { path: '/super/orders',     label: 'Đơn hàng',    icon: '🧾' },
   { path: '/super/users',      label: 'Người dùng',  icon: '👥' },
   { path: '/super/banners',    label: 'Banner',      icon: '🖼️' },
+  { path: '/super/flash-sale', label: 'Flash Sale',  icon: '⚡' },
+  { path: '/super/media',      label: 'Thư viện ảnh', icon: '🗂️' },
   { path: '/super/wallets',    label: 'Ví Shop',     icon: '💰' },
   { path: '/super/finance',    label: 'Tài chính hệ thống', icon: '🏦' },
   { path: '/super/db-viewer',  label: 'DB Viewer',   icon: '🗄️' },

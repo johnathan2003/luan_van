@@ -346,11 +346,12 @@ def my_bids(
 async def upload_banner_image(
     file: UploadFile = File(...),
     current_user: User = Depends(require_shop_owner),
+    db: Session = Depends(get_db),
 ):
     """Shop upload ảnh banner (dùng trước khi gọi /auctions/{id}/submit) —
     tái dùng save_upload_file() y hệt cách /products/upload-image làm, chỉ
     khác subfolder để tách riêng thư mục ảnh banner."""
-    url = await save_upload_file(file, "banners")
+    url = await save_upload_file(file, "banners", db=db, uploaded_by=current_user.user_id)
     return {"url": url}
 
 

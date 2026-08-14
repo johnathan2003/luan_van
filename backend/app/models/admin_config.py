@@ -4,24 +4,12 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 
-class Banner(Base):
-    __tablename__ = "banners"
-
-    banner_id     = Column(Integer, primary_key=True, autoincrement=True)
-    title         = Column(String(200), nullable=False)
-    shop_id       = Column(Integer, ForeignKey("shops.shop_id"), nullable=True)
-    shop_name     = Column(String(200))          # cache tên shop khi submit
-    status        = Column(Enum("pending", "active", "rejected", native_enum=False), default="pending", index=True)
-    valid_from    = Column(String(20))
-    valid_to      = Column(String(20))
-    link          = Column(String(500))
-    image_url     = Column(String(500))
-    emoji         = Column(String(20))
-    color1        = Column(String(20))
-    color2        = Column(String(20))
-    display_order = Column(Integer, default=0)
-    created_at    = Column(DateTime, server_default=func.now())
-    updated_at    = Column(DateTime, server_default=func.now(), onupdate=func.now())
+# NOTE: the old `Banner` model (table "banners") that used to live here has been
+# superseded by app.models.wallet_auction.Banner — the official/live banner
+# record populated via the banner-auction promote-on-approve flow. Do not
+# redefine a `Banner` class in this module; SQLAlchemy raises
+# `InvalidRequestError` if two declarative classes map the same table name on
+# the same MetaData.
 
 
 class Feedback(Base):

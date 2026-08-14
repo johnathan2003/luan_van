@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.middleware.auth import get_current_user, require_shop_owner, get_current_user_optional
 from app.models.user import User
+from app.models.product import Product
 from app.schemas.product import ProductCreate, ProductUpdate, DeletionRequestCreate, CategoryCreate
 from app.services.product_service import (
     get_products, get_product_by_id, create_product, update_product,
@@ -70,6 +71,53 @@ def similar_products(
     """Shop gõ tên sản phẩm mới → gợi ý sản phẩm đã tồn tại có tên tương tự,
     để tránh đăng trùng lặp hàng hoá lên sàn."""
     return {"products": find_similar_products(db, name, exclude_product_id=exclude_id)}
+
+
+@router.get("/flash-sale")
+def flash_sale_products(
+    limit: int = Query(12, ge=1, le=20),
+    db: Session = Depends(get_db),
+):
+    """Sản phẩm khu Flash Sale trang chủ. Ưu tiên danh sách admin ghim thủ
+    công (flash_sale_picks, quản lý ở /api/super/flash-sale, tối đa 10);
+    nếu chưa ghim gì thì fallback về top bán chạy tự động (hành vi cũ)."""
+    from app.models.product import FlashSalePick
+
+    picks = (
+        db.query(FlashSalePick)
+        .join(Product, Product.product_id == FlashSalePick.product_id)
+        .filter(Product.status == "active", Product.deleted_at.is_(None))
+        .order_by(FlashSalePick.sort_order.asc(), FlashSalePick.pick_id.asc())
+        .limit(limit)
+        .all()
+    )
+    if picks:
+        items = [p.product for p in picks]
+        curated = True
+    else:
+        items = (
+            db.query(Product)
+            .filter(Product.status == "active", Product.deleted_at.is_(None))
+            .order_by(Product.sales_count.desc())
+            .limit(limit)
+            .all()
+        )
+        curated = False
+
+    return {
+        "curated": curated,
+        "products": [
+            {
+                "product_id":   p.product_id,
+                "product_name": p.product_name,
+                "price":        p.price,
+                "image_urls":   p.image_urls,
+                "rating":       p.rating,
+                "sales_count":  p.sales_count,
+            }
+            for p in items
+        ],
+    }
 
 
 @router.get("/{product_id}")
@@ -224,8 +272,12 @@ def sync_product_variants(
 
 
 @router.post("/upload-image")
-async def upload_product_image(file: UploadFile = File(...)):
-    url = await save_upload_file(file, "products")
+async def upload_product_image(
+    file: UploadFile = File(...),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    url = await save_upload_file(file, "products", db=db, uploaded_by=current_user.user_id if current_user else None)
     return {"url": url}
 
 

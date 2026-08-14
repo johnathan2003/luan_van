@@ -65,7 +65,7 @@ class BannerSlot(Base):
     slot_id            = Column(Integer, primary_key=True, autoincrement=True)
     name               = Column(String(200), nullable=False)
     position           = Column(String(50), nullable=False, default='top')  # top|middle|sidebar|category
-    width              = Column(Integer)
+    width              = Column`(Integer)
     height             = Column(Integer)
     base_price         = Column(Numeric(15, 2), nullable=False, default=0)  # giá sàn mỗi đấu giá
     duration_days      = Column(Integer, nullable=False, default=7)          # thời hạn hiển thị

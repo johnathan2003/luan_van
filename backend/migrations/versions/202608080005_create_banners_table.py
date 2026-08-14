@@ -23,6 +23,19 @@ branch_labels = None
 depends_on = None
 
 
+def _column_exists(conn, table, column) -> bool:
+    return conn.execute(text("""
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = :t AND column_name = :c
+    """), {"t": table, "c": column}).first() is not None
+
+
+def _constraint_exists(conn, name) -> bool:
+    return conn.execute(text("""
+        SELECT 1 FROM pg_constraint WHERE conname = :n
+    """), {"n": name}).first() is not None
+
+
 def upgrade() -> None:
     conn = op.get_bind()
 
@@ -46,6 +59,55 @@ def upgrade() -> None:
             sa.Column('created_at', sa.DateTime(), server_default=sa.func.now()),
             sa.Column('updated_at', sa.DateTime(), server_default=sa.func.now()),
         )
+    else:
+        # "banners" đã tồn tại từ migration cũ 202606250002 (schema cũ của
+        # app.models.admin_config.Banner đã bị xoá — model đó không còn dùng
+        # nữa) — vá schema cho khớp app.models.wallet_auction.Banner thay vì
+        # giả định bảng trống/đúng cấu trúc.
+        if not _column_exists(conn, 'banners', 'slot_id'):
+            op.add_column('banners', sa.Column('slot_id', sa.Integer(), nullable=True))
+        if not _constraint_exists(conn, 'fk_banners_slot_id'):
+            conn.execute(text("""
+                ALTER TABLE banners ADD CONSTRAINT fk_banners_slot_id
+                FOREIGN KEY (slot_id) REFERENCES banner_slots(slot_id) ON DELETE SET NULL
+            """))
+
+        if not _column_exists(conn, 'banners', 'position'):
+            op.add_column('banners', sa.Column('position', sa.String(50), nullable=True))
+
+        if not _column_exists(conn, 'banners', 'source_auction_id'):
+            op.add_column('banners', sa.Column('source_auction_id', sa.Integer(), nullable=True))
+        if not _constraint_exists(conn, 'fk_banners_source_auction_id'):
+            conn.execute(text("""
+                ALTER TABLE banners ADD CONSTRAINT fk_banners_source_auction_id
+                FOREIGN KEY (source_auction_id) REFERENCES banner_auctions(auction_id) ON DELETE SET NULL
+            """))
+
+        if not _column_exists(conn, 'banners', 'created_by'):
+            op.add_column('banners', sa.Column('created_by', sa.Integer(), nullable=True))
+        if not _constraint_exists(conn, 'fk_banners_created_by'):
+            conn.execute(text("""
+                ALTER TABLE banners ADD CONSTRAINT fk_banners_created_by
+                FOREIGN KEY (created_by) REFERENCES users(user_id)
+            """))
+
+        # status: cột cũ là enum banner_status ('pending'/'active'/'rejected'),
+        # code mới ghi chuỗi tự do ('active'/'inactive') -> đổi sang varchar.
+        status_type = conn.execute(text("""
+            SELECT data_type FROM information_schema.columns
+            WHERE table_name = 'banners' AND column_name = 'status'
+        """)).scalar()
+        if status_type == 'USER-DEFINED':
+            conn.execute(text("ALTER TABLE banners ALTER COLUMN status DROP DEFAULT"))
+            conn.execute(text("ALTER TABLE banners ALTER COLUMN status TYPE VARCHAR(20) USING status::text"))
+            conn.execute(text("ALTER TABLE banners ALTER COLUMN status SET DEFAULT 'active'"))
+
+        # title NOT NULL ở schema cũ -> model mới cho phép NULL.
+        conn.execute(text("ALTER TABLE banners ALTER COLUMN title DROP NOT NULL"))
+        # image_url NOT NULL ở model mới, nhưng nới lỏng ở DB để tránh vỡ nếu
+        # bảng cũ đang có row NULL — code luôn set giá trị khi insert.
+        if _column_exists(conn, 'banners', 'image_url'):
+            conn.execute(text("ALTER TABLE banners ALTER COLUMN image_url DROP NOT NULL"))
 
     # Backfill: banner đã approved trước đây -> banners (status=active), 1 lần
     # duy nhất (idempotent nhờ NOT EXISTS theo source_auction_id).
@@ -65,4 +127,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table('banners')
+    # Không tự ý drop "banners" ở đây — bảng này có thể đã tồn tại từ trước
+    # migration 202606250002 (schema cũ) và downgrade của migration đó mới là
+    # nơi chịu trách nhiệm xoá bảng.
+    pass
