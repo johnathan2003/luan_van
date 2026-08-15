@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.middleware.auth import get_current_user, require_shop_owner, get_current_user_optional
 from app.models.user import User
+from app.models.shop import Shop
 from app.schemas.product import ProductCreate, ProductUpdate, DeletionRequestCreate, CategoryCreate
 from app.services.product_service import (
     get_products, get_product_by_id, create_product, update_product,
@@ -32,11 +33,18 @@ def list_products(
     db: Session = Depends(get_db),
 ):
     items, total, pages = get_products(db, page, limit, category_id, min_price, max_price, shop_id, search, sort)
+    # Build shop_name lookup for returned products
+    shop_ids = list({p.shop_id for p in items if p.shop_id})
+    shops_map: dict = {}
+    if shop_ids:
+        shops = db.query(Shop).filter(Shop.shop_id.in_(shop_ids)).all()
+        shops_map = {s.shop_id: s.shop_name for s in shops}
     return {
         "products": [
             {
                 "product_id": p.product_id,
                 "shop_id": p.shop_id,
+                "shop_name": shops_map.get(p.shop_id),
                 "product_name": p.product_name,
                 "price": p.price,
                 "stock_quantity": p.stock_quantity,

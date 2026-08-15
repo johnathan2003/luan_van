@@ -24,7 +24,12 @@ const ProductCard: React.FC<Props> = ({ product }) => {
             alt={product.product_name}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
-          {product.sales_count > 100 && (
+          {(product as any)._isTop && (
+            <span style={{ position: 'absolute', top: 8, left: 8, background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', color: '#fff', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 20 }}>
+              🏆 TOP
+            </span>
+          )}
+          {!(product as any)._isTop && product.sales_count > 100 && (
             <span style={{ position: 'absolute', top: 8, left: 8, background: 'var(--flash-timer-bg)', color: 'var(--flash-timer-text)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
               HOT
             </span>

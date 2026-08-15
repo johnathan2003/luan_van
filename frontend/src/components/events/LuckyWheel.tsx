@@ -1,6 +1,11 @@
 import React, { useState } from 'react'
 import { SPIN_REWARDS, doSpin, canSpinToday, type SpinReward } from '../../utils/eventsStore'
 
+function resetSpinForTest() {
+  // xoa tat ca key spin trong localStorage (ca co email va ko co email)
+  Object.keys(localStorage).forEach(k => { if (k.includes('buyzo_spin_v1')) localStorage.removeItem(k) })
+}
+
 interface Props {
   onResult: (reward: SpinReward) => void
 }
@@ -18,19 +23,24 @@ const LuckyWheel: React.FC<Props> = ({ onResult }) => {
     const result = doSpin()
     if (!result) { setCanSpin(false); return }
 
-    setSpinning(true)
-    // quay nhieu vong + dung tai vi tri index (mui ten o tren, 12h)
     const targetDeg = 360 - (result.index * SEGMENT_DEG + SEGMENT_DEG / 2)
     const extraSpins = 5 * 360
     const finalRotation = rotation - (rotation % 360) + extraSpins + targetDeg
 
-    setRotation(finalRotation)
+    // Bước 1: bật transition (spinning=true) → render trước
+    setSpinning(true)
+    // Bước 2: sau 2 frame browser mới set rotation → transition có hiệu lực
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setRotation(finalRotation)
+      })
+    })
 
     setTimeout(() => {
       setSpinning(false)
       setCanSpin(false)
       onResult(result.reward)
-    }, 3200)
+    }, 3400)
   }
 
   // conic-gradient cho banh xe
@@ -57,15 +67,28 @@ const LuckyWheel: React.FC<Props> = ({ onResult }) => {
           }}
         >
           {SPIN_REWARDS.map((r, i) => {
-            const angle = i * SEGMENT_DEG + SEGMENT_DEG / 2
+            // Tính chính xác tâm của từng segment bằng tọa độ cực
+            // angle tính từ đỉnh (12 giờ) theo chiều kim đồng hồ
+            const angleDeg = i * SEGMENT_DEG + SEGMENT_DEG / 2
+            const angleRad = angleDeg * Math.PI / 180
+            const radius = 78 // px từ tâm
+            const cx = 140, cy = 140 // tâm bánh xe (280/2)
+            const lx = cx + radius * Math.sin(angleRad)
+            const ly = cy - radius * Math.cos(angleRad)
             return (
               <div
                 key={i}
                 style={{
-                  position: 'absolute', top: '50%', left: '50%', width: 110,
-                  transform: `rotate(${angle}deg) translate(38px, -10px)`,
-                  transformOrigin: 'left center', fontSize: 11, fontWeight: 700,
-                  color: 'var(--gray-700)', textAlign: 'center',
+                  position: 'absolute',
+                  left: lx, top: ly,
+                  width: 68,
+                  transform: `translate(-50%, -50%) rotate(${angleDeg}deg)`,
+                  fontSize: 9.5, fontWeight: 800,
+                  color: '#1e1b4b',
+                  textAlign: 'center',
+                  lineHeight: 1.2,
+                  pointerEvents: 'none',
+                  textShadow: '0 0 4px rgba(255,255,255,1)',
                 }}
               >
                 {r.label}
@@ -91,6 +114,17 @@ const LuckyWheel: React.FC<Props> = ({ onResult }) => {
         style={{ minWidth: 180, opacity: (spinning || !canSpin) ? 0.6 : 1, cursor: (spinning || !canSpin) ? 'not-allowed' : 'pointer' }}
       >
         {spinning ? 'Đang quay...' : canSpin ? '🎰 Quay ngay (1 lượt/ngày)' : 'Đã quay hôm nay, mai quay tiếp!'}
+      </button>
+
+      {/* TEST ONLY */}
+      <button
+        onClick={() => { resetSpinForTest(); setCanSpin(true); setSpinning(false); setRotation(0) }}
+        style={{
+          fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px dashed #f87171',
+          background: '#fff1f2', color: '#b91c1c', cursor: 'pointer', marginTop: -8,
+        }}
+      >
+        🧪 [Test] Reset vòng quay
       </button>
     </div>
   )

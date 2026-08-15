@@ -427,3 +427,16 @@ export function formatCountdown(ms: number): string {
   const totalSec = Math.floor(ms / 1000); const m = Math.floor(totalSec / 60); const s = totalSec % 60
   return `${m}:${s.toString().padStart(2, '0')}`
 }
+
+export function migrateShopName(oldName: string, newName: string): void {
+  if (!oldName || !newName || oldName === newName) return
+  const d = getStore()
+  let changed = false
+  const migrate = (session: FlashAuctionSession) => {
+    session.bids.forEach(b => { if (b.shopName === oldName) { b.shopName = newName; changed = true } })
+    if (session.winner?.shopName === oldName) { session.winner.shopName = newName; changed = true }
+  }
+  Object.values(d.sessions).forEach(s => { if (s) migrate(s) })
+  d.history.forEach(h => migrate(h))
+  if (changed) saveStore(d)
+}

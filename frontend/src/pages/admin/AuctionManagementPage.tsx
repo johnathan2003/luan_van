@@ -167,7 +167,7 @@ const PoolCard: React.FC<{
       </div>
 
       {/* Settings */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.6fr 0.6fr 0.6fr 0.55fr 0.55fr', gap: 10, marginBottom: session ? 16 : 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.6fr 0.6fr 0.6fr 0.55fr 0.55fr', gap: 10, marginBottom: session ? 16 : 0, alignItems: 'end' }}>
         <label style={{ fontSize: 12, color: C.gray }}>
           Số slot tổng
           <input type="number" step={10} defaultValue={settings.totalSlots}
@@ -191,7 +191,7 @@ const PoolCard: React.FC<{
             style={inputStyle} />
         </label>
         <label style={{ fontSize: 11, color: C.gray }}>
-          🏁 Giá kết thúc (đ) <span style={{ color: '#7C3AED', fontWeight: 600, fontSize: 10 }}>— trừ Tiền đấu giá shop</span>
+          🏁 Giá kết thúc (đ)
           <input key={`ep-${settings.endPrice}`} type="text" defaultValue={(settings.endPrice ?? 0).toLocaleString('vi-VN')}
             disabled={!isEditing}
             onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
@@ -456,7 +456,7 @@ const AuctionManagementPage: React.FC = () => {
                       style={inputStyle} />
                   </label>
                   <label style={{ fontSize: 11, color: C.gray }}>
-                    🏁 Giá kết thúc (đ) <span style={{ color: '#7C3AED', fontWeight: 600, fontSize: 10 }}>— trừ Tiền đấu giá shop</span>
+                    🏁 Giá kết thúc (đ)
                     <input key={`ep-${s.endPrice}`} type="text" defaultValue={(s.endPrice ?? 0).toLocaleString('vi-VN')}
                       disabled={!isEditing}
                       onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
@@ -639,7 +639,7 @@ const AuctionManagementPage: React.FC = () => {
                       style={inputStyle} />
                   </label>
                   <label style={{ fontSize: 11, color: C.gray }}>
-                    🏁 Giá kết thúc (đ) <span style={{ color: '#7C3AED', fontWeight: 600, fontSize: 10 }}>— trừ Tiền đấu giá shop</span>
+                    🏁 Giá kết thúc (đ)
                     <input key={`ep-${s.endPrice}`} type="text" defaultValue={(s.endPrice ?? 0).toLocaleString('vi-VN')}
                       disabled={!isEditing}
                       onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}

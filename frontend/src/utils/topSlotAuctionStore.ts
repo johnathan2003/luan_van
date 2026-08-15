@@ -53,6 +53,7 @@ export interface TopBid {
 export interface TopAuctionSession {
   id: string; slot: TopSlotKey; startedAt: string; endsAt: string; bids: TopBid[]
   paused?: boolean
+  pausedAt?: string
   status: 'active' | 'ended'; winner?: TopBid
   scheduledStartAt?: string
   description?: string
@@ -153,7 +154,7 @@ function saveStore(data: StoreData) { writeJSON(KEY, data) }
 
 function rollIfExpired(data: StoreData, slot: TopSlotKey): TopAuctionSession | undefined {
   const session = data.sessions[slot]
-  if (session && new Date(session.endsAt).getTime() <= Date.now() && session.status === 'active') {
+  if (session && !session.paused && new Date(session.endsAt).getTime() <= Date.now() && session.status === 'active') {
     const winner = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)) : undefined
     const settings = data.settings[slot]
     const ended: TopAuctionSession = {
@@ -333,12 +334,19 @@ export function updateAdminSettings(slot: TopSlotKey, patch: Partial<Omit<Auctio
 
 export function freezeAuction(slot: TopSlotKey): void {
   const data = getStore()
-  if (data.sessions[slot]) { data.sessions[slot] = { ...data.sessions[slot]!, paused: true }; saveStore(data) }
+  const s = data.sessions[slot]
+  if (s) { data.sessions[slot] = { ...s, paused: true, pausedAt: new Date().toISOString() }; saveStore(data) }
 }
 
 export function unfreezeAuction(slot: TopSlotKey): void {
   const data = getStore()
-  if (data.sessions[slot]) { data.sessions[slot] = { ...data.sessions[slot]!, paused: false }; saveStore(data) }
+  const s = data.sessions[slot]
+  if (s && s.paused) {
+    const pausedMs = s.pausedAt ? Date.now() - new Date(s.pausedAt).getTime() : 0
+    const newEndsAt = new Date(new Date(s.endsAt).getTime() + pausedMs).toISOString()
+    data.sessions[slot] = { ...s, paused: false, pausedAt: undefined, endsAt: newEndsAt }
+    saveStore(data)
+  }
 }
 
 export function cancelAuction(slot: TopSlotKey): void {
@@ -404,4 +412,17 @@ export function openAuction(
 
 export function msUntilEnd(session: TopAuctionSession): number {
   return Math.max(0, new Date(session.endsAt).getTime() - Date.now())
+}
+
+export function migrateShopName(oldName: string, newName: string): void {
+  if (!oldName || !newName || oldName === newName) return
+  const d = getStore()
+  let changed = false
+  const migrate = (session: TopAuctionSession) => {
+    session.bids.forEach(b => { if (b.shopName === oldName) { b.shopName = newName; changed = true } })
+    if (session.winner?.shopName === oldName) { session.winner.shopName = newName; changed = true }
+  }
+  Object.values(d.sessions).forEach(s => { if (s) migrate(s) })
+  d.history.forEach(h => migrate(h))
+  if (changed) saveStore(d)
 }

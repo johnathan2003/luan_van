@@ -127,3 +127,11 @@ export function deleteBuyNowTransaction(txId: string): void {
   const data = getStore().filter(tx => tx.id !== txId)
   saveStore(data)
 }
+
+export function migrateShopName(oldName: string, newName: string): void {
+  if (!oldName || !newName || oldName === newName) return
+  const data = getStore()
+  let changed = false
+  data.forEach(tx => { if (tx.shopName === oldName) { tx.shopName = newName; changed = true } })
+  if (changed) saveStore(data)
+}

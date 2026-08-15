@@ -10,7 +10,7 @@ class Banner(Base):
     banner_id     = Column(Integer, primary_key=True, autoincrement=True)
     title         = Column(String(200), nullable=False)
     shop_id       = Column(Integer, ForeignKey("shops.shop_id"), nullable=True)
-    shop_name     = Column(String(200))          # cache tên shop khi submit
+    shop_name     = Column(String(200))
     status        = Column(Enum("pending", "active", "rejected", native_enum=False), default="pending", index=True)
     valid_from    = Column(String(20))
     valid_to      = Column(String(20))

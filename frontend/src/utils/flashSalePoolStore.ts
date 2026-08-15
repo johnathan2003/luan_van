@@ -11,6 +11,12 @@ function writeJSON(key: string, v: unknown) {
   try { localStorage.setItem(key, JSON.stringify(v)) } catch {}
 }
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+export const DEPOSIT_WINDOW_MS = 30 * 60 * 1000   // 30 phút đặt cọc
+export const DEPOSIT_RATE      = 0.2               // 20% tổng tiền thắng
+export const PAYMENT_WINDOW_MS = 24 * 60 * 60 * 1000  // 24h thanh toán đủ
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface PoolBid {
@@ -28,6 +34,12 @@ export interface SlotAllocation {
   slotsRequested: number
   slotsAssigned: number   // có thể nhỏ hơn requested nếu vừa đủ slot
   slotNumbers: number[]   // e.g. [1,2,3]
+  // Deposit tracking
+  depositStatus?: 'pending' | 'deposit_paid' | 'deposit_cancelled' | 'paid'
+  depositAmount?: number
+  depositDeadline?: string
+  paymentDeadline?: string
+  paidAt?: string   // ISO timestamp khi thanh toán đủ 100%
 }
 
 export interface PoolSession {
@@ -35,6 +47,7 @@ export interface PoolSession {
   startedAt: string
   endsAt: string
   paused?: boolean
+  pausedAt?: string
   status: 'active' | 'ended'
   scheduledStartAt?: string
   description?: string
@@ -91,6 +104,7 @@ export function computeAllocation(bids: PoolBid[], totalSlots: number): SlotAllo
   for (const bid of sorted) {
     if (used >= totalSlots) break
     const assign = Math.min(bid.slotsRequested, totalSlots - used)
+    const totalWin = bid.amountPerSlot * assign
     result.push({
       rank,
       shopName: bid.shopName,
@@ -98,6 +112,9 @@ export function computeAllocation(bids: PoolBid[], totalSlots: number): SlotAllo
       slotsRequested: bid.slotsRequested,
       slotsAssigned: assign,
       slotNumbers: Array.from({ length: assign }, (_, i) => used + i + 1),
+      depositStatus: 'pending',
+      depositAmount: Math.ceil(totalWin * DEPOSIT_RATE),
+      depositDeadline: new Date(Date.now() + DEPOSIT_WINDOW_MS).toISOString(),
     })
     used += assign
     rank++
@@ -119,26 +136,127 @@ function markWinNotified(id: string) {
   } catch {}
 }
 
+function endSession(s: PoolSession): PoolSession {
+  const allocation = computeAllocation(s.bids, s.totalSlots)
+  return { ...s, status: 'ended', allocation }
+}
+
 function rollIfExpired(d: StoreData): void {
   const s = d.session
   if (!s || s.status !== 'active') return
+  if (s.paused) return  // đóng băng → không kết thúc theo đồng hồ
   if (new Date(s.endsAt).getTime() > Date.now()) return
-  const allocation = computeAllocation(s.bids, s.totalSlots)
-  const ended: PoolSession = { ...s, status: 'ended', allocation }
+  const ended = endSession(s)
   d.history.unshift(ended); d.history = d.history.slice(0, 30)
   d.session = null
   // Notify winners
-  for (const a of allocation) {
+  for (const a of ended.allocation ?? []) {
     if (!hasWinNotified(s.id + '-' + a.shopName)) {
       markWinNotified(s.id + '-' + a.shopName)
       addNotificationFor('', 'shop', 0, {
         title: '⚡ Thắng đấu giá Flash Sale!',
-        message: `Shop "${a.shopName}" được ${a.slotsAssigned} slot Flash Sale (${a.slotNumbers.map(n => '#' + n).join(', ')}).`,
+        message: `Shop "${a.shopName}" được ${a.slotsAssigned} slot Flash Sale (${a.slotNumbers.map(n => '#' + n).join(', ')}). Vui lòng đặt cọc ${(a.depositAmount ?? 0).toLocaleString('vi-VN')}đ trong 30 phút!`,
         type: 'auction_win',
         action_url: '/shop/auction',
       })
     }
   }
+}
+
+/** Quét hết hạn deposit / payment trong history */
+export function sweepExpiredPoolDeposits(): void {
+  const d = getStore()
+  let changed = false
+  const now = Date.now()
+  for (const session of d.history) {
+    if (!session.allocation) continue
+    for (const a of session.allocation) {
+      if (a.depositStatus === 'pending' && a.depositDeadline && new Date(a.depositDeadline).getTime() <= now) {
+        a.depositStatus = 'deposit_cancelled'
+        changed = true
+        // TODO: ban logic có thể thêm ở đây nếu cần
+      }
+      if (a.depositStatus === 'deposit_paid' && a.paymentDeadline && new Date(a.paymentDeadline).getTime() <= now) {
+        a.depositStatus = 'deposit_cancelled'
+        changed = true
+      }
+    }
+  }
+  if (changed) saveStore(d)
+}
+
+/** Danh sách các phiên pool đã kết thúc mà shop CÒN cần đặt cọc hoặc đã cọc chờ thanh toán */
+export function getPoolPendingWins(shopName: string): { session: PoolSession; alloc: SlotAllocation }[] {
+  sweepExpiredPoolDeposits()
+  const d = getStore()
+  const result: { session: PoolSession; alloc: SlotAllocation }[] = []
+  for (const session of d.history) {
+    if (!session.allocation) continue
+    const a = session.allocation.find(x => x.shopName === shopName)
+    if (a && (a.depositStatus === 'pending' || a.depositStatus === 'deposit_paid')) {
+      result.push({ session, alloc: a })
+    }
+  }
+  return result
+}
+
+/** Shop đặt cọc 20% */
+export function payPoolDeposit(sessionId: string, shopName: string): boolean {
+  const d = getStore()
+  const session = d.history.find(s => s.id === sessionId)
+  if (!session?.allocation) return false
+  const a = session.allocation.find(x => x.shopName === shopName)
+  if (!a || a.depositStatus !== 'pending') return false
+  a.depositStatus = 'deposit_paid'
+  a.paymentDeadline = new Date(Date.now() + PAYMENT_WINDOW_MS).toISOString()
+  saveStore(d)
+  addNotificationFor('', 'shop', 0, {
+    title: '✅ Đặt cọc Flash Sale thành công!',
+    message: `Đã xác nhận cọc ${(a.depositAmount ?? 0).toLocaleString('vi-VN')}đ cho ${a.slotsAssigned} slot Flash Sale. Thanh toán đủ 100% trong 24h để slot đi vào hoạt động.`,
+    type: 'deposit_paid',
+    action_url: '/shop/auction',
+  })
+  return true
+}
+
+/** Huỷ cọc (chỉ sau khi đã cọc — deposit_paid) */
+export function cancelPoolDeposit(sessionId: string, shopName: string): boolean {
+  const d = getStore()
+  const session = d.history.find(s => s.id === sessionId)
+  if (!session?.allocation) return false
+  const a = session.allocation.find(x => x.shopName === shopName)
+  if (!a || a.depositStatus !== 'deposit_paid') return false
+  a.depositStatus = 'deposit_cancelled'
+  saveStore(d)
+  return true
+}
+
+/** Thanh toán đủ 100% */
+export function payPoolWin(sessionId: string, shopName: string): boolean {
+  const d = getStore()
+  const session = d.history.find(s => s.id === sessionId)
+  if (!session?.allocation) return false
+  const a = session.allocation.find(x => x.shopName === shopName)
+  if (!a || a.depositStatus !== 'deposit_paid') return false
+  a.depositStatus = 'paid'
+  a.paidAt = new Date().toISOString()
+  saveStore(d)
+  return true
+}
+
+/** Thông tin hiển thị Flash Sale (còn bao lâu nữa) */
+export function getFlashSaleDisplayInfo(shopName: string): { active: boolean; remainingMs: number } {
+  const d = getStore()
+  for (const session of d.history) {
+    if (!session.allocation) continue
+    const a = session.allocation.find(x => x.shopName === shopName && x.depositStatus === 'paid')
+    if (a?.paidAt) {
+      const expiresAt = new Date(a.paidAt).getTime() + d.settings.displayDurationMs
+      const remainingMs = Math.max(0, expiresAt - Date.now())
+      return { active: remainingMs > 0, remainingMs }
+    }
+  }
+  return { active: false, remainingMs: 0 }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -191,9 +309,7 @@ export function openAuction(opts?: { startDelayMinutes?: number; description?: s
   saveStore(d)
 
   const delayMin = opts?.startDelayMinutes ?? 0
-  const when = delayMin > 0
-    ? `sau ${delayMin} phút`
-    : 'ngay bây giờ'
+  const when = delayMin > 0 ? `sau ${delayMin} phút` : 'ngay bây giờ'
   addNotificationFor('', 'shop', 0, {
     title: '⚡ Phiên đấu giá Flash Sale mới!',
     message: `${d.settings.totalSlots} slot Flash Sale mở đấu giá ${when}. Mỗi shop tối đa ${d.settings.maxSlotsPerShop} slot.${opts?.description ? '\n📋 ' + opts.description : ''}\nVào Đấu giá QC để tham gia!`,
@@ -205,12 +321,17 @@ export function openAuction(opts?: { startDelayMinutes?: number; description?: s
 
 export function freezeAuction(): void {
   const d = getStore()
-  if (d.session) { d.session = { ...d.session, paused: true }; saveStore(d) }
+  if (d.session) { d.session = { ...d.session, paused: true, pausedAt: new Date().toISOString() }; saveStore(d) }
 }
 
 export function unfreezeAuction(): void {
   const d = getStore()
-  if (d.session) { d.session = { ...d.session, paused: false }; saveStore(d) }
+  const s = d.session
+  if (s && s.paused) {
+    const pausedMs = s.pausedAt ? Date.now() - new Date(s.pausedAt).getTime() : 0
+    d.session = { ...s, paused: false, pausedAt: undefined, endsAt: new Date(new Date(s.endsAt).getTime() + pausedMs).toISOString() }
+    saveStore(d)
+  }
 }
 
 export function cancelAuction(): void {
@@ -223,13 +344,38 @@ export function cancelAuction(): void {
 export function lockAuction(): void {
   const d = getStore(); rollIfExpired(d)
   if (d.session) {
-    const allocation = computeAllocation(d.session.bids, d.session.totalSlots)
-    d.history.unshift({ ...d.session, status: 'ended', allocation })
+    const ended = endSession(d.session)
+    d.history.unshift(ended)
     d.history = d.history.slice(0, 30)
     d.session = null
+    // Notify winners
+    for (const a of ended.allocation ?? []) {
+      if (!hasWinNotified(ended.id + '-' + a.shopName)) {
+        markWinNotified(ended.id + '-' + a.shopName)
+        addNotificationFor('', 'shop', 0, {
+          title: '⚡ Thắng đấu giá Flash Sale!',
+          message: `Shop "${a.shopName}" được ${a.slotsAssigned} slot Flash Sale. Đặt cọc ${(a.depositAmount ?? 0).toLocaleString('vi-VN')}đ trong 30 phút!`,
+          type: 'auction_win',
+          action_url: '/shop/auction',
+        })
+      }
+    }
   }
   d.settings.locked = true
   saveStore(d)
+}
+
+/** Shop names hiện đang có slot Flash Sale đã thanh toán đủ (status: 'paid') */
+export function getFlashSaleActiveShops(): Set<string> {
+  const d = getStore()
+  const result = new Set<string>()
+  for (const session of d.history) {
+    if (!session.allocation) continue
+    for (const a of session.allocation) {
+      if (a.depositStatus === 'paid') result.add(a.shopName)
+    }
+  }
+  return result
 }
 
 export interface PlaceBidResult { ok: boolean; error?: string; session?: PoolSession }
@@ -266,4 +412,18 @@ export function placeBid(
   d.session.bids.push(bid)
   saveStore(d)
   return { ok: true, session: d.session }
+}
+
+export function migrateShopName(oldName: string, newName: string): void {
+  if (!oldName || !newName || oldName === newName) return
+  const d = getStore()
+  let changed = false
+  for (const session of d.history) {
+    session.bids.forEach(b => { if (b.shopName === oldName) { b.shopName = newName; changed = true } })
+    ;(session.allocation ?? []).forEach(a => { if (a.shopName === oldName) { a.shopName = newName; changed = true } })
+  }
+  if (d.session) {
+    d.session.bids.forEach(b => { if (b.shopName === oldName) { b.shopName = newName; changed = true } })
+  }
+  if (changed) saveStore(d)
 }
