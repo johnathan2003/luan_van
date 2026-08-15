@@ -36,6 +36,23 @@ import {
   BuyNowTransaction, MAX_BUYNOW_REVISIONS,
   getAllBuyNowTransactions, approveBuyNow, rejectBuyNow, deleteBuyNowTransaction,
 } from '../../utils/buyNowStore'
+import {
+  TOP_SLOTS,
+  getHistory as getTopHistory,
+} from '../../utils/topSlotAuctionStore'
+import { getTopProductListByShop, getFlashProductList, migrateShopName as migrateDraftShopName } from '../../utils/bannerDraftStore'
+import {
+  getActiveSession as getFlashPoolSession,
+  computeAllocation as computeFlashAllocation,
+  getFlashSaleActiveShops,
+  getFlashSaleDisplayInfo,
+  migrateShopName as migratePoolShopName,
+} from '../../utils/flashSalePoolStore'
+import { migrateShopName as migrateBannerShopName } from '../../utils/bannerAuctionStore'
+import { migrateShopName as migrateFlashShopName } from '../../utils/flashSaleAuctionStore'
+import { migrateShopName as migrateTopShopName } from '../../utils/topSlotAuctionStore'
+import { migrateShopName as migrateBuyNowShopName } from '../../utils/buyNowStore'
+import { shopService } from '../../services/shopService'
 
 // ── Reminder dedup (localStorage) ────────────────────────────────────────────
 const REMINDER_KEY = 'buyzo_payment_reminders_v1'
@@ -111,6 +128,7 @@ const BannerAdminPage: React.FC = () => {
   const [auctionSubs, setAuctionSubs] = useState<AuctionSub[]>([])
   const [bannerHistory, setBannerHistory] = useState<any[]>([])
   const [flashHistory, setFlashHistory] = useState<any[]>([])
+  const [topHistory, setTopHistory] = useState<any[]>([])
   // Buy-now transactions (completely separate from auction)
   const [buyNowTxs, setBuyNowTxs] = useState<BuyNowTransaction[]>(() => getAllBuyNowTransactions())
   // Resolved image map: raw ref → actual data URL (for IDB refs)
@@ -295,6 +313,7 @@ const BannerAdminPage: React.FC = () => {
     setAuctionSubs(combined)
     setBannerHistory(getBannerHistory())
     setFlashHistory(getFlashHistory())
+    setTopHistory(getTopHistory())
     const bnTxs = getAllBuyNowTransactions()
     setBuyNowTxs([...bnTxs])
     // Resolve IDB image refs async — cả auction submissions lẫn buy-now transactions
@@ -311,6 +330,22 @@ const BannerAdminPage: React.FC = () => {
         })
         .catch(() => {})
     }
+  }, [])
+
+  // Migrate tên shop mock → tên thật (chạy 1 lần khi admin mở trang)
+  useEffect(() => {
+    shopService.getMyShop().then((res: any) => {
+      const name = res?.data?.data?.shop_name || res?.data?.shop_name
+      if (name && name !== 'My Demo Shop') {
+        migrateDraftShopName('My Demo Shop', name)
+        migrateBannerShopName('My Demo Shop', name)
+        migrateFlashShopName('My Demo Shop', name)
+        migratePoolShopName('My Demo Shop', name)
+        migrateTopShopName('My Demo Shop', name)
+        migrateBuyNowShopName('My Demo Shop', name)
+        loadAuction() // reload sau migration
+      }
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -1139,8 +1174,112 @@ const BannerAdminPage: React.FC = () => {
       )}
 
 
+      {/* ── Flash Sale đang hiển thị (tab active) ──────────────────────────── */}
+      {tab === 'active' && (() => {
+        const activeShops = Array.from(getFlashSaleActiveShops())
+        if (activeShops.length === 0) return null
+        const fmtMs = (ms: number) => {
+          if (ms <= 0) return 'Hết hạn'
+          const h = Math.floor(ms / 3600000); const m = Math.floor((ms % 3600000) / 60000)
+          return h > 0 ? `${h}h ${m}m` : `${m}m`
+        }
+        return (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: C.orange, textTransform: 'uppercase', letterSpacing: 1 }}>⚡ Flash Sale đang hiển thị</span>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: 'rgba(234,88,12,0.12)', color: C.orange }}>{activeShops.length} shop</span>
+              <div style={{ flex: 1, height: 1, background: C.border }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 10, marginBottom: 8 }}>
+              {activeShops.flatMap(shopName => {
+                const info = getFlashSaleDisplayInfo(shopName)
+                const preppedProducts = getFlashProductList(shopName).filter((p): p is NonNullable<typeof p> => !!p && !!p.selectedForFlashSale)
+                if (preppedProducts.length === 0) return [(
+                  <div key={shopName + '_empty'} className="card" style={{ padding: 14, borderLeft: `3px solid ${C.orange}` }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.orange, marginBottom: 4 }}>⚡ Flash Sale</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>🏪 {shopName}</div>
+                    <div style={{ fontSize: 11, color: C.gray, fontStyle: 'italic' }}>⚠️ Chưa chọn sản phẩm</div>
+                  </div>
+                )]
+                return preppedProducts.map((p, i) => (
+                  <div key={shopName + '_' + i} className="card" style={{ padding: 14, borderLeft: `3px solid ${C.orange}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: C.orange }}>⚡ Flash Sale #{i + 1}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: info.remainingMs > 0 ? 'rgba(234,88,12,0.1)' : 'rgba(220,38,38,0.1)', color: info.remainingMs > 0 ? C.orange : C.error }}>
+                        {info.remainingMs > 0 ? `⏳ ${fmtMs(info.remainingMs)}` : '🔴 Hết hạn'}
+                      </span>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>🏪 {shopName}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {p.productImage && (
+                        <img src={p.productImage} alt={p.productName}
+                          onError={e => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/48' }}
+                          style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8, flexShrink: 0, border: `1.5px solid rgba(234,88,12,0.25)` }} />
+                      )}
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.productName}</div>
+                        <div style={{ fontSize: 13, color: C.orange, fontWeight: 700 }}>{p.price.toLocaleString('vi-VN')}đ</div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── Vị trí Top đang hiển thị (tab active) ───────────────────────────── */}
+      {tab === 'active' && (() => {
+        const paidSlots = topHistory.filter(h => h.confirmation === 'paid' && h.winner)
+        if (paidSlots.length === 0) return null
+        return (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: 1 }}>🏆 Vị trí Top đang hiển thị</span>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: 'rgba(124,58,237,0.12)', color: '#7C3AED' }}>{paidSlots.length} slot</span>
+              <div style={{ flex: 1, height: 1, background: C.border }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 10, marginBottom: 8 }}>
+              {paidSlots.map((h: any) => {
+                const slotLabel = TOP_SLOTS.find(s => s.key === h.slot)?.label ?? h.slot
+                const slotNum = parseInt(h.slot.replace('top_', '')) || 0
+                const shopProducts = getTopProductListByShop(h.winner.shopName)
+                const product = shopProducts[slotNum - 1] ?? shopProducts[0]
+                return (
+                  <div key={h.id} className="card" style={{ padding: 14, borderLeft: '3px solid #7C3AED' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#7C3AED', marginBottom: 4 }}>📍 {slotLabel}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>🏪 {h.winner.shopName}</div>
+                    <div style={{ fontSize: 12, color: C.gray, marginBottom: 8 }}>Giá thắng: <b style={{ color: '#7C3AED' }}>{(h.winner.amount ?? 0).toLocaleString('vi-VN')}đ</b></div>
+                    {product ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(124,58,237,0.06)', borderRadius: 6, padding: '6px 8px' }}>
+                        <img src={product.productImage} alt={product.productName}
+                          onError={e => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/40' }}
+                          style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{product.productName}</div>
+                          <div style={{ fontSize: 11, color: '#7C3AED', fontWeight: 700 }}>{product.price.toLocaleString('vi-VN')}đ</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 11, color: C.gray, fontStyle: 'italic' }}>⚠️ Chưa chuẩn bị sản phẩm</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Empty state — only for active/rejected tabs */}
-      {tab !== 'pending' && regularByTab.length === 0 && auctionFiltered.length === 0 && buyNowTxs.filter(t => tab === 'active' ? t.status === 'approved' : t.status === 'rejected').length === 0 && !loadingApi && (
+      {tab !== 'pending'
+        && regularByTab.length === 0
+        && auctionFiltered.length === 0
+        && buyNowTxs.filter(t => tab === 'active' ? t.status === 'approved' : t.status === 'rejected').length === 0
+        && !(tab === 'active' && getFlashSaleActiveShops().size > 0)
+        && !(tab === 'active' && topHistory.some((h: any) => h.confirmation === 'paid' && h.winner))
+        && !loadingApi && (
         <div className="card" style={{ padding: 40, textAlign: 'center', color: C.gray }}>
           Không có banner nào ở trạng thái này
         </div>

@@ -15,6 +15,7 @@ import SuperUsers     from './pages/SuperUsers'
 import SuperBanners    from './pages/SuperBanners'
 import SuperFlashSale  from './pages/SuperFlashSale'
 import SuperMediaLibrary from './pages/SuperMediaLibrary'
+import SuperSlotAuctions from './pages/SuperSlotAuctions'
 import SuperWallets    from './pages/SuperWallets'
 import SuperFinance    from './pages/SuperFinance'
 import DBViewerPage    from './pages/DBViewerPage'
@@ -45,6 +46,7 @@ const SuperRouter: React.FC = () => (
             <Route path="banners"    element={<SuperBanners />} />
             <Route path="flash-sale" element={<SuperFlashSale />} />
             <Route path="media"      element={<SuperMediaLibrary />} />
+            <Route path="slot-auctions" element={<SuperSlotAuctions />} />
             <Route path="wallets"    element={<SuperWallets />} />
             <Route path="finance"    element={<SuperFinance />} />
             <Route path="db-viewer"  element={<DBViewerPage />} />

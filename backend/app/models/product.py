@@ -181,4 +181,3 @@ class FlashSalePick(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     product = relationship("Product", foreign_keys=[product_id])
-    deletion_request = relationship("ProductDeletionRequest")

@@ -18,7 +18,7 @@ from app.middleware.logging import RequestLoggingMiddleware
 from app.routes import (
     auth, users, products, carts, orders,
     payments, shipments, shops, admin, notifications, vouchers, chat, employee,
-    wallet, banners, feedback, disputes,
+    wallet, banners, feedback, disputes, slot_auctions, ai_incidents,
 )
 from app.routes.warehouses import router as warehouses_router
 from app.routes.warehouse_accounts import router as warehouse_accounts_router
@@ -276,6 +276,8 @@ app.include_router(warehouses_router,                                      tags=
 app.include_router(warehouse_accounts_router, prefix="/api/v1/warehouse-accounts", tags=["WarehouseAccounts"])
 app.include_router(wallet.router,                                          tags=["Wallet"])
 app.include_router(banners.router,                                         tags=["Banners"])
+app.include_router(slot_auctions.router,                                   tags=["Slot Auctions"])
+app.include_router(ai_incidents.router,                                    tags=["AI Guardian"])
 app.include_router(config_public_router, prefix="/api/v1",                tags=["Config"])
 
 # Superadmin — chỉ mount nếu module tồn tại

@@ -65,7 +65,7 @@ class BannerSlot(Base):
     slot_id            = Column(Integer, primary_key=True, autoincrement=True)
     name               = Column(String(200), nullable=False)
     position           = Column(String(50), nullable=False, default='top')  # top|middle|sidebar|category
-    width              = Column`(Integer)
+    width              = Column(Integer)
     height             = Column(Integer)
     base_price         = Column(Numeric(15, 2), nullable=False, default=0)  # giá sàn mỗi đấu giá
     duration_days      = Column(Integer, nullable=False, default=7)          # thời hạn hiển thị
@@ -78,22 +78,53 @@ class BannerSlot(Base):
 
 
 class BannerAuction(Base):
-    """Một phiên đấu giá cho một banner slot."""
+    """Một phiên đấu giá cho một banner slot.
+
+    Luồng tiền (đồng bộ với slot_auctions, nhưng vẫn giữ cơ chế reserve/
+    release lúc bid — khác slot):
+      - Suốt lúc đấu giá, tiền bid được RESERVE (giữ) trong ví — y hệt cơ
+        chế cũ, không đổi (xem place_bid trong app/routes/banners.py).
+      - Chạm/vượt end_price (BẮT BUỘC phải có ở mọi phiên) -> mua đứt, trừ
+        THẬT toàn bộ số tiền đang reserve NGAY. Khoá mua đứt trong 6 tiếng
+        cuối trước end_time (giống slot).
+      - Hết giờ bình thường -> người trả cao nhất thắng: trừ THẬT 20%
+        (deposit_amount) ngay, phần 80% còn lại VẪN nằm ở trạng thái
+        reserved (không trả về ví shop) chờ 30 phút trả nốt. Trễ hạn ->
+        KHÔNG thả tiền — trừ luôn phần reserved còn lại (mất trắng), ghi 1
+        vi phạm (dùng CHUNG bảng shop_bid_violations với slot_auctions).
+        Các shop thua cuộc không bị ảnh hưởng gì (vẫn release bình thường).
+      - Nộp nội dung: win_type='buyout' giới hạn tối đa 10 lần nộp trong
+        hạn 6h tính từ lúc trả tiền (final_paid_at) — khác slot chỉ 3 lần.
+        win_type='bid' không giới hạn số lần nộp, hạn 6h tính từ lần nộp
+        đầu tiên (giống slot).
+      - Duyệt nội dung do ADMIN làm (không phải super — đã chuyển giao),
+        duyệt xong không lên ngay, chờ 0:00 hôm sau (activates_at) mới
+        promote vào bảng "banners" chính thức.
+    """
     __tablename__ = "banner_auctions"
 
     auction_id     = Column(Integer, primary_key=True, autoincrement=True)
     slot_id        = Column(Integer, ForeignKey("banner_slots.slot_id", ondelete="CASCADE"), nullable=False, index=True)
     start_time     = Column(DateTime, nullable=False)
     end_time       = Column(DateTime, nullable=False)
-    # status: upcoming | active | ended | cancelled
+    # status: upcoming | active | ended | forfeited | live | cancelled
     status         = Column(String(30), nullable=False, default='upcoming', index=True)
     start_price    = Column(Numeric(15, 2), nullable=False, default=0)
     current_price  = Column(Numeric(15, 2), nullable=False, default=0)
+    # Mua đứt — BẮT BUỘC mọi phiên banner đều phải có (khác top slot).
+    end_price      = Column(Numeric(15, 2), nullable=False, default=0)
     winner_shop_id = Column(Integer, ForeignKey("shops.shop_id", ondelete="SET NULL"), nullable=True)
     winner_bid_id  = Column(Integer, ForeignKey("banner_bids.bid_id", use_alter=True, name="fk_auction_winner_bid"), nullable=True)
+    win_type       = Column(String(20), nullable=True)   # 'buyout' | 'bid'
+
+    deposit_amount        = Column(Numeric(15, 2))   # 20% (bid) hoặc 100% (buyout) đã trừ THẬT
+    deposit_charged_at    = Column(DateTime)
+    payment_deadline      = Column(DateTime)          # hạn 30' trả nốt 80% (chỉ win_type='bid')
+    final_paid_at         = Column(DateTime)           # lúc trả đủ 100%
+
     created_at     = Column(DateTime, server_default=func.now())
 
-    # ── Nội dung banner nộp sau khi thắng (shop tự upload, superadmin duyệt) ──
+    # ── Nội dung banner nộp sau khi thắng (shop tự upload, ADMIN duyệt) ──
     banner_image_url     = Column(String(500))
     banner_title          = Column(String(255))
     banner_link            = Column(String(500))
@@ -102,6 +133,9 @@ class BannerAuction(Base):
     banner_submitted_at     = Column(DateTime)
     banner_reviewed_at      = Column(DateTime)
     banner_reject_reason    = Column(Text)
+    submission_attempts     = Column(Integer, nullable=False, default=0)   # giới hạn 10 lần — chỉ win_type='buyout'
+    review_deadline          = Column(DateTime)   # hạn 6h duyệt nội dung
+    activates_at               = Column(DateTime)  # mốc 0:00 sẽ promote vào bảng "banners"
 
     slot         = relationship("BannerSlot", foreign_keys=[slot_id], back_populates="auctions")
     winner_shop  = relationship("Shop", foreign_keys=[winner_shop_id])

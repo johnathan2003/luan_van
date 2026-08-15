@@ -9,6 +9,7 @@ from app.database import get_db
 from app.middleware.auth import get_current_user, require_shop_owner, get_current_user_optional
 from app.models.user import User
 from app.models.product import Product
+from app.models.shop import Shop
 from app.schemas.product import ProductCreate, ProductUpdate, DeletionRequestCreate, CategoryCreate
 from app.services.product_service import (
     get_products, get_product_by_id, create_product, update_product,
@@ -33,11 +34,18 @@ def list_products(
     db: Session = Depends(get_db),
 ):
     items, total, pages = get_products(db, page, limit, category_id, min_price, max_price, shop_id, search, sort)
+    # Build shop_name lookup for returned products
+    shop_ids = list({p.shop_id for p in items if p.shop_id})
+    shops_map: dict = {}
+    if shop_ids:
+        shops = db.query(Shop).filter(Shop.shop_id.in_(shop_ids)).all()
+        shops_map = {s.shop_id: s.shop_name for s in shops}
     return {
         "products": [
             {
                 "product_id": p.product_id,
                 "shop_id": p.shop_id,
+                "shop_name": shops_map.get(p.shop_id),
                 "product_name": p.product_name,
                 "price": p.price,
                 "stock_quantity": p.stock_quantity,
@@ -78,34 +86,76 @@ def flash_sale_products(
     limit: int = Query(12, ge=1, le=20),
     db: Session = Depends(get_db),
 ):
-    """Sản phẩm khu Flash Sale trang chủ. Ưu tiên danh sách admin ghim thủ
-    công (flash_sale_picks, quản lý ở /api/super/flash-sale, tối đa 10);
-    nếu chưa ghim gì thì fallback về top bán chạy tự động (hành vi cũ)."""
+    """Sản phẩm khu Flash Sale trang chủ. Thứ tự ưu tiên:
+      1. Sản phẩm THẮNG phiên đấu giá flash-slot, đã qua duyệt + đã tới mốc
+         0:00 kích hoạt (flash_slot_auctions.status='live'), còn hạn hiển
+         thị (display_until > now) — đây là vị trí shop TRẢ TIỀN THẬT để có,
+         nên luôn ưu tiên cao nhất.
+      2. Danh sách admin ghim thủ công (flash_sale_picks, quản lý ở
+         /api/super/flash-sale), lấp đầy chỗ còn trống, loại trùng sản phẩm.
+      3. Nếu vẫn chưa đủ: fallback top bán chạy tự động (hành vi cũ)."""
+    from datetime import datetime
     from app.models.product import FlashSalePick
+    from app.models.slot_auctions import FlashSlotAuction
+    from app.services.slot_auction_service import activate_due_auctions
 
-    picks = (
-        db.query(FlashSalePick)
-        .join(Product, Product.product_id == FlashSalePick.product_id)
-        .filter(Product.status == "active", Product.deleted_at.is_(None))
-        .order_by(FlashSalePick.sort_order.asc(), FlashSalePick.pick_id.asc())
+    # Lazy-check: đưa các phiên đã duyệt + đã qua 0:00 sang status='live'
+    # ngay tại đây — Home.tsx gọi endpoint này liên tục nên không cần job riêng.
+    activate_due_auctions(db, FlashSlotAuction, is_top=False)
+
+    now = datetime.now()
+    won_auctions = (
+        db.query(FlashSlotAuction)
+        .join(Product, Product.product_id == FlashSlotAuction.winner_product_id)
+        .filter(
+            FlashSlotAuction.status == "live",
+            FlashSlotAuction.winner_product_id.isnot(None),
+            FlashSlotAuction.display_until > now,
+            Product.status == "active", Product.deleted_at.is_(None),
+        )
+        .order_by(FlashSlotAuction.activates_at.desc())
         .limit(limit)
         .all()
     )
-    if picks:
-        items = [p.product for p in picks]
-        curated = True
-    else:
-        items = (
-            db.query(Product)
-            .filter(Product.status == "active", Product.deleted_at.is_(None))
-            .order_by(Product.sales_count.desc())
-            .limit(limit)
+    won_products = [a.winner_product for a in won_auctions]
+    won_ids = {p.product_id for p in won_products}
+
+    items = list(won_products)
+    curated = False
+
+    if len(items) < limit:
+        picks = (
+            db.query(FlashSalePick)
+            .join(Product, Product.product_id == FlashSalePick.product_id)
+            .filter(
+                Product.status == "active", Product.deleted_at.is_(None),
+                FlashSalePick.product_id.notin_(won_ids) if won_ids else True,
+            )
+            .order_by(FlashSalePick.sort_order.asc(), FlashSalePick.pick_id.asc())
+            .limit(limit - len(items))
             .all()
         )
-        curated = False
+        if picks:
+            curated = True
+            items += [p.product for p in picks]
+
+    if len(items) < limit:
+        exclude_ids = won_ids | {p.product_id for p in items if p.product_id not in won_ids}
+        fallback = (
+            db.query(Product)
+            .filter(
+                Product.status == "active", Product.deleted_at.is_(None),
+                Product.product_id.notin_(exclude_ids) if exclude_ids else True,
+            )
+            .order_by(Product.sales_count.desc())
+            .limit(limit - len(items))
+            .all()
+        )
+        items += fallback
 
     return {
         "curated": curated,
+        "won_count": len(won_products),
         "products": [
             {
                 "product_id":   p.product_id,
@@ -114,6 +164,7 @@ def flash_sale_products(
                 "image_urls":   p.image_urls,
                 "rating":       p.rating,
                 "sales_count":  p.sales_count,
+                "is_auction_winner": p.product_id in won_ids,
             }
             for p in items
         ],

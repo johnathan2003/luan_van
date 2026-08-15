@@ -1,7 +1,14 @@
 """
 super/backend/routes/banners.py
 ---------------------------------
-Superadmin — duyệt banner shop nộp sau khi thắng đấu giá.
+Superadmin — CHỈ XEM đấu giá banner (pending/live/history). Duyệt/từ chối
+nội dung banner sau đấu giá đã CHUYỂN SANG ADMIN (app/routes/banners.py —
+POST /api/v1/banners/auctions/{id}/approve|reject), đồng bộ với cách
+slot_auctions hoạt động: admin vận hành, super chỉ quan sát.
+
+Ngoại lệ: 4 endpoint /manage* (CRUD trực tiếp bảng "banners" chính thức, vd
+thêm banner khuyến mãi thủ công không qua đấu giá) VẪN thuộc quyền super —
+đây là năng lực quản lý nội dung tổng thể, tách biệt khỏi luồng đấu giá.
 
 QUAN TRỌNG: endpoint /live ở dưới gọi thẳng app.routes.banners.get_live_banners()
 — hàm DUY NHẤT tính "banner nào đang thật sự hiển thị trên site", cũng chính
@@ -9,7 +16,6 @@ là hàm mà GET /api/v1/banners/live (Home.tsx trang chủ) dùng. Không viế
 logic riêng ở đây — đảm bảo những gì superadmin thấy ở tab "Đang hoạt động"
 LUÔN khớp 100% với những gì khách hàng thấy trên trang chủ.
 """
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,15 +24,10 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.wallet_auction import BannerAuction, BannerSlot, Banner
-from app.models.shop import Shop
 from app.routes.banners import _fmt_auction, get_live_banners
 from super.middleware import require_super
 
 router = APIRouter()
-
-
-class RejectBody(BaseModel):
-    reason: Optional[str] = None
 
 
 class BannerCreate(BaseModel):
@@ -72,7 +73,9 @@ def list_pending_banners(
     _:  dict    = Depends(require_super),
     db: Session = Depends(get_db),
 ):
-    """Banner shop đã nộp, đang chờ duyệt (banner_status='pending')."""
+    """Banner shop đã nộp, đang chờ ADMIN duyệt (banner_status='pending') —
+    CHỈ XEM, việc duyệt/từ chối thật sự nằm ở app/routes/banners.py
+    (POST /api/v1/banners/auctions/{id}/approve|reject)."""
     auctions = (
         db.query(BannerAuction)
         .filter(BannerAuction.banner_status == "pending")
@@ -110,67 +113,9 @@ def list_banner_history(
     return {"banners": [_fmt_auction(a) for a in auctions]}
 
 
-@router.post("/{auction_id}/approve")
-def approve_banner(
-    auction_id: int,
-    _:  dict    = Depends(require_super),
-    db: Session = Depends(get_db),
-):
-    """
-    Duyệt banner shop nộp -> PROMOTE thẳng vào bảng "banners" (chính thức).
-    Từ đây trang chủ đọc banner qua bảng banners (get_live_banners()), không
-    qua lại banner_auctions nữa -> banner sẽ hiển thị trên trang chủ NGAY.
-    """
-    a = db.query(BannerAuction).filter(BannerAuction.auction_id == auction_id).first()
-    if not a:
-        raise HTTPException(404, "Không tìm thấy phiên đấu giá")
-    if a.banner_status != "pending":
-        raise HTTPException(400, f"Banner đang ở trạng thái '{a.banner_status}', không thể duyệt")
-
-    a.banner_status = "approved"
-    a.banner_reviewed_at = datetime.now()
-    a.banner_reject_reason = None
-
-    # Slot chỉ hiển thị 1 banner tại 1 thời điểm — vô hiệu hoá banner active
-    # cũ (nếu có) của cùng slot trước khi promote banner mới.
-    db.query(Banner).filter(
-        Banner.slot_id == a.slot_id, Banner.status == "active",
-    ).update({"status": "inactive"})
-
-    shop = db.query(Shop).filter(Shop.shop_id == a.winner_shop_id).first() if a.winner_shop_id else None
-    db.add(Banner(
-        slot_id=a.slot_id,
-        position=a.slot.position if a.slot else None,
-        image_url=a.banner_image_url,
-        title=a.banner_title,
-        link=a.banner_link,
-        shop_id=a.winner_shop_id,
-        shop_name=shop.shop_name if shop else None,
-        source_auction_id=a.auction_id,
-        status="active",
-    ))
-
-    db.commit()
-    return {"message": "Đã duyệt — banner sẽ hiển thị trên trang chủ ngay", **_fmt_auction(a)}
-
-
-@router.post("/{auction_id}/reject")
-def reject_banner(
-    auction_id: int,
-    body: RejectBody,
-    _:    dict    = Depends(require_super),
-    db:   Session = Depends(get_db),
-):
-    a = db.query(BannerAuction).filter(BannerAuction.auction_id == auction_id).first()
-    if not a:
-        raise HTTPException(404, "Không tìm thấy phiên đấu giá")
-    if a.banner_status != "pending":
-        raise HTTPException(400, f"Banner đang ở trạng thái '{a.banner_status}', không thể từ chối")
-    a.banner_status = "rejected"
-    a.banner_reviewed_at = datetime.now()
-    a.banner_reject_reason = body.reason or "Không đạt yêu cầu"
-    db.commit()
-    return {"message": "Đã từ chối — shop có thể nộp lại ảnh khác", **_fmt_auction(a)}
+# approve/reject nội dung banner đã CHUYỂN SANG ADMIN — xem
+# app/routes/banners.py: POST /api/v1/banners/auctions/{id}/approve|reject.
+# Super không còn endpoint ghi/sửa nào cho luồng đấu giá banner ở đây.
 
 
 # ─── Bảng "banners" chính thức — full CRUD ─────────────────────────────────

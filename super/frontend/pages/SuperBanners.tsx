@@ -1,7 +1,13 @@
 /**
  * super/frontend/pages/SuperBanners.tsx
  * ----------------------------------------
- * Superadmin — duyệt banner shop nộp sau khi thắng đấu giá.
+ * Superadmin — CHỈ XEM banner shop nộp sau khi thắng đấu giá (tab "Chờ
+ * duyệt" giờ chỉ để quan sát). Duyệt/từ chối nội dung ĐÃ CHUYỂN SANG ADMIN
+ * (/admin/banner-auction — POST /api/v1/banners/auctions/{id}/approve|
+ * reject), đồng bộ với cách slot_auctions hoạt động.
+ *
+ * Ngoại lệ: tab "Quản lý (CRUD)" vẫn thuộc quyền super — đây là năng lực
+ * quản lý bảng banners chính thức, tách biệt khỏi luồng đấu giá.
  *
  * Tab "Đang hoạt động" gọi ĐÚNG endpoint /banners/live mà trang chủ
  * (Home.tsx) cũng gọi — nên những gì hiện ở đây LUÔN khớp 100% với
@@ -88,9 +94,6 @@ const SuperBanners: React.FC = () => {
   const [managed, setManaged] = useState<ManagedBanner[]>([])
   const [slots, setSlots]     = useState<Slot[]>([])
   const [loading, setLoading] = useState(true)
-  const [rejectTarget, setRejectTarget] = useState<BannerAuction | null>(null)
-  const [rejectReason, setRejectReason] = useState('')
-  const [busy, setBusy] = useState<number | null>(null)
 
   // Quản lý (full CRUD) modal
   const [manageModal, setManageModal] = useState(false)
@@ -115,31 +118,8 @@ const SuperBanners: React.FC = () => {
   useEffect(() => { load(tab) }, [tab, load])
   useEffect(() => { superApi.get('/banners/manage/slots').then(r => setSlots(r.data.slots || [])).catch(() => {}) }, [])
 
-  const handleApprove = async (a: BannerAuction) => {
-    setBusy(a.auction_id)
-    try {
-      await superApi.post(`/banners/${a.auction_id}/approve`)
-      setPending(ps => ps.filter(p => p.auction_id !== a.auction_id))
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Lỗi khi duyệt')
-    } finally { setBusy(null) }
-  }
-
-  const handleReject = async () => {
-    if (!rejectTarget) return
-    setBusy(rejectTarget.auction_id)
-    try {
-      await superApi.post(`/banners/${rejectTarget.auction_id}/reject`, { reason: rejectReason || undefined })
-      setPending(ps => ps.filter(p => p.auction_id !== rejectTarget.auction_id))
-      setRejectTarget(null)
-      setRejectReason('')
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Lỗi khi từ chối')
-    } finally { setBusy(null) }
-  }
-
   const TABS: { key: Tab; label: string; count?: number }[] = [
-    { key: 'pending', label: '⏳ Chờ duyệt', count: pending.length },
+    { key: 'pending', label: '⏳ Chờ duyệt (xem)', count: pending.length },
     { key: 'live',    label: '✅ Đang hoạt động trên site', count: live.length },
     { key: 'manage',  label: '🛠️ Quản lý (CRUD)', count: managed.length },
     { key: 'history', label: '📋 Lịch sử' },
@@ -240,19 +220,10 @@ const SuperBanners: React.FC = () => {
                   <p style={{ color: S.muted, fontSize: 11, margin: '0 0 4px' }}>
                     {POSITION_LABEL[a.slot_position || ''] || a.slot_position} · {a.slot_name}
                   </p>
-                  <p style={{ color: S.muted, fontSize: 11, margin: '0 0 10px' }}>
+                  <p style={{ color: S.muted, fontSize: 11, margin: 0 }}>
                     Shop: {a.winner_shop} · Giá thắng: {Number(a.current_price).toLocaleString('vi-VN')}đ
                   </p>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => handleApprove(a)} disabled={busy === a.auction_id}
-                      style={{ flex: 1, padding: '7px', background: S.green, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                      ✅ Duyệt
-                    </button>
-                    <button onClick={() => { setRejectTarget(a); setRejectReason('') }} disabled={busy === a.auction_id}
-                      style={{ padding: '7px 12px', background: '#2d1010', color: '#ef4444', border: `1px solid ${S.redDark}`, borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                      ✕
-                    </button>
-                  </div>
+                  <p style={{ color: S.orange, fontSize: 10, margin: '8px 0 0' }}>Duyệt/từ chối do admin thực hiện ở /admin/banner-auction.</p>
                 </div>
               </div>
             ))}
@@ -370,27 +341,6 @@ const SuperBanners: React.FC = () => {
             ))}
           </div>
         )
-      )}
-
-      {/* Reject modal */}
-      {rejectTarget && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-          onClick={() => setRejectTarget(null)}>
-          <div style={{ width: 380, background: S.card, border: `1px solid ${S.border}`, borderRadius: 14, padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}
-            onClick={e => e.stopPropagation()}>
-            <h2 style={{ color: S.text, fontSize: 15, fontWeight: 800, margin: 0 }}>Từ chối banner</h2>
-            <p style={{ color: S.muted, fontSize: 12, margin: 0 }}>{rejectTarget.banner_title || `Auction #${rejectTarget.auction_id}`}</p>
-            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Lý do từ chối (tùy chọn)"
-              rows={3} style={{ padding: '9px 12px', background: S.input, border: `1px solid ${S.border}`, borderRadius: 7, color: S.text, fontSize: 13, outline: 'none', resize: 'vertical' }} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={() => setRejectTarget(null)} style={{ padding: '8px 16px', background: 'none', border: `1px solid ${S.border}`, borderRadius: 8, color: S.muted, fontSize: 13, cursor: 'pointer' }}>Hủy</button>
-              <button onClick={handleReject} disabled={busy === rejectTarget.auction_id}
-                style={{ padding: '8px 18px', background: S.red, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                Từ chối
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Create/Edit banner modal (bảng quản lý CRUD) */}

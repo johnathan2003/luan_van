@@ -48,6 +48,8 @@ import VoucherCenterPage        from './pages/VoucherCenterPage'
 const BannerAuctionPage  = React.lazy(() => import('./pages/shop/BannerAuctionPage'))
 const AuctionLivePage    = React.lazy(() => import('./pages/shop/AuctionLivePage'))
 const WalletPage         = React.lazy(() => import('./pages/shop/WalletPage'))
+const SlotAuctionsPage       = React.lazy(() => import('./pages/shop/SlotAuctionsPage'))
+const SlotAuctionDetailPage  = React.lazy(() => import('./pages/shop/SlotAuctionDetailPage'))
 
 // ── ⚙️ Admin pages (lazy — bundle lớn) ───────────────────────────────────────
 const AdminOverviewPage          = React.lazy(() => import('./pages/admin/AdminOverviewPage'))
@@ -74,6 +76,8 @@ const ReportsPage                = React.lazy(() => import('./pages/admin/Report
 const FeedbackPage               = React.lazy(() => import('./pages/admin/FeedbackPage'))
 const ImageLibraryPage           = React.lazy(() => import('./pages/admin/ImageLibraryPage'))
 const AuctionManagementPage      = React.lazy(() => import('./pages/admin/AuctionManagementPage'))
+const SlotAuctionAdminPage       = React.lazy(() => import('./pages/admin/SlotAuctionAdminPage'))
+const AIGuardianPage             = React.lazy(() => import('./pages/admin/AIGuardianPage'))
 
 // ── ⚡ Superadmin (nằm ngoài hệ thống, không ghi log) ────────────────────────
 import SuperRouter from '@super/SuperRouter'
@@ -185,6 +189,8 @@ const Router: React.FC = () => (
       <Route path="/shop/vouchers"         element={inShop(<VoucherManagementPage />)} />
       <Route path="/shop/auction"          element={inShop(<BannerAuctionPage />)} />
       <Route path="/shop/auction-live"     element={inShop(<AuctionLivePage />)} />
+      <Route path="/shop/slot-auctions"                    element={inShop(<SlotAuctionsPage />)} />
+      <Route path="/shop/slot-auctions/:family/:auctionId" element={inShop(<SlotAuctionDetailPage />)} />
       <Route path="/shop/chat"             element={inShop(<ShopChatPage />)} />
       <Route path="/shop/mall"             element={inShop(<BuyZoMallRegisterPage />)} />
       <Route path="/shop/complaints"       element={inShop(<MyDisputesPage />)} />
@@ -215,6 +221,8 @@ const Router: React.FC = () => (
       {/* Nội dung / Marketing */}
       <Route path="/admin/banners"               element={inAdmin(<BannerAdminPage />)} />
       <Route path="/admin/auction"               element={inAdmin(<AuctionManagementPage />)} />
+      <Route path="/admin/slot-auctions"          element={inAdmin(<SlotAuctionAdminPage />)} />
+      <Route path="/admin/ai-guardian"            element={inAdmin(<AIGuardianPage />)} />
       <Route path="/admin/images"                element={inAdmin(<ImageLibraryPage />)} />
       <Route path="/admin/notifications"         element={inAdmin(<SystemNotificationPage />)} />
       {/* Vận hành */}

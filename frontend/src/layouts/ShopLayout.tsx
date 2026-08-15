@@ -16,6 +16,7 @@ const SHOP_NAV = [
   { icon: '\u{1F4C8}', label: 'Doanh Thu',  path: '/shop/revenue' },
   { icon: '\u{1F3AB}', label: 'Voucher',    path: '/shop/vouchers' },
   { icon: '\u{1F3C6}', label: 'Đấu Giá Quảng Cáo', path: '/shop/auction' },
+  { icon: '\u{1F680}', label: 'Đấu Giá Vị Trí',    path: '/shop/slot-auctions' },
   { icon: '💰',        label: 'Ví Tiền',           path: '/shop/wallet' },
   { icon: '⚠️',        label: 'Khiếu Nại',  path: '/shop/complaints' },
 ]

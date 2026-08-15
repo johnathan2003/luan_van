@@ -31,17 +31,27 @@ interface Auction {
   status: string
   start_price: number
   current_price: number
+  end_price: number | null
   winner_shop_id: number | null
   winner_shop: string | null
+  win_type: 'buyout' | 'bid' | null
   bid_count: number | null
   bids: AuctionBid[]
+  deposit_amount: number | null
+  payment_deadline: string | null
+  final_paid_at: string | null
   // Nội dung banner nộp sau khi thắng — xem POST /auctions/{id}/submit
   banner_image_url?: string | null
   banner_title?: string | null
   banner_link?: string | null
   banner_status?: 'pending' | 'approved' | 'rejected' | null
   banner_reject_reason?: string | null
+  submission_attempts?: number
+  review_deadline?: string | null
+  activates_at?: string | null
 }
+const MAX_BANNER_BUYOUT_SUBMISSIONS = 10
+const BUYOUT_LOCK_MS = 6 * 3_600_000
 interface Wallet {
   balance: number
   reserved: number
@@ -125,13 +135,15 @@ const BannerSubmitSection: React.FC<{
       const res = await API.post(`/api/v1/banners/auctions/${auction.auction_id}/submit`, {
         image_url: imageUrl, title, link,
       })
-      toast.success('✅ Đã nộp banner — chờ superadmin duyệt')
+      toast.success('✅ Đã nộp banner — chờ admin duyệt')
       onSubmitted(auction.auction_id, {
         banner_image_url: res.data.banner_image_url,
         banner_title: res.data.banner_title,
         banner_link: res.data.banner_link,
         banner_status: res.data.banner_status,
         banner_reject_reason: res.data.banner_reject_reason,
+        submission_attempts: res.data.submission_attempts,
+        review_deadline: res.data.review_deadline,
       })
       setOpen(false)
     } catch (e: any) {
@@ -143,11 +155,18 @@ const BannerSubmitSection: React.FC<{
   }
 
   const statusBadge = () => {
-    if (auction.banner_status === 'approved') return <span style={{ background: C.greenBg, color: C.green, borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>✅ Đã duyệt — đang hiển thị trên trang chủ</span>
-    if (auction.banner_status === 'pending')  return <span style={{ background: C.orangeBg, color: C.orange, borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>⏳ Đang chờ superadmin duyệt</span>
+    if (auction.banner_status === 'approved') {
+      return auction.activates_at
+        ? <span style={{ background: C.greenBg, color: C.green, borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>✅ Đã duyệt — lên trang chủ lúc 0:00 ({new Date(auction.activates_at).toLocaleDateString('vi-VN')})</span>
+        : <span style={{ background: C.greenBg, color: C.green, borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>✅ Đã duyệt</span>
+    }
+    if (auction.banner_status === 'pending')  return <span style={{ background: C.orangeBg, color: C.orange, borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>⏳ Đang chờ admin duyệt</span>
     if (auction.banner_status === 'rejected') return <span style={{ background: '#FEE2E2', color: C.red, borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>❌ Bị từ chối{auction.banner_reject_reason ? `: ${auction.banner_reject_reason}` : ''}</span>
     return null
   }
+
+  const isBuyout = auction.win_type === 'buyout'
+  const attemptsRemaining = isBuyout ? Math.max(0, MAX_BANNER_BUYOUT_SUBMISSIONS - (auction.submission_attempts || 0)) : null
 
   return (
     <div style={{ padding: '16px 20px', borderTop: `1px solid ${C.border}`, background: C.greenBg }}>
@@ -156,14 +175,20 @@ const BannerSubmitSection: React.FC<{
           <span style={{ fontWeight: 700, fontSize: 13, color: C.green }}>🏆 Bạn đã thắng phiên này</span>
           {statusBadge()}
         </div>
-        {(!open && (!auction.banner_status || auction.banner_status === 'rejected')) && (
+        {(!open && (!auction.banner_status || auction.banner_status === 'rejected')) && attemptsRemaining !== 0 && (
           <button onClick={() => setOpen(true)} style={{ padding: '6px 14px', background: C.green, color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
             📤 Nộp ảnh banner
           </button>
         )}
       </div>
 
-      {open && (
+      {isBuyout && auction.banner_status !== 'approved' && (
+        <p style={{ margin: '0 0 10px', fontSize: 12, color: attemptsRemaining && attemptsRemaining <= 2 ? C.red : C.orange }}>
+          ⏳ Còn <b>{attemptsRemaining}/{MAX_BANNER_BUYOUT_SUBMISSIONS}</b> lần nộp trong hạn 6 tiếng kể từ lúc thanh toán — hết hạn hoặc hết lượt sẽ bị huỷ vị trí.
+        </p>
+      )}
+
+      {open && attemptsRemaining !== 0 && (
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <label style={{
             width: 140, height: 90, borderRadius: 8, border: `2px dashed ${C.border}`, background: '#fff',
@@ -190,6 +215,43 @@ const BannerSubmitSection: React.FC<{
   )
 }
 
+// ── Trả nốt 80% sau khi thắng thường (win_type='bid') ──────────────────────
+const PayRemainingSection: React.FC<{
+  auction: Auction
+  onPaid: (auctionId: number, patch: Partial<Auction>) => void
+}> = ({ auction, onPaid }) => {
+  const [paying, setPaying] = useState(false)
+  const payMs = useCountdown(auction.payment_deadline || new Date().toISOString())
+  const remaining = auction.deposit_amount != null ? auction.current_price - auction.deposit_amount : 0
+
+  const handlePay = async () => {
+    setPaying(true)
+    try {
+      const r = await API.post(`/api/v1/banners/auctions/${auction.auction_id}/pay-remaining`)
+      toast.success('✅ Đã thanh toán đủ — giờ hãy nộp ảnh banner')
+      onPaid(auction.auction_id, { final_paid_at: r.data.final_paid_at })
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Thanh toán thất bại')
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  return (
+    <div style={{ padding: '16px 20px', borderTop: `1px solid ${C.border}`, background: C.orangeBg }}>
+      <p style={{ margin: '0 0 6px', fontWeight: 700, color: C.orange, fontSize: 14 }}>💰 Cần thanh toán nốt {fmt(remaining)}</p>
+      <p style={{ margin: '0 0 10px', fontSize: 12, color: C.gray }}>
+        Đã cọc {fmt(auction.deposit_amount || 0)} (20%) ngay khi thắng. Còn <b style={{ color: C.red }}>{fmtMs(payMs)}</b> để trả nốt 80%
+        — trễ hạn sẽ mất trắng luôn phần này (không thả tiền lại), tính 1 lần vi phạm (đủ 3 lần bị khoá đấu giá).
+      </p>
+      <button onClick={handlePay} disabled={paying || payMs === 0}
+        style={{ background: paying || payMs === 0 ? '#9CA3AF' : C.orange, color: 'white', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 13, fontWeight: 700, cursor: paying || payMs === 0 ? 'default' : 'pointer' }}>
+        {paying ? '⏳...' : `✅ Thanh toán ${fmt(remaining)}`}
+      </button>
+    </div>
+  )
+}
+
 // ── Single auction card ───────────────────────────────────────────────────────
 const AuctionCard: React.FC<{
   auction: Auction
@@ -205,6 +267,7 @@ const AuctionCard: React.FC<{
 
   const minBid = auction.current_price + 1000
   const isWinning = myShopId != null && auction.winner_shop_id === myShopId
+  const buyoutLocked = auction.status === 'active' && auction.end_price != null && ms > 0 && ms < BUYOUT_LOCK_MS
 
   const handleBid = async () => {
     const raw = parseInt(bidInput.replace(/[^\d]/g, ''))
@@ -213,7 +276,9 @@ const AuctionCard: React.FC<{
     setPlacing(true)
     try {
       const r = await API.post(`/api/v1/banners/auctions/${auction.auction_id}/bid`, { amount: raw })
-      toast.success(`✅ Đặt giá ${fmt(raw)} thành công!`)
+      if (r.data.buyout) toast.success('🎉 Bạn đã MUA ĐỨT vị trí banner này!')
+      else if (r.data.buyout_locked) toast.success(`✅ Đặt giá ${fmt(raw)} thành công! (Đã đạt endPrice nhưng đang trong 6h khoá mua đứt nên chỉ tính là 1 bid thường)`)
+      else toast.success(`✅ Đặt giá ${fmt(raw)} thành công!`)
       setBidInput('')
       onBidPlaced(auction.auction_id, { current_price: raw, winner_shop_id: myShopId ?? undefined as any, winner_shop: '(bạn)' })
     } catch (e: any) {
@@ -241,8 +306,9 @@ const AuctionCard: React.FC<{
             {isWinning && <span style={{ background: C.greenBg, color: C.green, borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>👑 Đang dẫn đầu</span>}
             <span style={{ background: C.purpleBg, color: C.purple, borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{auction.slot_position}</span>
           </div>
-          <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+          <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
             <span style={{ color: C.gray }}>Giá hiện tại: <b style={{ color: C.purple }}>{fmt(auction.current_price)}</b></span>
+            {auction.end_price != null && <span style={{ color: C.gray }}>endPrice (mua đứt): <b>{fmt(auction.end_price)}</b></span>}
             {auction.winner_shop && <span style={{ color: C.gray }}>Đang dẫn: <b>{auction.winner_shop}</b></span>}
           </div>
         </div>
@@ -260,7 +326,13 @@ const AuctionCard: React.FC<{
 
       {/* Bid form */}
       {ms > 0 && (
-        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}` }}>
+          {buyoutLocked && (
+            <p style={{ margin: '0 0 10px', fontSize: 12, color: C.orange, background: C.orangeBg, borderRadius: 8, padding: '8px 12px' }}>
+              🔒 Đang trong 6 tiếng cuối trước khi kết thúc — mua đứt (đạt endPrice) bị khoá, mọi mức giá chỉ tính là bid thường.
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           {/* Quick amounts */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 240 }}>
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
@@ -295,6 +367,7 @@ const AuctionCard: React.FC<{
             style={{ background: placing || !bidInput ? '#9CA3AF' : C.purple, color: 'white', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 13, fontWeight: 700, cursor: placing || !bidInput ? 'default' : 'pointer', flexShrink: 0, alignSelf: 'flex-end' }}>
             {placing ? '⏳ Đang đặt...' : '🏹 Đặt giá'}
           </button>
+          </div>
         </div>
       )}
 
@@ -330,8 +403,24 @@ const AuctionCard: React.FC<{
         )}
       </div>
 
-      {/* Nộp ảnh banner — chỉ hiện khi phiên đã kết thúc và bạn là người thắng */}
-      {auction.status === 'ended' && isWinning && (
+      {/* Cần trả nốt 80% (chỉ win_type='bid' — buyout đã trả đủ 100% ngay) */}
+      {isWinning && auction.status === 'ended' && auction.win_type === 'bid' && !auction.final_paid_at && (
+        <PayRemainingSection auction={auction} onPaid={onBannerUpdated} />
+      )}
+
+      {/* Bị huỷ do quá hạn / hết lượt nộp */}
+      {auction.status === 'forfeited' && (
+        <div style={{ padding: '16px 20px', borderTop: `1px solid ${C.border}`, background: '#FEE2E2' }}>
+          <p style={{ margin: 0, fontWeight: 700, color: C.red, fontSize: 13 }}>
+            {auction.win_type === 'buyout'
+              ? `❌ Phiên đã bị huỷ do quá hạn 6 tiếng nộp/duyệt nội dung (hoặc hết ${MAX_BANNER_BUYOUT_SUBMISSIONS} lần nộp) — tiền mua đứt không được hoàn lại.`
+              : '❌ Phiên đã bị huỷ do quá hạn thanh toán 30 phút — tiền đã giữ không được hoàn lại.'}
+          </p>
+        </div>
+      )}
+
+      {/* Nộp ảnh banner — chỉ hiện khi đã trả đủ tiền và bạn là người thắng */}
+      {auction.status === 'ended' && isWinning && auction.final_paid_at && (
         <BannerSubmitSection auction={auction} onSubmitted={onBannerUpdated} />
       )}
     </div>

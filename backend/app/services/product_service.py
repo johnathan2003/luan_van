@@ -2,7 +2,7 @@ import re
 import unicodedata
 from difflib import SequenceMatcher
 from typing import Optional
-from sqlalchemy import or_
+from sqlalchemy import or_, case, func
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
@@ -86,6 +86,16 @@ def get_products(
 ):
     query = db.query(Product).filter(Product.status == "active", Product.deleted_at.is_(None))
 
+    # ── Boost (top slot đang thắng) — sản phẩm đang boost trồi lên đầu trong
+    # MỌI danh sách đi qua hàm này: tìm kiếm (search), duyệt danh mục
+    # (category_id), và widget "sản phẩm liên quan" ở trang chi tiết sản
+    # phẩm (cũng gọi get_products với category_id) — 3 vị trí đã chốt với
+    # người dùng. Không cần match tag tường minh vì sản phẩm boost chỉ nổi
+    # lên khi nó ĐÃ khớp bộ lọc hiện tại (cùng category / khớp từ khoá).
+    from app.models.slot_auctions import ProductBoost
+    boosted_ids = db.query(ProductBoost.product_id).filter(ProductBoost.expires_at > func.now())
+    query = query.order_by(case((Product.product_id.in_(boosted_ids), 0), else_=1))
+
     if category_id:
         query = query.filter(Product.category_id == category_id)
     if shop_id:
@@ -154,6 +164,10 @@ def create_product(db: Session, shop_id: int, data: ProductCreate) -> Product:
     db.add(product)
     db.commit()
     db.refresh(product)
+
+    from app.utils.tagging import sync_product_tags
+    sync_product_tags(db, product)
+
     return product
 
 
@@ -176,6 +190,11 @@ def update_product(db: Session, product_id: int, shop_id: int, data: ProductUpda
 
     db.commit()
     db.refresh(product)
+
+    if "product_name" in data.model_dump(exclude_none=True) or "category_id" in data.model_dump(exclude_none=True):
+        from app.utils.tagging import sync_product_tags
+        sync_product_tags(db, product)
+
     return product
 
 

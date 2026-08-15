@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { path: '/super/banners',    label: 'Banner',      icon: '🖼️' },
   { path: '/super/flash-sale', label: 'Flash Sale',  icon: '⚡' },
   { path: '/super/media',      label: 'Thư viện ảnh', icon: '🗂️' },
+  { path: '/super/slot-auctions', label: 'Đấu giá vị trí (xem)', icon: '🏆' },
   { path: '/super/wallets',    label: 'Ví Shop',     icon: '💰' },
   { path: '/super/finance',    label: 'Tài chính hệ thống', icon: '🏦' },
   { path: '/super/db-viewer',  label: 'DB Viewer',   icon: '🗄️' },

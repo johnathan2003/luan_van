@@ -37,9 +37,16 @@ interface Auction {
   status: string
   start_price: number
   current_price: number
+  end_price: number | null
+  win_type: 'buyout' | 'bid' | null
   winner_shop_id: number | null
   winner_shop: string | null
   bid_count: number | null
+  banner_image_url?: string | null
+  banner_title?: string | null
+  banner_status?: string | null
+  banner_reject_reason?: string | null
+  submission_attempts?: number
 }
 interface AuctionDetail extends Auction {
   bids: { bid_id: number; shop_name: string; amount: number; status: string; created_at: string }[]
@@ -166,17 +173,20 @@ const OpenAuctionModal: React.FC<{
 }> = ({ slots, onClose, onOpened }) => {
   const [slotId,       setSlotId]       = useState(slots[0]?.slot_id ?? 0)
   const [startPrice,   setStartPrice]   = useState('')
+  const [endPrice,     setEndPrice]     = useState('')
   const [durationHours, setDurationHours] = useState('24')
   const [opening, setOpening] = useState(false)
 
   const open = async () => {
     if (!slotId) { toast.error('Chọn slot'); return }
+    if (!endPrice || Number(endPrice) <= 0) { toast.error('Nhập endPrice — mọi phiên banner đều bắt buộc có mua đứt'); return }
     setOpening(true)
     try {
       const slot = slots.find(s => s.slot_id === Number(slotId))
       await API.post('/api/v1/banners/auctions', {
         slot_id: Number(slotId),
         start_price: Number(startPrice) || (slot?.base_price ?? 0),
+        end_price: Number(endPrice),
         duration_hours: Number(durationHours) || 24,
       })
       toast.success('✅ Đã mở phiên đấu giá!')
@@ -204,6 +214,10 @@ const OpenAuctionModal: React.FC<{
             <input style={inputStyle} type="number" value={startPrice} onChange={e => setStartPrice(e.target.value)} placeholder={String(slots.find(s => s.slot_id === Number(slotId))?.base_price ?? '')} />
           </div>
           <div>
+            <label style={{ fontSize: 12, color: C.gray, display: 'block', marginBottom: 4 }}>endPrice — giá mua đứt (*)</label>
+            <input style={inputStyle} type="number" value={endPrice} onChange={e => setEndPrice(e.target.value)} placeholder="VD: 5000000" />
+          </div>
+          <div>
             <label style={{ fontSize: 12, color: C.gray, display: 'block', marginBottom: 4 }}>Thời gian phiên (giờ)</label>
             <div style={{ display: 'flex', gap: 5 }}>
               {['1', '6', '12', '24', '48'].map(h => (
@@ -225,8 +239,67 @@ const OpenAuctionModal: React.FC<{
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
+const MAX_BANNER_BUYOUT_SUBMISSIONS = 10
+
+// ── Tab: Duyệt nội dung banner ────────────────────────────────────────────────
+const ReviewTab: React.FC = () => {
+  const [pending, setPending] = useState<Auction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState<number | null>(null)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    API.get('/api/v1/banners/admin/pending-review').then(r => setPending(r.data.pending || [])).finally(() => setLoading(false))
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const handleApprove = async (a: Auction) => {
+    setBusy(a.auction_id)
+    try {
+      const r = await API.post(`/api/v1/banners/auctions/${a.auction_id}/approve`)
+      toast.success(r.data.message || 'Đã duyệt')
+      load()
+    } catch (e: any) { toast.error(e?.response?.data?.detail || 'Lỗi') } finally { setBusy(null) }
+  }
+  const handleReject = async (a: Auction) => {
+    const reason = window.prompt('Lý do từ chối:') || undefined
+    setBusy(a.auction_id)
+    try {
+      const r = await API.post(`/api/v1/banners/auctions/${a.auction_id}/reject`, { reason })
+      toast.success(r.data.message || 'Đã từ chối')
+      load()
+    } catch (e: any) { toast.error(e?.response?.data?.detail || 'Lỗi') } finally { setBusy(null) }
+  }
+
+  if (loading) return <p style={{ color: C.gray, textAlign: 'center', padding: 30 }}>Đang tải...</p>
+  if (pending.length === 0) return <p style={{ color: C.gray, textAlign: 'center', padding: 30 }}>Không có nội dung nào đang chờ duyệt.</p>
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {pending.map(a => (
+        <div key={a.auction_id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          {a.banner_image_url && <img src={a.banner_image_url} alt="" style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />}
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: 13 }}>{a.slot_name} (phiên #{a.auction_id})</p>
+            <p style={{ margin: '0 0 4px', color: C.gray, fontSize: 12 }}>Người thắng: {a.winner_shop || '—'} · Tiêu đề: {a.banner_title || '—'}</p>
+            <p style={{ margin: 0, color: C.orange, fontSize: 11 }}>
+              {a.win_type === 'buyout'
+                ? `Mua đứt — đã nộp ${a.submission_attempts ?? 0}/${MAX_BANNER_BUYOUT_SUBMISSIONS} lần, hạn 6h tính từ lúc thanh toán. Từ chối lần thứ ${MAX_BANNER_BUYOUT_SUBMISSIONS} sẽ huỷ vị trí luôn.`
+                : 'Hạn phản hồi trong 6 giờ kể từ lúc nộp.'}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button onClick={() => handleApprove(a)} disabled={busy === a.auction_id} style={btn(C.green, 'white', { opacity: busy === a.auction_id ? 0.6 : 1 })}>✅ Duyệt</button>
+            <button onClick={() => handleReject(a)} disabled={busy === a.auction_id} style={btn(C.red, 'white', { opacity: busy === a.auction_id ? 0.6 : 1 })}>❌ Từ chối</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const BannerAuctionRealPage: React.FC = () => {
-  const [tab, setTab] = useState<'slots' | 'auctions'>('auctions')
+  const [tab, setTab] = useState<'slots' | 'auctions' | 'review'>('auctions')
   const [slots,    setSlots]    = useState<BannerSlot[]>([])
   const [auctions, setAuctions] = useState<Auction[]>([])
   const [auctionFilter, setAuctionFilter] = useState('all')
@@ -277,7 +350,7 @@ const BannerAuctionRealPage: React.FC = () => {
     } catch { toast.error('Không tải được chi tiết phiên') }
   }
 
-  const tabBtn = (t: 'slots' | 'auctions'): React.CSSProperties => ({
+  const tabBtn = (t: 'slots' | 'auctions' | 'review'): React.CSSProperties => ({
     padding: '8px 18px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600,
     cursor: 'pointer', background: tab === t ? C.purple : 'transparent', color: tab === t ? 'white' : C.gray,
   })
@@ -289,8 +362,12 @@ const BannerAuctionRealPage: React.FC = () => {
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         <button style={tabBtn('auctions')} onClick={() => setTab('auctions')}>📋 Phiên đấu giá</button>
+        <button style={tabBtn('review')} onClick={() => setTab('review')}>✅ Duyệt nội dung</button>
         <button style={tabBtn('slots')} onClick={() => setTab('slots')}>🗂️ Banner Slots</button>
       </div>
+
+      {/* ── REVIEW TAB ───────────────────────────────────────────────────────── */}
+      {tab === 'review' && <ReviewTab />}
 
       {/* ── AUCTIONS TAB ─────────────────────────────────────────────────────── */}
       {tab === 'auctions' && (
@@ -330,6 +407,8 @@ const BannerAuctionRealPage: React.FC = () => {
                       </div>
                       <div style={{ display: 'flex', gap: 16, fontSize: 12, color: C.gray, flexWrap: 'wrap' }}>
                         <span>Giá: <b style={{ color: C.purple }}>{fmt(a.current_price)}</b></span>
+                        {a.end_price != null && <span>endPrice: <b>{fmt(a.end_price)}</b></span>}
+                        {a.win_type && <span>Thắng: <b>{a.win_type === 'buyout' ? 'Mua đứt' : 'Đấu giá'}</b></span>}
                         {a.winner_shop && <span>Winner: <b>{a.winner_shop}</b></span>}
                         <span>Kết thúc: {fmtDate(a.end_time)}</span>
                         <span>{a.bid_count ?? 0} bid</span>

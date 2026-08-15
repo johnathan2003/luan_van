@@ -1,11 +1,15 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react'
+import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import ProductList from '../components/product/ProductList'
 import ProductFilter from '../components/product/ProductFilter'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { fetchProducts, fetchCategories, setFilters, resetFilters, appendProducts, resetProducts, setLoadingMore, setLoopLoading } from '../store/slices/productSlice'
 import { formatCurrency } from '../utils/formatters'
+
 import { getImageUrl } from '../utils/helpers'
+import { getTopProductListByShop } from '../utils/bannerDraftStore'
+import { getHistory as getTopHistory } from '../utils/topSlotAuctionStore'
+
 import API from '../services/api'
 
 // Banner (home_slider/mall_ads_main/mall_ads_fixed/mall_banner) lấy từ hệ
@@ -137,44 +141,47 @@ const BannerSlider: React.FC = () => {
   )
 }
 
-// ─── Flash Sale (sản phẩm bán chạy thật) ─────────────────────────────────────
+// ─── Flash Sale ───────────────────────────────────────────────────────────────
 const pad = (n: number) => String(n).padStart(2, '0')
-const getFlashEnd = () => {
-  const now = new Date(); const end = new Date(now)
-  const nextH = Math.ceil((now.getHours() + 0.5) / 2) * 2
-  end.setHours(nextH, 0, 0, 0)
-  if (end.getTime() - now.getTime() < 60000) end.setHours(end.getHours() + 2)
-  return end
-}
-const useCountdown = (endTime: Date) => {
-  const calc = () => { const diff = Math.max(0, endTime.getTime() - Date.now()); return { h: Math.floor(diff/3600000), m: Math.floor((diff%3600000)/60000), s: Math.floor((diff%60000)/1000) } }
-  const [tick, setTick] = useState(calc)
-  useEffect(() => { const t = setInterval(() => setTick(calc()), 1000); return () => clearInterval(t) }, [endTime])
-  return tick
-}
 
 const FlashSaleSection: React.FC = () => {
-  const [endTime] = useState(getFlashEnd)
-  const { h, m, s } = useCountdown(endTime)
-  const [items, setItems] = useState<any[]>([])
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const scroll = (dir: number) => scrollRef.current?.scrollBy({ left: dir * 220, behavior: 'smooth' })
+  const [allItems, setAllItems] = useState<any[]>([])
+  const [visibleCount, setVisibleCount] = useState(20)
+  const [remainingMs, setRemainingMs] = useState(0)
 
   useEffect(() => {
     // Ưu tiên danh sách admin ghim thủ công (quản lý ở /super/flash-sale);
     // rỗng thì backend tự fallback về top bán chạy (hành vi cũ).
+    // (Hệ đấu giá 100 slot kiểu shop-bid — xem flashSalePoolStore.ts — tạm
+    // chưa nối vào đây; đây là việc làm sau: dựng backend thật cho nó giống
+    // banner_auctions, thay vì đọc localStorage như hiện tại.)
     API.get('/api/v1/products/flash-sale', { params: { limit: 12 } })
-      .then(r => setItems(r.data.products ?? []))
+      .then(r => setAllItems(r.data.products ?? []))
       .catch(() => {})
   }, [])
 
-  // Nếu không có sản phẩm thật → không hiện section
-  if (items.length === 0) return null
+  // Đếm ngược thời gian Flash Sale
+  useEffect(() => {
+    if (remainingMs <= 0) return
+    const t = setInterval(() => setRemainingMs(ms => Math.max(0, ms - 1000)), 1000)
+    return () => clearInterval(t)
+  }, [remainingMs > 0])
+
+  // Nếu không có sản phẩm → không hiện section
+  if (allItems.length === 0) return null
+
+  const visibleItems = allItems.slice(0, visibleCount)
+  const hasMore = visibleCount < allItems.length
+
+  const h = Math.floor(remainingMs / 3600000)
+  const m = Math.floor((remainingMs % 3600000) / 60000)
+  const s = Math.floor((remainingMs % 60000) / 1000)
 
   return (
     <div style={{ background: 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 40%, #b91c1c 100%)', padding: '28px 0', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: -60, right: -60, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
       <div className="container">
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 28 }}>⚡</span>
@@ -183,46 +190,64 @@ const FlashSaleSection: React.FC = () => {
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: 500 }}>Bán chạy nhất hôm nay</div>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>Cập nhật sau:</span>
-            {[pad(h), pad(m), pad(s)].map((v, i) => (
-              <React.Fragment key={i}>
-                <div style={{ background: '#1a1a1a', color: '#fff', fontWeight: 800, fontSize: 20, borderRadius: 8, padding: '6px 10px', minWidth: 44, textAlign: 'center', fontVariantNumeric: 'tabular-nums', letterSpacing: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>{v}</div>
-                {i < 2 && <span style={{ color: '#fca5a5', fontWeight: 900, fontSize: 20 }}>:</span>}
-              </React.Fragment>
-            ))}
+          {remainingMs > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>Kết thúc sau:</span>
+              {[pad(h), pad(m), pad(s)].map((v, i) => (
+                <React.Fragment key={i}>
+                  <div style={{ background: '#1a1a1a', color: '#fff', fontWeight: 800, fontSize: 20, borderRadius: 8, padding: '6px 10px', minWidth: 44, textAlign: 'center', fontVariantNumeric: 'tabular-nums', letterSpacing: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>{v}</div>
+                  {i < 2 && <span style={{ color: '#fca5a5', fontWeight: 900, fontSize: 20 }}>:</span>}
+                </React.Fragment>
+              ))}
+            </div>
+          )}
+          <div style={{ marginLeft: 'auto', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+            {visibleItems.length}/{allItems.length} sản phẩm
           </div>
         </div>
-        <div style={{ position: 'relative' }}>
-          <button onClick={() => scroll(-1)} style={{ position: 'absolute', left: -16, top: '50%', transform: 'translateY(-50%)', zIndex: 5, width: 36, height: 36, borderRadius: '50%', background: '#fff', border: 'none', boxShadow: '0 2px 10px rgba(0,0,0,0.3)', cursor: 'pointer', fontSize: 18, color: '#b91c1c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
-          <button onClick={() => scroll(1)}  style={{ position: 'absolute', right: -16, top: '50%', transform: 'translateY(-50%)', zIndex: 5, width: 36, height: 36, borderRadius: '50%', background: '#fff', border: 'none', boxShadow: '0 2px 10px rgba(0,0,0,0.3)', cursor: 'pointer', fontSize: 18, color: '#b91c1c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
-          <div ref={scrollRef} style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-            {items.map((item: any) => (
-              <Link key={item.product_id} to={`/products/${item.product_id}`} style={{ textDecoration: 'none', flexShrink: 0, width: 172 }}>
-                <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', transition: 'transform 0.2s, box-shadow 0.2s', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 24px rgba(0,0,0,0.35)' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';  (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)' }}>
-                  <div style={{ position: 'relative', background: '#f3f4f6', height: 148, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {item.image_urls?.[0]
-                      ? <img src={item.image_urls[0]} alt={item.product_name} style={{ width: '100%', height: 148, objectFit: 'cover', display: 'block' }} />
-                      : <span style={{ fontSize: 48 }}>📦</span>
-                    }
-                    <div style={{ position: 'absolute', top: 8, left: 8, background: '#ef4444', color: '#fff', fontWeight: 800, fontSize: 11, padding: '3px 8px', borderRadius: 20 }}>⚡ HOT</div>
-                  </div>
-                  <div style={{ padding: '10px 10px 12px' }}>
-                    <p style={{ fontSize: 12, fontWeight: 500, color: '#111', lineHeight: 1.4, marginBottom: 6, height: 32, overflow: 'hidden' }}>{item.product_name}</p>
-                    <p style={{ fontSize: 15, fontWeight: 800, color: '#ef4444', margin: '0 0 4px' }}>{formatCurrency(parseFloat(item.price))}</p>
-                    <p style={{ fontSize: 10, color: '#9ca3af', margin: 0 }}>⭐ {item.rating} · Đã bán {item.sales_count}</p>
-                  </div>
+
+        {/* Product Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+          {visibleItems.map((item: any, idx: number) => (
+            <Link key={item.product_id ?? `local-${idx}`} to={item.product_id ? `/products/${item.product_id}` : '#'} style={{ textDecoration: 'none' }}>
+              <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', transition: 'transform 0.2s, box-shadow 0.2s', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 24px rgba(0,0,0,0.35)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';  (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)' }}>
+                <div style={{ position: 'relative', background: '#f3f4f6', height: 148, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {item.image_urls?.[0]
+                    ? <img src={item.image_urls[0]} alt={item.product_name} style={{ width: '100%', height: 148, objectFit: 'cover', display: 'block' }} />
+                    : <span style={{ fontSize: 48 }}>📦</span>
+                  }
+                  <div style={{ position: 'absolute', top: 8, left: 8, background: '#ef4444', color: '#fff', fontWeight: 800, fontSize: 11, padding: '3px 8px', borderRadius: 20 }}>⚡ HOT</div>
                 </div>
-              </Link>
-            ))}
-          </div>
+                <div style={{ padding: '10px 10px 12px' }}>
+                  <p style={{ fontSize: 12, fontWeight: 500, color: '#111', lineHeight: 1.4, marginBottom: 6, height: 32, overflow: 'hidden' }}>{item.product_name}</p>
+                  <p style={{ fontSize: 15, fontWeight: 800, color: '#ef4444', margin: '0 0 4px' }}>{formatCurrency(parseFloat(item.price))}</p>
+                  <p style={{ fontSize: 10, color: '#9ca3af', margin: 0 }}>⭐ {item.rating} · Đã bán {item.sales_count}</p>
+                </div>
+              </div>
+            </Link>
+          ))}
         </div>
+
+        {/* Nút mở rộng */}
+        {hasMore && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20 }}>
+            <button
+              onClick={() => setVisibleCount(c => Math.min(c + 20, allItems.length))}
+              style={{ background: 'rgba(255,255,255,0.15)', border: '2px solid rgba(255,255,255,0.4)', color: '#fff', fontWeight: 700, fontSize: 14, padding: '10px 36px', borderRadius: 999, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, transition: 'background 0.2s', backdropFilter: 'blur(4px)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.28)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
+            >
+              Xem thêm <span style={{ fontSize: 20, lineHeight: 1 }}>↓</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
 }
+
 
 // ─── Banner quang cao tren BuyZo Mall ─────────────────────────────────────────
 const STATIC_MALL_ADS = [
@@ -470,6 +495,36 @@ const Home: React.FC = () => {
 
   const { products, categories, filters, loading, loadingMore, loopLoading, total, pages } = useAppSelector(s => s.product)
 
+
+  // ── Top slot map — vị trí N (0-indexed) → sản phẩm top được chèn vào lưới ──
+  const topSlotMap = useMemo<Map<number, { productName: string; price: number; productImage: string; shopName: string; productId?: number }>>(() => {
+    const map = new Map()
+    try {
+      const history = getTopHistory()
+      history.filter(h => h.confirmation === 'paid' && h.winner).forEach(h => {
+        const shopName = h.winner!.shopName
+        const match = h.slot.match(/top_(\d+)/)
+        if (!match) return
+        const pos = parseInt(match[1]) - 1  // 0-indexed
+        if (map.has(pos)) return
+        const prods = getTopProductListByShop(shopName)
+        const p = prods[pos] ?? prods[0]
+        if (p) map.set(pos, { productName: p.productName, price: p.price, productImage: p.productImage, shopName, productId: p.productId })
+      })
+    } catch {}
+    return map
+  }, [])
+
+  // ── Infinite scroll ────────────────────────────────────────────────────────
+  const [accProducts, setAccProducts] = useState<any[]>([])
+  const virtualPageRef  = useRef(1)
+  const totalPagesRef   = useRef(1)
+  const isMouseBelowRef = useRef(false)
+  const timerRef        = useRef<ReturnType<typeof setInterval> | null>(null)
+  const featuresRef     = useRef<HTMLDivElement>(null)
+
+
+
   // ── Infinite scroll state ──────────────────────────────────────────────────
   const infinitePageRef   = useRef(1)   // trang hiện tại đã load
   const infinitePagesRef  = useRef(1)   // tổng số trang
@@ -653,7 +708,37 @@ const Home: React.FC = () => {
 
             {/* Products — infinite scroll */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <ProductList products={products} loading={loading} loadingMore={loadingMore} loopLoading={loopLoading} />
+
+              <ProductList products={(() => {
+                if (topSlotMap.size === 0) return products
+                // Chèn top products vào đúng vị trí trong lưới
+                const result: typeof products = []
+                let regIdx = 0
+                const maxPos = Math.max(...Array.from(topSlotMap.keys())) + 1
+                const total = Math.max(maxPos, products.length + topSlotMap.size)
+                for (let pos = 0; pos < total; pos++) {
+                  if (topSlotMap.has(pos)) {
+                    const top = topSlotMap.get(pos)!
+                    result.push({
+                      product_id: top.productId ?? -(pos + 1),
+                      product_name: top.productName,
+                      price: String(top.price),
+                      image_urls: [top.productImage],
+                      shop_name: top.shopName,
+                      shop_id: 0,
+                      stock_quantity: 1,
+                      sales_count: 0,
+                      rating: '0',
+                      total_reviews: 0,
+                      _isTop: true,
+                    } as any)
+                  } else if (regIdx < products.length) {
+                    result.push(products[regIdx++])
+                  }
+                }
+                while (regIdx < products.length) result.push(products[regIdx++])
+                return result
+              })()} loading={loading} loadingMore={loadingMore} loopLoading={loopLoading} />
 
               {/* Sentinel div — IntersectionObserver bắt sự kiện này */}
               <div ref={sentinelRef} style={{ height: 1 }} />

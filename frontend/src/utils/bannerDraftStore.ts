@@ -33,24 +33,42 @@ export const FLASH_PRODUCT_MAX = 20
 /** Mỗi sản phẩm trong danh sách chuẩn bị Flash Sale (tối đa 20) */
 export interface FlashProductItem {
   shopName: string
+  productId?: number    // product_id từ backend (để link trang chủ)
   productName: string
   price: number
   productImage: string  // path hoặc URL
   updatedAt: string
+  selectedForFlashSale?: boolean  // có được tích chọn lên Flash Sale trang chủ không
 }
+
+export const TOP_PRODUCT_MAX = 20
+
+/** Mỗi sản phẩm trong danh sách chuẩn bị Vị trí Top (tối đa 20) */
+export interface TopProductItem {
+  shopName: string
+  productId?: number
+  productName: string
+  price: number
+  productImage: string
+  updatedAt: string
+}
+
+// Giữ lại alias cũ để không phá các import đã có
+export type TopProductDraft = TopProductItem & { link?: string }
 
 interface DraftStore {
   banners: Partial<Record<BannerPositionKey, BannerDraft>>
   flash:   Partial<Record<FlashSlotKey, FlashDraft>>
   flashProducts?: (FlashProductItem | null)[]
+  topProducts?: (TopProductItem | null)[]
 }
 
 function read(): DraftStore {
   try {
     const raw = localStorage.getItem(storeKey())
     const d = raw ? JSON.parse(raw) : {}
-    return { banners: d.banners ?? {}, flash: d.flash ?? {}, flashProducts: d.flashProducts ?? [] }
-  } catch { return { banners: {}, flash: {}, flashProducts: [] } }
+    return { banners: d.banners ?? {}, flash: d.flash ?? {}, flashProducts: d.flashProducts ?? [], topProducts: d.topProducts ?? [] }
+  } catch { return { banners: {}, flash: {}, flashProducts: [], topProducts: [] } }
 }
 function write(d: DraftStore): boolean {
   try { localStorage.setItem(storeKey(), JSON.stringify(d)); return true } catch { return false }
@@ -123,11 +141,21 @@ export function getFlashProductList(shopName: string): (FlashProductItem | null)
   return result
 }
 
-export function saveFlashProduct(shopName: string, index: number, product: { productName: string; price: number; productImage: string }): void {
+export function saveFlashProduct(shopName: string, index: number, product: { productId?: number; productName: string; price: number; productImage: string }): void {
   const d = read()
   if (!d.flashProducts) d.flashProducts = []
   while (d.flashProducts.length <= index) d.flashProducts.push(null)
   d.flashProducts[index] = { shopName, ...product, updatedAt: new Date().toISOString() }
+  write(d)
+}
+
+/** Tích / bỏ tích chọn sản phẩm lên Flash Sale trang chủ */
+export function setFlashProductSelected(shopName: string, index: number, selected: boolean): void {
+  const d = read()
+  if (!d.flashProducts) return
+  const item = d.flashProducts[index]
+  if (!item || item.shopName !== shopName) return
+  d.flashProducts[index] = { ...item, selectedForFlashSale: selected, updatedAt: new Date().toISOString() }
   write(d)
 }
 
@@ -159,3 +187,72 @@ export function clearFlashDraft(slot: FlashSlotKey, shopName: string): void {
     write(d)
   }
 }
+
+// ── Top Product list (tối đa 20 sản phẩm chuẩn bị cho Vị trí Top) ──────────
+export function getTopProductList(shopName: string): (TopProductItem | null)[] {
+  const d = read()
+  const stored = d.topProducts ?? []
+  const result: (TopProductItem | null)[] = Array(TOP_PRODUCT_MAX).fill(null)
+  stored.forEach((item, i) => {
+    if (i < TOP_PRODUCT_MAX && item?.shopName === shopName) result[i] = item
+  })
+  return result
+}
+
+/** Quét toàn bộ localStorage để lấy list của 1 shop — dùng cho trang chủ */
+export function getTopProductListByShop(shopName: string): TopProductItem[] {
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith('buyzo_banner_draft_v1')) continue
+      const raw = localStorage.getItem(key); if (!raw) continue
+      const d: DraftStore = JSON.parse(raw)
+      const items = (d.topProducts ?? []).filter((p): p is TopProductItem => !!p && p.shopName === shopName)
+      if (items.length > 0) return items
+    }
+  } catch {}
+  return []
+}
+
+export function saveTopProduct(shopName: string, index: number, product: { productId?: number; productName: string; price: number; productImage: string }): void {
+  const d = read()
+  if (!d.topProducts) d.topProducts = []
+  while (d.topProducts.length <= index) d.topProducts.push(null)
+  d.topProducts[index] = { shopName, ...product, updatedAt: new Date().toISOString() }
+  write(d)
+}
+
+export function clearTopProduct(shopName: string, index: number): void {
+  const d = read()
+  if (d.topProducts?.[index]?.shopName === shopName) {
+    d.topProducts[index] = null
+    write(d)
+  }
+}
+
+/** Migration: đổi tên shop trong toàn bộ draft store (gọi 1 lần khi load tên thật từ API) */
+export function migrateShopName(oldName: string, newName: string): void {
+  if (!oldName || !newName || oldName === newName) return
+  const d = read()
+  let changed = false
+  d.flashProducts = (d.flashProducts ?? []).map(item => {
+    if (item?.shopName === oldName) { changed = true; return { ...item, shopName: newName } }
+    return item
+  })
+  d.topProducts = (d.topProducts ?? []).map(item => {
+    if (item?.shopName === oldName) { changed = true; return { ...item, shopName: newName } }
+    return item
+  })
+  ;(Object.keys(d.banners) as BannerPositionKey[]).forEach(pos => {
+    if (d.banners[pos]?.shopName === oldName) { changed = true; d.banners[pos] = { ...d.banners[pos]!, shopName: newName } }
+  })
+  ;(Object.keys(d.flash) as FlashSlotKey[]).forEach(slot => {
+    if (d.flash[slot]?.shopName === oldName) { changed = true; d.flash[slot] = { ...d.flash[slot]!, shopName: newName } }
+  })
+  if (changed) write(d)
+}
+
+// Compat aliases (giữ lại để không phá import cũ)
+export const getTopProductDraft = (shopName: string) => getTopProductList(shopName).find(Boolean) ?? null
+export const getTopProductDraftByShop = (shopName: string) => getTopProductListByShop(shopName)[0] ?? null
+export const saveTopProductDraft = (draft: TopProductDraft) => saveTopProduct(draft.shopName, 0, draft)
+export const clearTopProductDraft = (shopName: string) => clearTopProduct(shopName, 0)

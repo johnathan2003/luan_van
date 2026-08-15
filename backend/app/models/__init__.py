@@ -13,6 +13,12 @@ from app.models.chat import Conversation, Message
 from app.models.admin_config import Feedback, ShippingZone, ShippingMethod, PlatformTransaction
 from app.models.wallet_auction import Banner
 from app.models.media import MediaAsset
+from app.models.slot_auctions import (
+    FlashSlot, FlashSlotAuction, FlashSlotBid,
+    TopSlot, TopSlotAuction, TopSlotBid,
+    ShopBidViolation, ProductTag, ProductTagMap, ProductBoost,
+)
+from app.models.ai_incident import AIIncident
 
 __all__ = [
     "User", "Role", "UserRole", "Permission", "RolePermission",
@@ -31,5 +37,8 @@ __all__ = [
     "EmployeeActivityLog", "AdminLog", "SystemLog",
     "Conversation", "Message",
     "Banner", "Feedback", "ShippingZone", "ShippingMethod", "PlatformTransaction", "MediaAsset",
-
+    "FlashSlot", "FlashSlotAuction", "FlashSlotBid",
+    "TopSlot", "TopSlotAuction", "TopSlotBid",
+    "ShopBidViolation", "ProductTag", "ProductTagMap", "ProductBoost",
+    "AIIncident",
 ]

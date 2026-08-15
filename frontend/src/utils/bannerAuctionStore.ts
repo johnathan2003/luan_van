@@ -98,6 +98,7 @@ export interface BannerAuctionSession {
   description?: string       // mô tả admin đặt khi mở phiên
   bids: BannerBid[]
   paused?: boolean
+  pausedAt?: string          // ISO timestamp khi bị freeze — dùng để tính bù thời gian
   status: 'active' | 'ended'
   winner?: BannerBid
   confirmation?: 'pending' | 'deposit_paid' | 'declined' | 'expired' | 'paid' | 'deposit_cancelled'
@@ -248,7 +249,7 @@ function saveStore(data: StoreData) { writeJSON(KEY, trimForStorage(data)) }
 
 function rollIfExpired(data: StoreData, position: BannerPositionKey): BannerAuctionSession | undefined {
   const session = data.sessions[position]
-  if (session && new Date(session.endsAt).getTime() <= Date.now() && session.status === 'active') {
+  if (session && !session.paused && new Date(session.endsAt).getTime() <= Date.now() && session.status === 'active') {
     const winner = session.bids.length ? session.bids.reduce((a, b) => (b.amount > a.amount ? b : a)) : undefined
     const settings = data.settings[position]
     const ended: BannerAuctionSession = {
@@ -759,12 +760,19 @@ export function updateAdminSettings(position: BannerPositionKey, patch: Partial<
 
 export function freezeAuction(position: BannerPositionKey): void {
   const data = getStore()
-  if (data.sessions[position]) { data.sessions[position] = { ...data.sessions[position]!, paused: true }; saveStore(data) }
+  const s = data.sessions[position]
+  if (s) { data.sessions[position] = { ...s, paused: true, pausedAt: new Date().toISOString() }; saveStore(data) }
 }
 
 export function unfreezeAuction(position: BannerPositionKey): void {
   const data = getStore()
-  if (data.sessions[position]) { data.sessions[position] = { ...data.sessions[position]!, paused: false }; saveStore(data) }
+  const s = data.sessions[position]
+  if (s && s.paused) {
+    const pausedMs = s.pausedAt ? Date.now() - new Date(s.pausedAt).getTime() : 0
+    const newEndsAt = new Date(new Date(s.endsAt).getTime() + pausedMs).toISOString()
+    data.sessions[position] = { ...s, paused: false, pausedAt: undefined, endsAt: newEndsAt }
+    saveStore(data)
+  }
 }
 
 export function cancelAuction(position: BannerPositionKey): void {
@@ -833,4 +841,18 @@ export function msUntilEnd(session: BannerAuctionSession): number {
 export function formatCountdown(ms: number): string {
   const totalSec = Math.floor(ms / 1000); const m = Math.floor(totalSec / 60); const s = totalSec % 60
   return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+export function migrateShopName(oldName: string, newName: string): void {
+  if (!oldName || !newName || oldName === newName) return
+  const d = getStore()
+  let changed = false
+  const migrate = (session: BannerAuctionSession) => {
+    session.bids.forEach(b => { if (b.shopName === oldName) { b.shopName = newName; changed = true } })
+    if (session.winner?.shopName === oldName) { session.winner.shopName = newName; changed = true }
+    ;(session.buyNowPurchases ?? []).forEach(p => { if (p.shopName === oldName) { p.shopName = newName; changed = true } })
+  }
+  Object.values(d.sessions).forEach(s => { if (s) migrate(s) })
+  d.history.forEach(h => migrate(h))
+  if (changed) saveStore(d)
 }
