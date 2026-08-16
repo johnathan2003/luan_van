@@ -107,9 +107,11 @@ const MyDisputesPage: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <input
               type="number"
+              min={1}
               placeholder="Mã đơn hàng (số)"
               value={orderId}
               onChange={e => setOrderId(e.target.value)}
+              onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()}
               className="form-input"
               style={{ maxWidth: 220 }}
             />

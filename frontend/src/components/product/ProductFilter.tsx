@@ -36,8 +36,8 @@ const ProductFilter: React.FC<Props> = ({ categories, filters, onChange }) => (
     <div style={{ marginBottom: 20 }}>
       <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--gray-600)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Giá</p>
       <div style={{ display: 'flex', gap: 8 }}>
-        <input className="input" placeholder="Từ" type="number" value={filters.min_price || ''} onChange={e => onChange('min_price', e.target.value ? Number(e.target.value) : undefined)} style={{ width: '50%' }} />
-        <input className="input" placeholder="Đến" type="number" value={filters.max_price || ''} onChange={e => onChange('max_price', e.target.value ? Number(e.target.value) : undefined)} style={{ width: '50%' }} />
+        <input className="input" placeholder="Từ" type="number" min={0} value={filters.min_price || ''} onChange={e => onChange('min_price', e.target.value ? Number(e.target.value) : undefined)} onKeyDown={e => ['e','E','+','-'].includes(e.key) && e.preventDefault()} style={{ width: '50%' }} />
+        <input className="input" placeholder="Đến" type="number" min={0} value={filters.max_price || ''} onChange={e => onChange('max_price', e.target.value ? Number(e.target.value) : undefined)} onKeyDown={e => ['e','E','+','-'].includes(e.key) && e.preventDefault()} style={{ width: '50%' }} />
       </div>
     </div>
 

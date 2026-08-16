@@ -170,8 +170,9 @@ const PoolCard: React.FC<{
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.6fr 0.6fr 0.6fr 0.55fr 0.55fr', gap: 10, marginBottom: session ? 16 : 0, alignItems: 'end' }}>
         <label style={{ fontSize: 12, color: C.gray }}>
           Số slot tổng
-          <input type="number" step={10} defaultValue={settings.totalSlots}
+          <input type="number" step={10} min={1} defaultValue={settings.totalSlots}
             disabled={!isEditing}
+            onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()}
             onBlur={e => onUpdateSettings({ totalSlots: Number(e.target.value) })}
             style={inputStyle} />
         </label>
@@ -218,7 +219,7 @@ const PoolCard: React.FC<{
         </label>
         <label style={{ fontSize: 11, color: C.gray }}>
           Thời gian phiên (phút)
-          <input type="number" defaultValue={Math.round(settings.biddingDurationMs / 60000)}
+          <input type="number" min={1} defaultValue={Math.round(settings.biddingDurationMs / 60000)}
             disabled={!isEditing}
             onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
             onBlur={e => onUpdateSettings({ biddingDurationMs: Number(e.target.value) * 60000 })}
@@ -226,7 +227,7 @@ const PoolCard: React.FC<{
         </label>
         <label style={{ fontSize: 11, color: C.gray }}>
           Hiển thị sau thắng (giờ)
-          <input type="number" defaultValue={Math.round(settings.displayDurationMs / 3600000)}
+          <input type="number" min={1} defaultValue={Math.round(settings.displayDurationMs / 3600000)}
             disabled={!isEditing}
             onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
             onBlur={e => onUpdateSettings({ displayDurationMs: Number(e.target.value) * 3600000 })}
@@ -475,7 +476,7 @@ const AuctionManagementPage: React.FC = () => {
                   </label>
                   <label style={{ fontSize: 11, color: C.gray }}>
                     Thời gian phiên (phút)
-                    <input type="number" defaultValue={Math.round(s.biddingDurationMs / 60000)}
+                    <input type="number" min={1} defaultValue={Math.round(s.biddingDurationMs / 60000)}
                       disabled={!isEditing}
                       onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
                       onBlur={e => { updateBannerSettings(p.key, { biddingDurationMs: Number(e.target.value) * 60000 }); refresh() }}
@@ -483,7 +484,7 @@ const AuctionManagementPage: React.FC = () => {
                   </label>
                   <label style={{ fontSize: 11, color: C.gray }}>
                     Hiển thị sau thắng (giờ)
-                    <input type="number" defaultValue={Math.round(s.displayDurationMs / 3600000)}
+                    <input type="number" min={1} defaultValue={Math.round(s.displayDurationMs / 3600000)}
                       disabled={!isEditing}
                       onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
                       onBlur={e => { updateBannerSettings(p.key, { displayDurationMs: Number(e.target.value) * 3600000 }); refresh() }}
@@ -658,7 +659,7 @@ const AuctionManagementPage: React.FC = () => {
                   </label>
                   <label style={{ fontSize: 11, color: C.gray }}>
                     Thời gian phiên (phút)
-                    <input type="number" defaultValue={Math.round(s.biddingDurationMs / 60000)}
+                    <input type="number" min={1} defaultValue={Math.round(s.biddingDurationMs / 60000)}
                       disabled={!isEditing}
                       onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
                       onBlur={e => { updateTopSettings(sl.key, { biddingDurationMs: Number(e.target.value) * 60000 }); refresh() }}
@@ -666,7 +667,7 @@ const AuctionManagementPage: React.FC = () => {
                   </label>
                   <label style={{ fontSize: 11, color: C.gray }}>
                     Hiển thị sau thắng (giờ)
-                    <input type="number" defaultValue={Math.round(s.displayDurationMs / 3600000)}
+                    <input type="number" min={1} defaultValue={Math.round(s.displayDurationMs / 3600000)}
                       disabled={!isEditing}
                       onInput={e => { const raw = e.currentTarget.value.replace(/[^\d]/g, ''); e.currentTarget.value = raw ? Number(raw).toLocaleString('vi-VN') : '' }}
                       onBlur={e => { updateTopSettings(sl.key, { displayDurationMs: Number(e.target.value) * 3600000 }); refresh() }}

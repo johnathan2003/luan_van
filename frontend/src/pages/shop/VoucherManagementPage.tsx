@@ -69,12 +69,12 @@ const VoucherManagementPage: React.FC = () => {
               <option value="fixed">Số tiền cố định</option>
             </select>
           </div>
-          <div><label className="input-label">Giá trị ({form.discount_type === 'percentage' ? '%' : 'VND'})</label><input className="input" type="number" value={form.discount_value} onChange={e => setForm(f => ({ ...f, discount_value: Number(e.target.value) }))} /></div>
+          <div><label className="input-label">Giá trị ({form.discount_type === 'percentage' ? '%' : 'VND'})</label><input className="input" type="number" min={0} max={form.discount_type === 'percentage' ? 100 : undefined} value={form.discount_value} onChange={e => setForm(f => ({ ...f, discount_value: Number(e.target.value) }))} onKeyDown={e => ['e','E','+','-'].includes(e.key) && e.preventDefault()} /></div>
           {form.discount_type === 'percentage' && (
-            <div><label className="input-label">Giảm tối đa (VND)</label><input className="input" type="number" placeholder="Không giới hạn" value={form.max_discount} onChange={e => setForm(f => ({ ...f, max_discount: e.target.value }))} /></div>
+            <div><label className="input-label">Giảm tối đa (VND)</label><input className="input" type="number" min={0} placeholder="Không giới hạn" value={form.max_discount} onChange={e => setForm(f => ({ ...f, max_discount: e.target.value }))} onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()} /></div>
           )}
-          <div><label className="input-label">Đơn tối thiểu (VND)</label><input className="input" type="number" placeholder="Không bắt buộc" value={form.min_order_value} onChange={e => setForm(f => ({ ...f, min_order_value: e.target.value }))} /></div>
-          <div><label className="input-label">Số lần dùng tối đa</label><input className="input" type="number" placeholder="Không giới hạn" value={form.max_uses} onChange={e => setForm(f => ({ ...f, max_uses: e.target.value }))} /></div>
+          <div><label className="input-label">Đơn tối thiểu (VND)</label><input className="input" type="number" min={0} placeholder="Không bắt buộc" value={form.min_order_value} onChange={e => setForm(f => ({ ...f, min_order_value: e.target.value }))} onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()} /></div>
+          <div><label className="input-label">Số lần dùng tối đa</label><input className="input" type="number" min={1} placeholder="Không giới hạn" value={form.max_uses} onChange={e => setForm(f => ({ ...f, max_uses: e.target.value }))} onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()} /></div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
             <button onClick={() => setModalOpen(false)} className="btn btn-ghost">Hủy</button>
             <button onClick={handleCreate} className="btn btn-primary">Tạo voucher</button>

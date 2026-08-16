@@ -128,19 +128,19 @@ const SlotModal: React.FC<{
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.gray, display: 'block', marginBottom: 4 }}>Giá sàn (đ)</label>
-            <input style={inputStyle} type="number" value={basePrice} onChange={e => setBasePrice(e.target.value)} placeholder="100000" />
+            <input style={inputStyle} type="number" min={0} value={basePrice} onChange={e => setBasePrice(e.target.value)} onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()} placeholder="100000" />
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.gray, display: 'block', marginBottom: 4 }}>Thời hạn hiển thị (ngày)</label>
-            <input style={inputStyle} type="number" value={durationDays} onChange={e => setDurationDays(e.target.value)} />
+            <input style={inputStyle} type="number" min={1} value={durationDays} onChange={e => setDurationDays(e.target.value)} onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()} />
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.gray, display: 'block', marginBottom: 4 }}>Rộng (px)</label>
-            <input style={inputStyle} type="number" value={width} onChange={e => setWidth(e.target.value)} placeholder="1200" />
+            <input style={inputStyle} type="number" min={1} value={width} onChange={e => setWidth(e.target.value)} onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()} placeholder="1200" />
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.gray, display: 'block', marginBottom: 4 }}>Cao (px)</label>
-            <input style={inputStyle} type="number" value={height} onChange={e => setHeight(e.target.value)} placeholder="300" />
+            <input style={inputStyle} type="number" min={1} value={height} onChange={e => setHeight(e.target.value)} onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()} placeholder="300" />
           </div>
         </div>
 
@@ -201,7 +201,7 @@ const OpenAuctionModal: React.FC<{
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.gray, display: 'block', marginBottom: 4 }}>Giá khởi điểm (đ) — để trống dùng giá sàn slot</label>
-            <input style={inputStyle} type="number" value={startPrice} onChange={e => setStartPrice(e.target.value)} placeholder={String(slots.find(s => s.slot_id === Number(slotId))?.base_price ?? '')} />
+            <input style={inputStyle} type="number" min={0} value={startPrice} onChange={e => setStartPrice(e.target.value)} onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()} placeholder={String(slots.find(s => s.slot_id === Number(slotId))?.base_price ?? '')} />
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.gray, display: 'block', marginBottom: 4 }}>Thời gian phiên (giờ)</label>

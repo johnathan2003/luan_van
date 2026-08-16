@@ -2797,7 +2797,8 @@ const BannerAuctionPage: React.FC = () => {
                 </label>
                 <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 10 }}>
                   Giá bán Flash Sale (đ) *
-                  <input type="number" value={flashForm.price} onChange={e => setFlashForm(f => ({ ...f, price: e.target.value }))}
+                  <input type="number" min={0} value={flashForm.price} onChange={e => setFlashForm(f => ({ ...f, price: e.target.value }))}
+                    onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()}
                     style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, boxSizing: 'border-box' }} />
                 </label>
                 <label style={{ fontSize: 13, color: C.gray, display: 'block', marginBottom: 6 }}>

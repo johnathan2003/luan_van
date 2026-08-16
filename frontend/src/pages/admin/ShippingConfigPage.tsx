@@ -129,12 +129,14 @@ const SizeTiersTab: React.FC = () => {
                 </td>
                 {(['max_length_cm','max_width_cm','max_height_cm','max_weight_kg'] as const).map(field => (
                   <td key={field} style={{ padding: '11px 14px' }}>
-                    <input type="number" value={t[field]} onChange={e => update(i, field, e.target.value)}
+                    <input type="number" min={0} value={t[field]} onChange={e => update(i, field, e.target.value)}
+                      onKeyDown={e => ['e','E','+','-'].includes(e.key) && e.preventDefault()}
                       style={{ width: 80, padding: '5px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, outline: 'none', textAlign: 'right' }} />
                   </td>
                 ))}
                 <td style={{ padding: '11px 14px' }}>
-                  <input type="number" value={t.extra_fee} onChange={e => update(i, 'extra_fee', e.target.value)}
+                  <input type="number" min={0} value={t.extra_fee} onChange={e => update(i, 'extra_fee', e.target.value)}
+                    onKeyDown={e => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()}
                     style={{ width: 100, padding: '5px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, outline: 'none', textAlign: 'right' }} />
                 </td>
               </tr>
@@ -164,7 +166,8 @@ const SizeTiersTab: React.FC = () => {
           ].map(f => (
             <div key={f.label}>
               <label style={{ fontSize: 11, color: '#64748B', display: 'block', marginBottom: 4, fontWeight: 600 }}>{f.label}</label>
-              <input type="number" value={f.val} onChange={e => f.set(e.target.value)} placeholder="0"
+              <input type="number" min={0} value={f.val} onChange={e => f.set(e.target.value)} placeholder="0"
+                onKeyDown={e => ['e','E','+','-'].includes(e.key) && e.preventDefault()}
                 style={{ width: 90, padding: '7px 10px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 14, outline: 'none', textAlign: 'center' }} />
             </div>
           ))}
@@ -405,14 +408,16 @@ const ShippingConfigPage: React.FC = () => {
               {[
                 { key:'name',           label:'Tên vùng',                  type:'text',   placeholder:'VD: Nội thành HCM' },
                 { key:'provinces',      label:'Tỉnh/TP áp dụng',           type:'text',   placeholder:'VD: HCM, Bình Dương' },
-                { key:'base_fee',       label:'Phí cơ bản (₫)',            type:'number', placeholder:'VD: 30000' },
-                { key:'per_kg',         label:'Phí/kg thêm (₫)',           type:'number', placeholder:'VD: 5000' },
+                { key:'base_fee',       label:'Phí cơ bản (₫)',            type:'number', placeholder:'VD: 30000',  min: 0 },
+                { key:'per_kg',         label:'Phí/kg thêm (₫)',           type:'number', placeholder:'VD: 5000',   min: 0 },
                 { key:'estimated_days', label:'Thời gián ước tính (ngày)', type:'text',   placeholder:'VD: 1-2' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ fontSize:12, fontWeight:600, color:C.gray, display:'block', marginBottom:4 }}>{f.label}</label>
                   <input type={f.type} value={zoneForm[f.key] ?? ''} placeholder={f.placeholder}
+                    min={(f as any).min}
                     onChange={e => setZoneForm((p: any) => ({ ...p, [f.key]: e.target.value }))}
+                    onKeyDown={f.type === 'number' ? (e: React.KeyboardEvent) => ['e','E','+','-','.'].includes(e.key) && e.preventDefault() : undefined}
                     style={{ width:'100%', padding:'9px 12px', border:`1px solid ${C.light}`, borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box' }} />
                 </div>
               ))}
