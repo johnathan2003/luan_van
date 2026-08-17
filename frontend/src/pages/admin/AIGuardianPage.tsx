@@ -9,6 +9,8 @@
  * GET  /api/v1/ai-incidents
  * POST /api/v1/ai-incidents/preview
  * POST /api/v1/ai-incidents
+ * POST /api/v1/ai-incidents/{id}/approve       — duyệt lỗi critical đang chờ
+ * POST /api/v1/ai-incidents/release-batch      — phát hành bản cập nhật cuối tuần
  */
 import React, { useCallback, useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
@@ -20,19 +22,28 @@ interface Incident {
   incident_id: number; category: string; severity: string; title: string
   root_cause: string; actions_taken: string[]; detected_at: string
   resolved_at: string | null; status: string
+  proposed_solution: string | null; release_batch_date: string | null
+  approved_by: number | null; approved_at: string | null
 }
 
 const C = {
   navy: '#1E3A8A', blue: '#1D4ED8', light: '#DBEAFE',
   gray: 'var(--text-secondary)', border: 'var(--border-subtle)', card: 'var(--bg-card)',
-  success: '#16A34A', warning: '#D97706', error: '#DC2626',
+  success: '#16A34A', warning: '#D97706', error: '#DC2626', purple: '#7C3AED',
 }
 const SEVERITY_STYLE: Record<string, { color: string; bg: string; label: string }> = {
   info:     { color: C.blue,    bg: C.light,          label: 'Thông tin' },
   warning:  { color: C.warning, bg: '#FEF3C7',         label: 'Cảnh báo' },
   critical: { color: C.error,   bg: '#FEE2E2',         label: 'Nghiêm trọng' },
 }
-const STATUS_LABEL: Record<string, string> = { detected: '🔍 Đang phát hiện', mitigating: '🛠️ Đang xử lý', resolved: '✅ Đã khắc phục' }
+const STATUS_LABEL: Record<string, string> = {
+  detected: '🔍 Đang phát hiện', mitigating: '🛠️ Đang xử lý', resolved: '✅ Đã khắc phục',
+  pending_approval: '⏳ Chờ admin duyệt', scheduled: '🗓️ Chờ gộp bản cập nhật',
+}
+
+function fmtDateOnly(s: string) {
+  return new Date(s + 'T00:00:00').toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
 
 function fmtDate(s: string) {
   return new Date(s).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -48,6 +59,7 @@ const AIGuardianPage: React.FC = () => {
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
+  const [releasing, setReleasing] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -56,6 +68,29 @@ const AIGuardianPage: React.FC = () => {
 
   useEffect(() => { load() }, [load])
 
+  const releaseBatch = async (batchDate: string) => {
+    setReleasing(batchDate)
+    try {
+      const r = await API.post('/api/v1/ai-incidents/release-batch', { release_batch_date: batchDate })
+      toast.success(`🚀 ${r.data.message}`)
+      load()
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'Lỗi khi phát hành bản cập nhật')
+    } finally {
+      setReleasing(null)
+    }
+  }
+
+  // Gộp các lỗi nhỏ đang 'scheduled' theo release_batch_date để hiện 1 nút
+  // phát hành / lô, thay vì phải xử lý từng dòng.
+  const batches = incidents
+    .filter(i => i.status === 'scheduled' && i.release_batch_date)
+    .reduce<Record<string, number>>((acc, i) => {
+      const d = i.release_batch_date as string
+      acc[d] = (acc[d] || 0) + 1
+      return acc
+    }, {})
+
   return (
     <div style={{ maxWidth: 820 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
@@ -63,12 +98,27 @@ const AIGuardianPage: React.FC = () => {
           <h2 style={{ margin: 0 }}>🛡️ AI Guardian — Nhật ký bảo vệ hệ thống</h2>
           <p style={{ color: C.gray, fontSize: 13, marginTop: 4 }}>
             AI quét hệ thống liên tục, ghi lại các sự cố phát hiện được và các bước đã tự động xử lý để đảm bảo hệ thống luôn hoạt động.
+            Lỗi nhỏ được tự vá và gộp vào bản cập nhật cuối tuần; lỗi nghiêm trọng cần admin duyệt giải pháp trước khi triển khai.
           </p>
         </div>
         <button onClick={() => setFormOpen(o => !o)} style={btn(C.navy)}>{formOpen ? '✕ Đóng' : '+ Ghi nhận sự cố'}</button>
       </div>
 
       {formOpen && <IncidentForm onSaved={() => { setFormOpen(false); load() }} />}
+
+      {Object.keys(batches).length > 0 && (
+        <div style={{ marginTop: 18, background: '#F5F3FF', border: `1px solid ${C.purple}44`, borderRadius: 12, padding: '14px 18px' }}>
+          <p style={{ margin: '0 0 10px', fontWeight: 700, color: C.purple, fontSize: 13 }}>🗓️ Bản cập nhật cuối tuần đang chờ phát hành</p>
+          {Object.entries(batches).map(([d, count]) => (
+            <div key={d} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0' }}>
+              <span style={{ fontSize: 13 }}>Ngày {fmtDateOnly(d)} — <b>{count}</b> lỗi nhỏ đã tự vá, đang chờ gộp</span>
+              <button onClick={() => releaseBatch(d)} disabled={releasing === d} style={btn(releasing === d ? '#9CA3AF' : C.purple, releasing === d)}>
+                {releasing === d ? '⏳...' : `🚀 Phát hành bản cập nhật ${fmtDateOnly(d)}`}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ marginTop: 20 }}>
         {loading ? (
@@ -80,7 +130,7 @@ const AIGuardianPage: React.FC = () => {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {incidents.map((i, idx) => <IncidentCard key={i.incident_id} incident={i} isFirst={idx === 0} />)}
+            {incidents.map((i, idx) => <IncidentCard key={i.incident_id} incident={i} isFirst={idx === 0} onChanged={load} />)}
           </div>
         )}
       </div>
@@ -89,9 +139,24 @@ const AIGuardianPage: React.FC = () => {
 }
 
 // ── Timeline card ────────────────────────────────────────────────────────────
-const IncidentCard: React.FC<{ incident: Incident; isFirst: boolean }> = ({ incident: i, isFirst }) => {
-  const [open, setOpen] = useState(isFirst)
+const IncidentCard: React.FC<{ incident: Incident; isFirst: boolean; onChanged: () => void }> = ({ incident: i, isFirst, onChanged }) => {
+  const [open, setOpen] = useState(isFirst || i.status === 'pending_approval')
+  const [approving, setApproving] = useState(false)
   const sev = SEVERITY_STYLE[i.severity] || SEVERITY_STYLE.warning
+
+  const approve = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setApproving(true)
+    try {
+      await API.post(`/api/v1/ai-incidents/${i.incident_id}/approve`)
+      toast.success('✅ Đã duyệt — giải pháp được triển khai lên hệ thống')
+      onChanged()
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi khi duyệt')
+    } finally {
+      setApproving(false)
+    }
+  }
 
   return (
     <div style={{ display: 'flex', gap: 14 }}>
@@ -103,7 +168,7 @@ const IncidentCard: React.FC<{ incident: Incident; isFirst: boolean }> = ({ inci
 
       <div style={{ flex: 1, paddingBottom: 16 }}>
         <div onClick={() => setOpen(o => !o)}
-          style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', cursor: 'pointer' }}>
+          style={{ background: C.card, border: `1px solid ${i.status === 'pending_approval' ? C.error : i.status === 'scheduled' ? C.purple : C.border}${i.status === 'pending_approval' || i.status === 'scheduled' ? '66' : ''}`, borderRadius: 12, padding: '14px 18px', cursor: 'pointer' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
@@ -129,9 +194,27 @@ const IncidentCard: React.FC<{ incident: Incident; isFirst: boolean }> = ({ inci
                   </div>
                 ))}
               </div>
+
+              {i.status === 'pending_approval' && i.proposed_solution && (
+                <div style={{ marginTop: 12, background: '#FEF2F2', border: `1px solid ${C.error}44`, borderRadius: 8, padding: '10px 14px' }}>
+                  <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: C.error }}>💡 Giải pháp AI đề xuất — chờ admin duyệt</p>
+                  <p style={{ margin: '0 0 10px', fontSize: 13, lineHeight: 1.6 }}>{i.proposed_solution}</p>
+                  <button onClick={approve} disabled={approving} style={btn(approving ? '#9CA3AF' : C.success, approving)}>
+                    {approving ? '⏳...' : '✅ Duyệt & triển khai lên hệ thống'}
+                  </button>
+                </div>
+              )}
+
+              {i.status === 'scheduled' && i.release_batch_date && (
+                <p style={{ margin: '10px 0 0', fontSize: 12, color: C.purple, fontWeight: 600 }}>
+                  🗓️ Đã tự vá tạm thời — chờ gộp vào bản cập nhật cuối tuần ngày {fmtDateOnly(i.release_batch_date)}
+                </p>
+              )}
+
               {i.resolved_at && (
                 <p style={{ margin: '10px 0 0', fontSize: 12, color: C.success, fontWeight: 600 }}>
                   ✅ Đã khắc phục lúc {fmtDate(i.resolved_at)}
+                  {i.approved_at && ' (đã qua admin duyệt)'}
                 </p>
               )}
             </div>
@@ -142,6 +225,14 @@ const IncidentCard: React.FC<{ incident: Incident; isFirst: boolean }> = ({ inci
   )
 }
 
+// Thứ 7 gần nhất SAU ngày `from` (dùng làm mốc "cuối tuần" mặc định cho lỗi 'scheduled')
+function nextSaturday(from: Date): string {
+  const d = new Date(from)
+  const diff = (6 - d.getDay() + 7) % 7 || 7
+  d.setDate(d.getDate() + diff)
+  return d.toISOString().slice(0, 10)
+}
+
 // ── Form tạo sự cố ────────────────────────────────────────────────────────────
 const IncidentForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
   const [templates, setTemplates] = useState<Template[]>([])
@@ -150,6 +241,8 @@ const IncidentForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
   const [severity, setSeverity] = useState('warning')
   const [status, setStatus] = useState('resolved')
   const [detectedAt, setDetectedAt] = useState(() => new Date().toISOString().slice(0, 16))
+  const [proposedSolution, setProposedSolution] = useState('')
+  const [releaseBatchDate, setReleaseBatchDate] = useState(() => nextSaturday(new Date()))
   const [preview, setPreview] = useState<{ title: string; root_cause: string; actions_taken: string[] } | null>(null)
   const [saving, setSaving] = useState(false)
   const [customTitle, setCustomTitle] = useState('')
@@ -192,6 +285,7 @@ const IncidentForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
   const handleSave = async () => {
     if (!category) { toast.error('Chọn loại sự cố'); return }
     if (category === 'custom' && (!customTitle || !customRootCause)) { toast.error('Nhập tiêu đề và nguyên nhân'); return }
+    if (status === 'pending_approval' && !proposedSolution.trim()) { toast.error('Nhập giải pháp AI đề xuất cho lỗi nghiêm trọng này'); return }
     setSaving(true)
     try {
       await API.post('/api/v1/ai-incidents', {
@@ -199,6 +293,8 @@ const IncidentForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
         custom: category === 'custom' ? customPayload() : undefined,
         detected_at: detectedAt,
         resolved_at: status === 'resolved' ? new Date().toISOString() : null,
+        proposed_solution: status === 'pending_approval' ? proposedSolution : null,
+        release_batch_date: status === 'scheduled' ? releaseBatchDate : null,
       })
       toast.success('✅ Đã ghi nhận sự cố')
       onSaved()
@@ -247,12 +343,30 @@ const IncidentForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
             <option value="resolved">Đã khắc phục</option>
             <option value="mitigating">Đang xử lý</option>
             <option value="detected">Vừa phát hiện</option>
+            <option value="pending_approval">⏳ Chờ admin duyệt (lỗi nghiêm trọng)</option>
+            <option value="scheduled">🗓️ Chờ gộp bản cập nhật cuối tuần (lỗi nhỏ)</option>
           </select>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label style={{ fontSize: 11, color: C.gray }}>Thời điểm phát hiện (có thể lùi ngày)</label>
             <input type="datetime-local" value={detectedAt} onChange={e => setDetectedAt(e.target.value)} style={inputStyle} />
           </div>
           <button onClick={runPreview} style={{ ...btn('#6B7280'), alignSelf: 'flex-end' }}>👁 Xem trước</button>
+        </div>
+      )}
+
+      {status === 'pending_approval' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 11, color: C.gray }}>Giải pháp AI đề xuất (admin sẽ đọc trước khi duyệt)</label>
+          <textarea rows={2} value={proposedSolution} onChange={e => setProposedSolution(e.target.value)}
+            placeholder="VD: Đề xuất tăng giới hạn connection pool lên 250, bật idle timeout 30s..."
+            style={{ ...inputStyle, resize: 'vertical' }} />
+        </div>
+      )}
+
+      {status === 'scheduled' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 220 }}>
+          <label style={{ fontSize: 11, color: C.gray }}>Ngày phát hành bản cập nhật cuối tuần</label>
+          <input type="date" value={releaseBatchDate} onChange={e => setReleaseBatchDate(e.target.value)} style={inputStyle} />
         </div>
       )}
 

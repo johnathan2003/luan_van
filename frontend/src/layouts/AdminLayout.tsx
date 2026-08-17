@@ -65,7 +65,8 @@ const ADMIN_NAV: NavGroup[] = [
     group: 'Quảng Cáo & Nội Dung',
     items: [
       { icon: '🖼️', label: 'Banner Quảng Cáo',      path: '/admin/banners' },
-      { icon: '🏆', label: 'Đấu Giá Quảng Cáo',     path: '/admin/auction' },
+      { icon: '🏆', label: 'Đấu Giá Quảng Cáo (cũ)', path: '/admin/auction' },
+      { icon: '🎯', label: 'Đấu Giá Banner (mới)',  path: '/admin/banner-auction' },
       { icon: '🚀', label: 'Đấu Giá Vị Trí',        path: '/admin/slot-auctions' },
       { icon: '🛡️', label: 'AI Guardian',           path: '/admin/ai-guardian' },
       { icon: '📷', label: 'Thư Viện Ảnh',           path: '/admin/images' },

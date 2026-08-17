@@ -9,19 +9,20 @@
  * link trong thông báo mở phiên trỏ tới).
  */
 import React, { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import API from '../../services/api'
 
 interface Auction {
   auction_id: number
   slot_id: number
   slot_name: string | null
+  slot_preview_image_url: string | null
   start_time: string
   end_time: string
   status: string
   start_price: number
   current_price: number
-  end_price: number
+  end_price: number | null
   winner_shop_id: number | null
   winner_shop: string | null
   win_type: string | null
@@ -70,6 +71,7 @@ const SlotAuctionsPage: React.FC = () => {
   const [auctions, setAuctions] = useState<Auction[]>([])
   const [wins, setWins] = useState<Win[]>([])
   const [loading, setLoading] = useState(true)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
   const loadAuctions = useCallback(async () => {
     try {
@@ -106,6 +108,7 @@ const SlotAuctionsPage: React.FC = () => {
       <h2 style={{ margin: '0 0 4px' }}>🏆 Đấu giá vị trí Flash Sale / Top sản phẩm</h2>
       <p style={{ color: C.gray, fontSize: 13, marginBottom: 16 }}>
         Thắng phiên để sản phẩm của bạn lên khu Flash Sale trang chủ hoặc được ưu tiên hiển thị khi khách tìm kiếm/duyệt danh mục.
+        {' '}<Link to="/shop/auction-rules" style={{ color: C.purple, fontWeight: 600 }}>Xem quy định đấu giá →</Link>
       </p>
 
       {needsAction.length > 0 && (
@@ -155,9 +158,16 @@ const SlotAuctionsPage: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <span style={{ fontWeight: 700, fontSize: 14 }}>{a.slot_name || `Slot #${a.slot_id}`}</span>
                     <span style={{ background: st.bg, color: st.color, borderRadius: 999, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{st.label}</span>
+                    {a.slot_preview_image_url && (
+                      <button onClick={e => { e.stopPropagation(); setPreviewUrl(a.slot_preview_image_url) }}
+                        style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 999, padding: '1px 8px', fontSize: 11, color: C.blue, cursor: 'pointer' }}>
+                        🖼️ Xem vị trí
+                      </button>
+                    )}
                   </div>
                   <div style={{ fontSize: 12, color: C.gray }}>
-                    {fmtDate(a.start_time)} → {fmtDate(a.end_time)} · Giá hiện tại: <b style={{ color: C.purple }}>{fmt(a.current_price)}</b> · endPrice: {fmt(a.end_price)}
+                    {fmtDate(a.start_time)} → {fmtDate(a.end_time)} · Giá hiện tại: <b style={{ color: C.purple }}>{fmt(a.current_price)}</b>
+                    {a.end_price != null && <> · endPrice: {fmt(a.end_price)}</>}
                     {a.winner_shop && <> · Đang dẫn: <b>{a.winner_shop}</b></>}
                   </div>
                 </div>
@@ -165,6 +175,12 @@ const SlotAuctionsPage: React.FC = () => {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {previewUrl && (
+        <div onClick={() => setPreviewUrl(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, cursor: 'zoom-out' }}>
+          <img src={previewUrl} alt="Hướng dẫn vị trí" style={{ maxWidth: '90%', maxHeight: '90%', borderRadius: 8, objectFit: 'contain' }} />
         </div>
       )}
     </div>

@@ -7,6 +7,7 @@
  * Socket.io: room "banner_auction", events: banner:bid_update, banner:auction_opened, banner:auction_ended
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { io, Socket } from 'socket.io-client'
 import API from '../../services/api'
@@ -26,6 +27,7 @@ interface Auction {
   slot_id: number
   slot_name: string | null
   slot_position: string | null
+  slot_preview_image_url: string | null
   start_time: string
   end_time: string
   status: string
@@ -264,6 +266,7 @@ const AuctionCard: React.FC<{
   const [bidInput, setBidInput] = useState('')
   const [placing, setPlacing] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
 
   const minBid = auction.current_price + 1000
   const isWinning = myShopId != null && auction.winner_shop_id === myShopId
@@ -305,6 +308,11 @@ const AuctionCard: React.FC<{
             <span style={{ fontWeight: 700, fontSize: 15 }}>{auction.slot_name || `Slot #${auction.slot_id}`}</span>
             {isWinning && <span style={{ background: C.greenBg, color: C.green, borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>👑 Đang dẫn đầu</span>}
             <span style={{ background: C.purpleBg, color: C.purple, borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{auction.slot_position}</span>
+            {auction.slot_preview_image_url && (
+              <button onClick={() => setShowPreview(true)} style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 999, padding: '2px 8px', fontSize: 11, color: C.blue, cursor: 'pointer' }}>
+                🖼️ Xem vị trí
+              </button>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
             <span style={{ color: C.gray }}>Giá hiện tại: <b style={{ color: C.purple }}>{fmt(auction.current_price)}</b></span>
@@ -422,6 +430,13 @@ const AuctionCard: React.FC<{
       {/* Nộp ảnh banner — chỉ hiện khi đã trả đủ tiền và bạn là người thắng */}
       {auction.status === 'ended' && isWinning && auction.final_paid_at && (
         <BannerSubmitSection auction={auction} onSubmitted={onBannerUpdated} />
+      )}
+
+      {/* Ảnh hướng dẫn vị trí (lightbox) */}
+      {showPreview && auction.slot_preview_image_url && (
+        <div onClick={() => setShowPreview(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, cursor: 'zoom-out' }}>
+          <img src={auction.slot_preview_image_url} alt="Hướng dẫn vị trí" style={{ maxWidth: '90%', maxHeight: '90%', borderRadius: 8, objectFit: 'contain' }} />
+        </div>
       )}
     </div>
   )
@@ -554,6 +569,7 @@ const AuctionLivePage: React.FC = () => {
       </div>
       <p style={{ color: C.gray, fontSize: 13, marginBottom: 16 }}>
         Đặt giá để shop của bạn xuất hiện ở vị trí banner. Kết quả cập nhật real-time.
+        {' '}<Link to="/shop/auction-rules" style={{ color: C.purple, fontWeight: 600 }}>Xem quy định đấu giá →</Link>
       </p>
 
       {/* Wallet summary */}

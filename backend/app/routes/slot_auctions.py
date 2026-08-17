@@ -82,6 +82,7 @@ def _fmt_slot(s) -> dict:
         "image_format":       s.image_format,
         "content_rules":      s.content_rules,
         "current_auction_id": s.current_auction_id,
+        "preview_image_url":  s.preview_image_url,
     }
 
 
@@ -90,6 +91,7 @@ def _fmt_auction(a, include_bids=False) -> dict:
         "auction_id":       a.auction_id,
         "slot_id":          a.slot_id,
         "slot_name":        a.slot.name if a.slot else None,
+        "slot_preview_image_url": a.slot.preview_image_url if a.slot else None,
         "announced_at":     str(a.announced_at) if a.announced_at else None,
         "start_time":       str(a.start_time),
         "end_time":         str(a.end_time),
@@ -319,6 +321,18 @@ async def upload_slot_image(
     return {"url": url}
 
 
+@router.post("/admin/upload-preview-image")
+async def upload_admin_preview_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin_or_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Admin upload ảnh minh hoạ vị trí (khác /upload-image — cái đó dành
+    cho shop nộp nội dung sau khi thắng)."""
+    url = await save_upload_file(file, "slot-previews", db=db, uploaded_by=current_user.user_id)
+    return {"url": url}
+
+
 @router.post("/{family}/auctions/{auction_id}/submit")
 def submit_content(
     family: str, auction_id: int, body: dict,
@@ -357,6 +371,7 @@ def admin_create_slot(
         image_height=body.get("image_height"),
         image_format=body.get("image_format"),
         content_rules=body.get("content_rules"),
+        preview_image_url=body.get("preview_image_url"),
     )
     db.add(slot)
     db.commit()
@@ -374,7 +389,7 @@ def admin_update_slot(
     slot = db.query(SlotModel).filter(SlotModel.slot_id == slot_id).first()
     if not slot:
         raise HTTPException(404, "Không tìm thấy slot")
-    for field in ("name", "is_active", "image_width", "image_height", "image_format", "content_rules"):
+    for field in ("name", "is_active", "image_width", "image_height", "image_format", "content_rules", "preview_image_url"):
         if field in body:
             setattr(slot, field, body[field])
     if "base_price" in body:

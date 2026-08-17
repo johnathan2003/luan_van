@@ -26,6 +26,7 @@ interface BannerSlot {
   duration_days: number
   is_active: boolean
   current_auction_id: number | null
+  preview_image_url: string | null
 }
 interface Auction {
   auction_id: number
@@ -91,7 +92,25 @@ const SlotModal: React.FC<{
   const [width,         setWidth]        = useState(String(slot?.width ?? ''))
   const [height,        setHeight]       = useState(String(slot?.height ?? ''))
   const [isActive,      setIsActive]     = useState(slot?.is_active ?? true)
+  const [previewImage,  setPreviewImage] = useState(slot?.preview_image_url || '')
+  const [uploadingPreview, setUploadingPreview] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  const handlePreviewFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return
+    e.target.value = ''
+    setUploadingPreview(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', f)
+      const up = await API.post('/api/v1/banners/admin/upload-preview-image', fd, {
+        transformRequest: (data, headers) => { if (headers) delete (headers as any)['Content-Type']; return data },
+      })
+      setPreviewImage(up.data?.url || '')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Tải ảnh thất bại')
+    } finally { setUploadingPreview(false) }
+  }
 
   const save = async () => {
     if (!name.trim()) { toast.error('Nhập tên slot'); return }
@@ -100,6 +119,7 @@ const SlotModal: React.FC<{
       name: name.trim(), position, base_price: Number(basePrice) || 0,
       duration_days: Number(durationDays) || 7,
       width: Number(width) || null, height: Number(height) || null, is_active: isActive,
+      preview_image_url: previewImage || null,
     }
     try {
       if (slot) {
@@ -148,6 +168,22 @@ const SlotModal: React.FC<{
           <div>
             <label style={{ fontSize: 12, color: C.gray, display: 'block', marginBottom: 4 }}>Cao (px)</label>
             <input style={inputStyle} type="number" value={height} onChange={e => setHeight(e.target.value)} placeholder="300" />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 12, color: C.gray, display: 'block', marginBottom: 4 }}>Ảnh hướng dẫn vị trí (cho shop xem banner sẽ lên ở đâu)</label>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <label style={{ width: 120, height: 80, borderRadius: 8, border: `2px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', flexShrink: 0, background: '#fafafa' }}>
+              {previewImage
+                ? <img src={previewImage} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <span style={{ fontSize: 11, color: C.gray, textAlign: 'center' }}>🖼️<br />Chọn ảnh</span>}
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePreviewFile} />
+            </label>
+            <div style={{ fontSize: 11, color: C.gray, flex: 1 }}>
+              {uploadingPreview ? '⏳ Đang tải ảnh...' : 'Ảnh minh hoạ vị trí banner sẽ hiện trên trang — không phải nội dung shop nộp.'}
+              {previewImage && <button onClick={() => setPreviewImage('')} style={{ display: 'block', marginTop: 6, background: 'none', border: 'none', color: C.red, fontSize: 11, cursor: 'pointer', padding: 0 }}>Xoá ảnh</button>}
+            </div>
           </div>
         </div>
 
@@ -484,7 +520,11 @@ const BannerAuctionRealPage: React.FC = () => {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px,1fr))', gap: 12 }}>
               {slots.map(s => (
-                <div key={s.slot_id} style={{ background: C.card, border: `1px solid ${s.is_active ? C.border : C.redBg}`, borderRadius: 12, padding: 16 }}>
+                <div key={s.slot_id} style={{ background: C.card, border: `1px solid ${s.is_active ? C.border : C.redBg}`, borderRadius: 12, padding: 16, display: 'flex', gap: 12 }}>
+                  {s.preview_image_url && (
+                    <img src={s.preview_image_url} alt="" style={{ width: 64, height: 48, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{s.name}</div>
@@ -498,6 +538,7 @@ const BannerAuctionRealPage: React.FC = () => {
                     <span>Thời hạn hiển thị: <b>{s.duration_days} ngày</b></span>
                     {s.width && s.height && <span>Kích thước: <b>{s.width} × {s.height} px</b></span>}
                     {s.current_auction_id && <span style={{ color: C.orange }}>🔥 Phiên #{s.current_auction_id} đang active</span>}
+                  </div>
                   </div>
                 </div>
               ))}

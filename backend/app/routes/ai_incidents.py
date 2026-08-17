@@ -9,8 +9,10 @@ GET    /api/v1/ai-incidents/templates   — danh sách loại sự cố + field 
 GET    /api/v1/ai-incidents             — nhật ký (timeline), mới nhất trước
 POST   /api/v1/ai-incidents             — tạo 1 sự cố mới
 DELETE /api/v1/ai-incidents/{id}        — xoá (lỡ tạo sai)
+POST   /api/v1/ai-incidents/{id}/approve       — duyệt lỗi critical (pending_approval -> resolved)
+POST   /api/v1/ai-incidents/release-batch      — phát hành bản cập nhật cuối tuần (scheduled -> resolved theo release_batch_date)
 """
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -37,6 +39,10 @@ def _fmt(i: AIIncident) -> dict:
         "detected_at":   str(i.detected_at),
         "resolved_at":   str(i.resolved_at) if i.resolved_at else None,
         "status":        i.status,
+        "proposed_solution":  i.proposed_solution,
+        "release_batch_date": str(i.release_batch_date) if i.release_batch_date else None,
+        "approved_by":   i.approved_by,
+        "approved_at":   str(i.approved_at) if i.approved_at else None,
         "created_at":    str(i.created_at) if i.created_at else None,
     }
 
@@ -113,6 +119,8 @@ def create_incident(
     detected_at = datetime.fromisoformat(detected_at) if detected_at else datetime.now()
     resolved_at = body.get("resolved_at")
     resolved_at = datetime.fromisoformat(resolved_at) if resolved_at else None
+    release_batch_date = body.get("release_batch_date")
+    release_batch_date = date.fromisoformat(release_batch_date) if release_batch_date else None
 
     incident = AIIncident(
         category=category,
@@ -124,6 +132,8 @@ def create_incident(
         detected_at=detected_at,
         resolved_at=resolved_at,
         status=body.get("status", "resolved"),
+        proposed_solution=body.get("proposed_solution") or None,
+        release_batch_date=release_batch_date,
         is_seed=bool(body.get("is_seed", True)),
         created_by=current_user.user_id,
     )
@@ -131,6 +141,62 @@ def create_incident(
     db.commit()
     db.refresh(incident)
     return _fmt(incident)
+
+
+@router.post("/{incident_id}/approve")
+def approve_incident(
+    incident_id: int,
+    current_user: User = Depends(require_admin_or_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Duyệt 1 lỗi critical đang 'pending_approval' — coi như admin đã đọc
+    giải pháp AI đề xuất (proposed_solution) và đồng ý triển khai lên hệ
+    thống chính thức. Không dùng cho lỗi ở trạng thái khác."""
+    i = db.query(AIIncident).filter(AIIncident.incident_id == incident_id).first()
+    if not i:
+        raise HTTPException(404, "Không tìm thấy sự cố")
+    if i.status != "pending_approval":
+        raise HTTPException(400, f"Sự cố đang ở trạng thái '{i.status}', không phải chờ duyệt")
+
+    now = datetime.now()
+    i.status = "resolved"
+    i.approved_by = current_user.user_id
+    i.approved_at = now
+    if not i.resolved_at:
+        i.resolved_at = now
+    db.commit()
+    db.refresh(i)
+    return _fmt(i)
+
+
+@router.post("/release-batch")
+def release_batch(
+    body: dict,
+    current_user: User = Depends(require_admin_or_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Phát hành bản cập nhật cuối tuần — đóng HÀNG LOẠT các lỗi nhỏ đang
+    'scheduled' có cùng release_batch_date thành 'resolved' cùng lúc."""
+    raw_date = body.get("release_batch_date")
+    if not raw_date:
+        raise HTTPException(400, "Thiếu release_batch_date")
+    batch_date = date.fromisoformat(raw_date)
+
+    rows = db.query(AIIncident).filter(
+        AIIncident.status == "scheduled",
+        AIIncident.release_batch_date == batch_date,
+    ).all()
+    if not rows:
+        raise HTTPException(404, "Không có sự cố nào đang chờ ở bản cập nhật này")
+
+    now = datetime.now()
+    for i in rows:
+        i.status = "resolved"
+        i.resolved_at = now
+        i.approved_by = current_user.user_id
+        i.approved_at = now
+    db.commit()
+    return {"message": f"Đã phát hành bản cập nhật {raw_date} — {len(rows)} lỗi được đóng", "count": len(rows)}
 
 
 @router.delete("/{incident_id}")

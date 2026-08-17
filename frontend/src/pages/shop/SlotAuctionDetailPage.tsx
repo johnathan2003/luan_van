@@ -31,6 +31,7 @@ interface Auction {
   auction_id: number
   slot_id: number
   slot_name: string | null
+  slot_preview_image_url: string | null
   announced_at: string | null
   start_time: string
   end_time: string
@@ -109,6 +110,7 @@ const SlotAuctionDetailPage: React.FC = () => {
   const [bidProductId, setBidProductId] = useState<number | ''>('')
   const [placing, setPlacing] = useState(false)
   const [paying, setPaying] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -204,7 +206,15 @@ const SlotAuctionDetailPage: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', margin: '10px 0 16px' }}>
         <div>
           <span style={{ background: C.purpleBg, color: C.purple, borderRadius: 999, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>{FAMILY_LABEL[family]}</span>
-          <h2 style={{ margin: '8px 0 0' }}>{auction.slot_name || `Slot #${auction.slot_id}`}</h2>
+          <h2 style={{ margin: '8px 0 0', display: 'flex', alignItems: 'center', gap: 10 }}>
+            {auction.slot_name || `Slot #${auction.slot_id}`}
+            {auction.slot_preview_image_url && (
+              <button onClick={() => setShowPreview(true)}
+                style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 999, padding: '3px 10px', fontSize: 12, color: C.blue, cursor: 'pointer', fontWeight: 600 }}>
+                🖼️ Xem vị trí
+              </button>
+            )}
+          </h2>
         </div>
         {isWinner && <span style={{ background: C.greenBg, color: C.green, borderRadius: 999, padding: '4px 12px', fontSize: 12, fontWeight: 700 }}>👑 Bạn đang/đã thắng phiên này</span>}
       </div>
@@ -363,6 +373,12 @@ const SlotAuctionDetailPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {showPreview && auction.slot_preview_image_url && (
+        <div onClick={() => setShowPreview(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, cursor: 'zoom-out' }}>
+          <img src={auction.slot_preview_image_url} alt="Hướng dẫn vị trí" style={{ maxWidth: '90%', maxHeight: '90%', borderRadius: 8, objectFit: 'contain' }} />
+        </div>
+      )}
     </div>
   )
 }

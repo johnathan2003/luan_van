@@ -18,6 +18,7 @@ interface Slot {
   slot_id: number; name: string; base_price: number; is_active: boolean
   image_width: number | null; image_height: number | null; image_format: string | null
   content_rules: string | null; current_auction_id: number | null
+  preview_image_url: string | null
 }
 interface Auction {
   auction_id: number; slot_id: number; slot_name: string | null
@@ -98,7 +99,9 @@ const SlotsTab: React.FC<{ family: Family }> = ({ family }) => {
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ name: '', base_price: '', image_width: '', image_height: '', image_format: '', content_rules: '' })
+  const [form, setForm] = useState({ name: '', base_price: '', image_width: '', image_height: '', image_format: '', content_rules: '', preview_image_url: '' })
+  const [uploadingPreview, setUploadingPreview] = useState(false)
+  const [replacingId, setReplacingId] = useState<number | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -106,6 +109,44 @@ const SlotsTab: React.FC<{ family: Family }> = ({ family }) => {
   }, [family])
 
   useEffect(() => { load() }, [load])
+
+  const uploadPreview = async (file: File): Promise<string | null> => {
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const up = await API.post('/api/v1/slots/admin/upload-preview-image', fd, {
+        transformRequest: (data, headers) => { if (headers) delete (headers as any)['Content-Type']; return data },
+      })
+      return up.data?.url || null
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Tải ảnh thất bại')
+      return null
+    }
+  }
+
+  const handleFormFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return
+    e.target.value = ''
+    setUploadingPreview(true)
+    const url = await uploadPreview(f)
+    if (url) setForm(prev => ({ ...prev, preview_image_url: url }))
+    setUploadingPreview(false)
+  }
+
+  const handleReplaceImage = async (s: Slot, e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return
+    e.target.value = ''
+    setReplacingId(s.slot_id)
+    const url = await uploadPreview(f)
+    if (url) {
+      try {
+        await API.put(`/api/v1/slots/${family}/${s.slot_id}`, { preview_image_url: url })
+        toast.success('✅ Đã cập nhật ảnh hướng dẫn')
+        load()
+      } catch (e: any) { toast.error(e.response?.data?.detail || 'Lỗi') }
+    }
+    setReplacingId(null)
+  }
 
   const handleCreate = async () => {
     if (!form.name.trim()) { toast.error('Nhập tên slot'); return }
@@ -117,9 +158,10 @@ const SlotsTab: React.FC<{ family: Family }> = ({ family }) => {
         image_height: form.image_height ? Number(form.image_height) : null,
         image_format: form.image_format || null,
         content_rules: form.content_rules || null,
+        preview_image_url: form.preview_image_url || null,
       })
       toast.success('✅ Đã tạo slot')
-      setForm({ name: '', base_price: '', image_width: '', image_height: '', image_format: '', content_rules: '' })
+      setForm({ name: '', base_price: '', image_width: '', image_height: '', image_format: '', content_rules: '', preview_image_url: '' })
       setFormOpen(false)
       load()
     } catch (e: any) { toast.error(e.response?.data?.detail || 'Lỗi khi tạo slot') } finally { setSaving(false) }
@@ -146,6 +188,15 @@ const SlotsTab: React.FC<{ family: Family }> = ({ family }) => {
             <input placeholder="Định dạng (jpg,png,webp)" value={form.image_format} onChange={e => setForm({ ...form, image_format: e.target.value })} style={{ ...inputStyle, width: 200 }} />
           </div>
           <textarea placeholder="Quy định nội dung (cấm gì, yêu cầu gì...)" value={form.content_rules} onChange={e => setForm({ ...form, content_rules: e.target.value })} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <label style={{ width: 100, height: 70, borderRadius: 8, border: `2px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', flexShrink: 0, background: '#fafafa' }}>
+              {form.preview_image_url
+                ? <img src={form.preview_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <span style={{ fontSize: 10, color: C.gray, textAlign: 'center' }}>🖼️<br />Ảnh hướng dẫn</span>}
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFormFile} />
+            </label>
+            <p style={{ fontSize: 11, color: C.gray, margin: 0 }}>{uploadingPreview ? '⏳ Đang tải ảnh...' : 'Ảnh minh hoạ cho shop thấy sản phẩm thắng sẽ lên đâu trên trang (tuỳ chọn).'}</p>
+          </div>
           <button onClick={handleCreate} disabled={saving} style={{ ...btn(C.success, saving), alignSelf: 'flex-start' }}>{saving ? '⏳...' : '✅ Tạo slot'}</button>
         </div>
       )}
@@ -155,10 +206,18 @@ const SlotsTab: React.FC<{ family: Family }> = ({ family }) => {
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead><tr style={{ background: 'rgba(0,0,0,0.02)' }}>{['ID', 'Tên', 'Giá sàn', 'Kích thước', 'Trạng thái', ''].map(h => <th key={h} style={{ textAlign: 'left', padding: '10px 14px', color: C.gray, fontSize: 11, borderBottom: `1px solid ${C.border}` }}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ background: 'rgba(0,0,0,0.02)' }}>{['', 'ID', 'Tên', 'Giá sàn', 'Kích thước', 'Trạng thái', ''].map(h => <th key={h} style={{ textAlign: 'left', padding: '10px 14px', color: C.gray, fontSize: 11, borderBottom: `1px solid ${C.border}` }}>{h}</th>)}</tr></thead>
             <tbody>
               {slots.map(s => (
                 <tr key={s.slot_id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={{ padding: '8px 14px' }}>
+                    <label style={{ display: 'block', width: 44, height: 32, borderRadius: 6, border: `1px dashed ${C.border}`, overflow: 'hidden', cursor: 'pointer', position: 'relative' }} title="Đổi ảnh hướng dẫn">
+                      {s.preview_image_url
+                        ? <img src={s.preview_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : <span style={{ fontSize: 9, color: C.gray, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>🖼️</span>}
+                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleReplaceImage(s, e)} disabled={replacingId === s.slot_id} />
+                    </label>
+                  </td>
                   <td style={{ padding: '8px 14px', color: C.gray }}>#{s.slot_id}</td>
                   <td style={{ padding: '8px 14px', fontWeight: 600 }}>{s.name}</td>
                   <td style={{ padding: '8px 14px', color: C.purple }}>{fmt(s.base_price)}</td>

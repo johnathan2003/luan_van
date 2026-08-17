@@ -50,6 +50,9 @@ const AuctionLivePage    = React.lazy(() => import('./pages/shop/AuctionLivePage
 const WalletPage         = React.lazy(() => import('./pages/shop/WalletPage'))
 const SlotAuctionsPage       = React.lazy(() => import('./pages/shop/SlotAuctionsPage'))
 const SlotAuctionDetailPage  = React.lazy(() => import('./pages/shop/SlotAuctionDetailPage'))
+const AuctionRulesPage       = React.lazy(() => import('./pages/shop/AuctionRulesPage'))
+const WalletDepositQRPage        = React.lazy(() => import('./pages/shop/WalletDepositQRPage'))
+const WalletDepositSimulatorPage = React.lazy(() => import('./pages/shop/WalletDepositSimulatorPage'))
 
 // ── ⚙️ Admin pages (lazy — bundle lớn) ───────────────────────────────────────
 const AdminOverviewPage          = React.lazy(() => import('./pages/admin/AdminOverviewPage'))
@@ -76,6 +79,7 @@ const ReportsPage                = React.lazy(() => import('./pages/admin/Report
 const FeedbackPage               = React.lazy(() => import('./pages/admin/FeedbackPage'))
 const ImageLibraryPage           = React.lazy(() => import('./pages/admin/ImageLibraryPage'))
 const AuctionManagementPage      = React.lazy(() => import('./pages/admin/AuctionManagementPage'))
+const BannerAuctionRealPage      = React.lazy(() => import('./pages/admin/BannerAuctionRealPage'))
 const SlotAuctionAdminPage       = React.lazy(() => import('./pages/admin/SlotAuctionAdminPage'))
 const AIGuardianPage             = React.lazy(() => import('./pages/admin/AIGuardianPage'))
 
@@ -186,11 +190,21 @@ const Router: React.FC = () => (
       <Route path="/shop/analytics"        element={inShop(<AnalyticsPage />)} />
       <Route path="/shop/revenue"          element={inShop(<ShopRevenueDetailPage />)} />
       <Route path="/shop/wallet"           element={inShop(<WalletPage />)} />
+      {/* Demo nạp tiền ví — cùng pattern với checkout/momo ở trên (1 route
+          riêng mỗi provider, chỉ đổi theme qua prop), không bọc ShopLayout để
+          giống 1 trang thanh toán độc lập. */}
+      <Route path="/shop/wallet-deposit/momo/:txnId"       element={<WalletDepositQRPage provider="momo" />} />
+      <Route path="/wallet-deposit-simulator/momo/:txnId"  element={<WalletDepositSimulatorPage provider="momo" />} />
+      <Route path="/shop/wallet-deposit/vnpay/:txnId"      element={<WalletDepositQRPage provider="vnpay" />} />
+      <Route path="/wallet-deposit-simulator/vnpay/:txnId" element={<WalletDepositSimulatorPage provider="vnpay" />} />
+      <Route path="/shop/wallet-deposit/zalopay/:txnId"       element={<WalletDepositQRPage provider="zalopay" />} />
+      <Route path="/wallet-deposit-simulator/zalopay/:txnId"  element={<WalletDepositSimulatorPage provider="zalopay" />} />
       <Route path="/shop/vouchers"         element={inShop(<VoucherManagementPage />)} />
       <Route path="/shop/auction"          element={inShop(<BannerAuctionPage />)} />
       <Route path="/shop/auction-live"     element={inShop(<AuctionLivePage />)} />
       <Route path="/shop/slot-auctions"                    element={inShop(<SlotAuctionsPage />)} />
       <Route path="/shop/slot-auctions/:family/:auctionId" element={inShop(<SlotAuctionDetailPage />)} />
+      <Route path="/shop/auction-rules"    element={inShop(<AuctionRulesPage />)} />
       <Route path="/shop/chat"             element={inShop(<ShopChatPage />)} />
       <Route path="/shop/mall"             element={inShop(<BuyZoMallRegisterPage />)} />
       <Route path="/shop/complaints"       element={inShop(<MyDisputesPage />)} />
@@ -221,6 +235,7 @@ const Router: React.FC = () => (
       {/* Nội dung / Marketing */}
       <Route path="/admin/banners"               element={inAdmin(<BannerAdminPage />)} />
       <Route path="/admin/auction"               element={inAdmin(<AuctionManagementPage />)} />
+      <Route path="/admin/banner-auction"         element={inAdmin(<BannerAuctionRealPage />)} />
       <Route path="/admin/slot-auctions"          element={inAdmin(<SlotAuctionAdminPage />)} />
       <Route path="/admin/ai-guardian"            element={inAdmin(<AIGuardianPage />)} />
       <Route path="/admin/images"                element={inAdmin(<ImageLibraryPage />)} />

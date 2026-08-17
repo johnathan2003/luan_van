@@ -43,6 +43,10 @@ class FlashSlot(Base):
     image_height        = Column(Integer)
     image_format         = Column(String(100))   # vd "jpg,png,webp"
     content_rules         = Column(Text)          # mô tả yêu cầu / danh sách cấm
+    # Ảnh hướng dẫn vị trí — admin upload để shop thấy sản phẩm thắng sẽ lên
+    # đâu trên trang Flash Sale (khác submission_image_url — đó là nội dung
+    # shop nộp sau khi thắng).
+    preview_image_url      = Column(String(500))
     current_auction_id    = Column(Integer, ForeignKey("flash_slot_auctions.auction_id", use_alter=True, name="fk_flash_slot_current_auction"), nullable=True)
     created_at             = Column(DateTime, server_default=func.now())
 
@@ -144,6 +148,7 @@ class TopSlot(Base):
     image_height        = Column(Integer)
     image_format         = Column(String(100))
     content_rules         = Column(Text)
+    preview_image_url      = Column(String(500))   # ảnh hướng dẫn vị trí — admin upload
     current_auction_id    = Column(Integer, ForeignKey("top_slot_auctions.auction_id", use_alter=True, name="fk_top_slot_current_auction"), nullable=True)
     created_at             = Column(DateTime, server_default=func.now())
 

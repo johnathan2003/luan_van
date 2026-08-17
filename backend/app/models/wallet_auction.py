@@ -23,7 +23,12 @@ class ShopWallet(Base):
     wallet_id  = Column(Integer, primary_key=True, autoincrement=True)
     shop_id    = Column(Integer, ForeignKey("shops.shop_id", ondelete="CASCADE"), nullable=False, unique=True)
     balance    = Column(Numeric(15, 2), nullable=False, default=0)   # tổng số dư
-    reserved   = Column(Numeric(15, 2), nullable=False, default=0)   # đang giữ cho bid
+    reserved   = Column(Numeric(15, 2), nullable=False, default=0)   # đang giữ cho bid đang dẫn đầu (tự động, escrow)
+    # Nhãn shop TỰ đánh dấu "dành cho đấu giá" — thuần hiển thị/ghi chú, KHÔNG
+    # trừ vào available và KHÔNG ảnh hưởng logic đặt giá (khác với `reserved`
+    # ở trên, vốn tự động do place_bid quản lý). Chuyển vào đây là hành động
+    # tức thời do shop tự thực hiện, không qua admin duyệt.
+    auction_fund = Column(Numeric(15, 2), nullable=False, default=0)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -32,7 +37,8 @@ class ShopWallet(Base):
 
     @property
     def available(self):
-        """Số dư khả dụng = balance - reserved."""
+        """Số dư khả dụng để ĐẶT GIÁ = balance - reserved. `auction_fund` KHÔNG
+        trừ vào đây — nó chỉ là nhãn hiển thị, không khoá tiền khỏi việc đặt giá."""
         return float(self.balance) - float(self.reserved)
 
 
@@ -44,7 +50,10 @@ class ShopWalletTransaction(Base):
     wallet_id  = Column(Integer, ForeignKey("shop_wallet.wallet_id", ondelete="CASCADE"), nullable=False, index=True)
     shop_id    = Column(Integer, ForeignKey("shops.shop_id", ondelete="CASCADE"), nullable=False, index=True)
     amount     = Column(Numeric(15, 2), nullable=False)   # dương=nạp, âm=trừ
-    # txn_type: deposit | withdraw | reserve | release | charge | refund
+    # txn_type: deposit_pending | deposit | deposit_rejected (nạp tiền demo,
+    #   xem app/routes/wallet.py) | withdraw | reserve | release | charge |
+    #   refund (escrow tự động khi đặt giá) | allocate_auction (nhãn tự đánh
+    #   dấu, không di chuyển tiền thật — xem ShopWallet.auction_fund)
     txn_type   = Column(String(30), nullable=False)
     # ref_type: manual | mock_deposit | auction_bid | auction_win | auction_loss
     ref_type   = Column(String(50))
@@ -70,6 +79,10 @@ class BannerSlot(Base):
     base_price         = Column(Numeric(15, 2), nullable=False, default=0)  # giá sàn mỗi đấu giá
     duration_days      = Column(Integer, nullable=False, default=7)          # thời hạn hiển thị
     is_active          = Column(Boolean, default=True)
+    # Ảnh hướng dẫn — admin upload để shop thấy vị trí này thật sự nằm ở đâu
+    # trên trang (khác banner_image_url của BannerAuction — đó là nội dung
+    # SHOP nộp sau khi thắng, còn ảnh này là minh hoạ VỊ TRÍ do admin quản lý).
+    preview_image_url  = Column(String(500))
     current_auction_id = Column(Integer, ForeignKey("banner_auctions.auction_id", use_alter=True, name="fk_slot_current_auction"), nullable=True)
     created_at         = Column(DateTime, server_default=func.now())
 

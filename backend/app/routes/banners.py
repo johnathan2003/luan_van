@@ -108,6 +108,7 @@ def _fmt_slot(s: BannerSlot) -> dict:
         "duration_days":      s.duration_days,
         "is_active":          s.is_active,
         "current_auction_id": s.current_auction_id,
+        "preview_image_url":  s.preview_image_url,
     }
 
 
@@ -117,6 +118,7 @@ def _fmt_auction(a: BannerAuction, include_bids=False) -> dict:
         "slot_id":        a.slot_id,
         "slot_name":      a.slot.name if a.slot else None,
         "slot_position":  a.slot.position if a.slot else None,
+        "slot_preview_image_url": a.slot.preview_image_url if a.slot else None,
         "start_time":     str(a.start_time),
         "end_time":       str(a.end_time),
         "status":         a.status,
@@ -544,6 +546,7 @@ def create_slot(
         height=body.get("height"),
         base_price=Decimal(str(body.get("base_price", 0))),
         duration_days=int(body.get("duration_days", 7)),
+        preview_image_url=body.get("preview_image_url"),
     )
     db.add(slot)
     db.commit()
@@ -561,13 +564,25 @@ def update_slot(
     slot = db.query(BannerSlot).filter(BannerSlot.slot_id == slot_id).first()
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
-    for field in ("name", "position", "width", "height", "duration_days", "is_active"):
+    for field in ("name", "position", "width", "height", "duration_days", "is_active", "preview_image_url"):
         if field in body:
             setattr(slot, field, body[field])
     if "base_price" in body:
         slot.base_price = Decimal(str(body["base_price"]))
     db.commit()
     return _fmt_slot(slot)
+
+
+@router.post("/admin/upload-preview-image")
+async def upload_slot_preview_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin_or_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Admin upload ảnh minh hoạ vị trí (khác /upload-image — cái đó dành
+    cho shop nộp nội dung banner sau khi thắng)."""
+    url = await save_upload_file(file, "slot-previews", db=db, uploaded_by=current_user.user_id)
+    return {"url": url}
 
 
 @router.post("/auctions")
